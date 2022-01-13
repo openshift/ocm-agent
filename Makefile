@@ -102,6 +102,10 @@ coverage: coverage.txt
 coverage.txt: vet $(GO_SOURCES)
 	@./hack/test.sh
 
+.PHONY: coverage
+coverage:
+	hack/codecov.sh
+
 .PHONY: docs
 docs:
 	@# Ensure that the output from the test is hidden so this can be
