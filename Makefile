@@ -42,7 +42,7 @@ default: all
 all: test build-image
 
 .PHONY: test
-test: vet $(GO_SOURCES)
+go-test: vet $(GO_SOURCES)
 	$(AT)go test $(TESTOPTS) $(shell go list -mod=readonly -e ./...)
 
 .PHONY: clean
@@ -98,9 +98,8 @@ push-base: build/Dockerfile
 	$(CONTAINER_ENGINE) push $(IMG):$(IMAGETAG)
 	$(CONTAINER_ENGINE) push $(IMG):latest
 
-coverage: coverage.txt
-coverage.txt: vet $(GO_SOURCES)
-	@./hack/test.sh
+.PHONY: test
+test: go-test
 
 .PHONY: coverage
 coverage:
