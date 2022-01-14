@@ -51,7 +51,7 @@ clean:
 
 .PHONY: serve
 serve:
-	$(AT)go run ./cmd/main.go -port 8888
+	$(AT)go run ./cmd/ocm-agent/main.go
 
 .PHONY: vet
 vet:
