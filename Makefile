@@ -28,7 +28,7 @@ GOENV=GOOS=${GOOS} GOARCH=${GOARCH} CGO_ENABLED=0 GOFLAGS=
 GOBUILDFLAGS=-gcflags="all=-trimpath=${GOPATH}" -asmflags="all=-trimpath=${GOPATH}"
 
 CONTAINER_ENGINE ?= $(shell command -v podman 2>/dev/null || command -v docker 2>/dev/null)
-SRC_CONTAINER_TRANSPORT ?= $(if $(findstring podman,$(CONTAINER_ENGINE)),container-storage,docker-daemon)
+SRC_CONTAINER_TRANSPORT ?= $(if $(findstring podman,$(CONTAINER_ENGINE)),containers-storage,docker-daemon)
 
 #eg, -v
 TESTOPTS ?=
