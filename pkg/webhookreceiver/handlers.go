@@ -19,19 +19,28 @@ func AMReceiver() Handler {
 				http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 				return
 			}
-			// process request
+			var err error
 			var alertData AMReceiverData
-			json.NewDecoder(r.Body).Decode(&alertData)
+			err = json.NewDecoder(r.Body).Decode(&alertData)
+			if err != nil {
+				log.Printf("Failed to process request body: %s\n", err)
+				http.Error(w, "Bad request body", http.StatusBadRequest)
+				return
+			}
+			// process request
 			go processAMReceiver(alertData)
 
 			// write response
 			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
 			response := AMReceiverResponse{
 				Status: "ok",
 			}
-			err := json.NewEncoder(w).Encode(response)
+			err = json.NewEncoder(w).Encode(response)
 			if err != nil {
 				log.Printf("Failed to write to response: %s\n", err)
+				http.Error(w, "Failed to write to responss", http.StatusInternalServerError)
+				return
 			}
 		},
 	}
