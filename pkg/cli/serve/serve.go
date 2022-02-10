@@ -2,10 +2,12 @@ package serve
 
 import (
 	"fmt"
-	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/mux"
+	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	kcmdutil "k8s.io/kubectl/pkg/cmd/util"
@@ -14,11 +16,35 @@ import (
 	"github.com/openshift/ocm-agent/hack"
 )
 
-// ServeOptions define the configuration options required by OCM agent to serve.
-type ServeOptions struct {
+type level logrus.Level
+
+func (l *level) String() string {
+	return logrus.Level(*l).String()
+}
+
+func (l *level) Set(value string) error {
+	lvl, err := logrus.ParseLevel(strings.TrimSpace(value))
+	if err == nil {
+		*l = level(lvl)
+	}
+	return err
+}
+
+func (l *level) Type() string {
+	return "string"
+}
+
+var (
+	defaultLogLevel = logrus.InfoLevel.String()
+	logLevel        level
+)
+
+// serveOptions define the configuration options required by OCM agent to serve.
+type serveOptions struct {
 	accessToken string
 	services    string
 	ocmURL      string
+	debug       bool
 }
 
 var (
@@ -36,6 +62,9 @@ var (
 
 	# Start the OCM agent server by accepting token from a file (value starting with '@' is considered a file)
 	ocm-agent server -t @tokenfile --services "$SERVICE" --ocm-url @urlfile
+
+	# Start the OCM agent server in debug mode
+	ocm-agent server -t @tokenfile --services "$SERVICE" --ocm-url @urlfile --debug
 	`)
 )
 
@@ -43,10 +72,11 @@ const (
 	accessTokenFlagName = "access-token"
 	servicesFlagName    = "services"
 	ocmURLFlagName      = "ocm-url"
+	debugFlagName       = "debug"
 )
 
-func NewServeOptions() *ServeOptions {
-	return &ServeOptions{}
+func NewServeOptions() *serveOptions {
+	return &serveOptions{}
 }
 
 // NewServeCmd initializes serve command and it's flags
@@ -67,6 +97,7 @@ func NewServeCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&o.ocmURL, ocmURLFlagName, "", "", "OCM URL")
 	cmd.Flags().StringVarP(&o.services, servicesFlagName, "", "", "OCM service name")
 	cmd.Flags().StringVarP(&o.accessToken, accessTokenFlagName, "t", "", "Access token for OCM")
+	cmd.PersistentFlags().BoolVarP(&o.debug, debugFlagName, "d", false, "Debug mode enable")
 
 	_ = cmd.MarkFlagRequired(ocmURLFlagName)
 	_ = cmd.MarkFlagRequired(servicesFlagName)
@@ -75,26 +106,31 @@ func NewServeCmd() *cobra.Command {
 	return cmd
 }
 
-// Complete initialisation of the flags
-func (o *ServeOptions) Complete(cmd *cobra.Command, args []string) error {
+// Complete initialisation for the server
+func (o *serveOptions) Complete(cmd *cobra.Command, args []string) error {
 
+	// ReadFlagsFromFile would read the values of flags from files (if any)
 	err := ReadFlagsFromFile(cmd, accessTokenFlagName, servicesFlagName, ocmURLFlagName)
 	if err != nil {
 		return err
 	}
 
+	// Check if debug mode is enabled and set the logging level accordingly
+	if o.debug {
+		logrus.SetLevel(logrus.DebugLevel)
+	}
+
 	return nil
 }
 
-func (o *ServeOptions) Run() error {
+func (o *serveOptions) Run() error {
 
 	port := 8081
 
-	fmt.Printf("Value of accesstoken is %s\n", o.accessToken)
-	fmt.Printf("Value of url is %s\n", o.ocmURL)
-	fmt.Printf("Value of service is %s\n", o.services)
+	log.Info("Starting ocm-agent server")
+	log.WithField("URL", o.ocmURL).Debug("OCM URL configured")
+	log.WithField("Service", o.services).Debug("OCM Service configured")
 
-	log.Println("starting ocm-agent server")
 	// create a new router
 	r := mux.NewRouter()
 
@@ -102,14 +138,32 @@ func (o *ServeOptions) Run() error {
 	r.HandleFunc("/data", hack.AddItem).Methods("POST")
 	r.HandleFunc("/data", hack.ListItem).Methods("GET")
 
-	log.Printf("Start listening on port %v", port)
-	log.Fatal(http.ListenAndServe(":8081", r))
+	log.WithField("Port", port).Info("Start listening on port")
+
+	err := http.ListenAndServe(":8081", r)
+	if err != nil {
+		log.WithError(err).Fatal("OCM Agent failed to serve")
+	}
 
 	return nil
 }
 
 func HealthCheck(w http.ResponseWriter, r *http.Request) {
-	log.Println("registering health check end point")
+	log.Info("Registering health check end point")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, "API is up and running")
+}
+
+func initLogging() {
+	logrus.SetLevel(logrus.Level(logLevel))
+	log.SetFormatter(&log.TextFormatter{
+		FullTimestamp: true,
+		PadLevelText:  false,
+	})
+}
+
+func init() {
+	// Set default log level
+	_ = logLevel.Set(defaultLogLevel)
+	cobra.OnInitialize(initLogging)
 }
