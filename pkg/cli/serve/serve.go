@@ -69,6 +69,7 @@ var (
 )
 
 const (
+	port                = 8081
 	accessTokenFlagName = "access-token"
 	servicesFlagName    = "services"
 	ocmURLFlagName      = "ocm-url"
@@ -124,8 +125,6 @@ func (o *serveOptions) Complete(cmd *cobra.Command, args []string) error {
 }
 
 func (o *serveOptions) Run() error {
-
-	port := 8081
 
 	log.Info("Starting ocm-agent server")
 	log.WithField("URL", o.ocmURL).Debug("OCM URL configured")
