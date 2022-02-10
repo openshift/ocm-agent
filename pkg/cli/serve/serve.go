@@ -30,10 +30,6 @@ func (l *level) Set(value string) error {
 	return err
 }
 
-func (l *level) Type() string {
-	return "string"
-}
-
 var (
 	defaultLogLevel = logrus.InfoLevel.String()
 	logLevel        level
