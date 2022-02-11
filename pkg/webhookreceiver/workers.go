@@ -1,7 +1,7 @@
 package webhookreceiver
 
-import "log"
+import log "github.com/sirupsen/logrus"
 
 func processAMReceiver(d AMReceiverData) {
-	log.Printf("Process alert data: %+v\n", d)
+	log.WithField("AMReceiverData", d).Info("Process alert data")
 }

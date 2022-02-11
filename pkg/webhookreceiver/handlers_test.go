@@ -60,7 +60,7 @@ var _ = Describe("Webhook Handlers", func() {
 			}
 			// Set response
 			var response AMReceiverResponse
-			json.NewDecoder(resp.Body).Decode(&response)
+			_ = json.NewDecoder(resp.Body).Decode(&response)
 			Expect(response).Should(Equal(expected))
 		})
 	})

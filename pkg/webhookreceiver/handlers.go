@@ -2,10 +2,10 @@ package webhookreceiver
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
+	log "github.com/sirupsen/logrus"
 )
 
 func AMReceiver() Handler {
@@ -23,7 +23,7 @@ func AMReceiver() Handler {
 			var alertData AMReceiverData
 			err = json.NewDecoder(r.Body).Decode(&alertData)
 			if err != nil {
-				log.Printf("Failed to process request body: %s\n", err)
+				log.Errorf("Failed to process request body: %s\n", err)
 				http.Error(w, "Bad request body", http.StatusBadRequest)
 				return
 			}
@@ -38,7 +38,7 @@ func AMReceiver() Handler {
 			}
 			err = json.NewEncoder(w).Encode(response)
 			if err != nil {
-				log.Printf("Failed to write to response: %s\n", err)
+				log.Errorf("Failed to write to response: %s\n", err)
 				http.Error(w, "Failed to write to responss", http.StatusInternalServerError)
 				return
 			}

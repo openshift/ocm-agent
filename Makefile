@@ -51,7 +51,7 @@ clean:
 
 .PHONY: serve
 serve:
-	$(AT)go run ./cmd/ocm-agent/main.go
+	$(AT)go run ./cmd/ocm-agent/main.go serve --access-token "$TOKEN" --services "$SERVICE" --ocm-url "https://sample.example.com"
 
 .PHONY: vet
 vet:
@@ -112,3 +112,12 @@ docs:
 	@# To hide the rules: make DOCFLAGS=-hideRules docs
 	@$(MAKE test)
 	@go run $(DOC_BINARY) $(DOCFLAGS)
+
+# Installed using instructions from: https://golangci-lint.run/usage/install/#linux-and-windows
+getlint:
+	@mkdir -p $(GOPATH)/bin
+	@ls $(GOPATH)/bin/golangci-lint 1>/dev/null || (echo "Installing golangci-lint..." && curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOPATH)/bin v1.42.0)
+
+.PHONY: lint
+lint: getlint
+	$(GOPATH)/bin/golangci-lint run
