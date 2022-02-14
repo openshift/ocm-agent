@@ -23,7 +23,7 @@ func ReadFlagsFromFile(cmd *cobra.Command, names ...string) error {
 			data, err := ioutil.ReadFile(value)
 			if err != nil {
 				return fmt.Errorf(
-					"can't read value of flag '%s' from file '%s': %w\n",
+					"can't read value of flag '%s' from file '%s': %w",
 					name, value, err,
 				)
 			}
@@ -31,7 +31,7 @@ func ReadFlagsFromFile(cmd *cobra.Command, names ...string) error {
 
 			err = cmd.Flags().Set(name, value)
 			if err != nil {
-				fmt.Errorf("unable to set value for key %s\n", name)
+				fmt.Fprintf(os.Stderr, "unable to set value for key %s\n", name)
 				os.Exit(1)
 			}
 		}

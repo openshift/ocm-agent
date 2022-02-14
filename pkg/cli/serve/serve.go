@@ -6,24 +6,23 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
-	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	kcmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"k8s.io/kubectl/pkg/util/templates"
 
-	"github.com/openshift/ocm-agent/hack"
+	"github.com/openshift/ocm-agent/pkg/webhookreceiver"
 )
 
-type level logrus.Level
+type level log.Level
 
 func (l *level) String() string {
-	return logrus.Level(*l).String()
+	return log.Level(*l).String()
 }
 
 func (l *level) Set(value string) error {
-	lvl, err := logrus.ParseLevel(strings.TrimSpace(value))
+	lvl, err := log.ParseLevel(strings.TrimSpace(value))
 	if err == nil {
 		*l = level(lvl)
 	}
@@ -31,7 +30,7 @@ func (l *level) Set(value string) error {
 }
 
 var (
-	defaultLogLevel = logrus.InfoLevel.String()
+	defaultLogLevel = log.InfoLevel.String()
 	logLevel        level
 )
 
@@ -54,13 +53,13 @@ var (
 
 	serviceExample = templates.Examples(`
 	# Start the OCM agent server
-	ocm-agent server --access-token "$TOKEN" --services "$SERVICE" --ocm-url "https://sample.example.com"
+	ocm-agent serve --access-token "$TOKEN" --services "$SERVICE" --ocm-url "https://sample.example.com"
 
 	# Start the OCM agent server by accepting token from a file (value starting with '@' is considered a file)
-	ocm-agent server -t @tokenfile --services "$SERVICE" --ocm-url @urlfile
+	ocm-agent serve -t @tokenfile --services "$SERVICE" --ocm-url @urlfile
 
 	# Start the OCM agent server in debug mode
-	ocm-agent server -t @tokenfile --services "$SERVICE" --ocm-url @urlfile --debug
+	ocm-agent serve -t @tokenfile --services "$SERVICE" --ocm-url @urlfile --debug
 	`)
 )
 
@@ -114,7 +113,7 @@ func (o *serveOptions) Complete(cmd *cobra.Command, args []string) error {
 
 	// Check if debug mode is enabled and set the logging level accordingly
 	if o.debug {
-		logrus.SetLevel(logrus.DebugLevel)
+		log.SetLevel(log.DebugLevel)
 	}
 
 	return nil
@@ -130,8 +129,8 @@ func (o *serveOptions) Run() error {
 	r := mux.NewRouter()
 
 	r.HandleFunc("/readyz", HealthCheck).Methods("GET")
-	r.HandleFunc("/data", hack.AddItem).Methods("POST")
-	r.HandleFunc("/data", hack.ListItem).Methods("GET")
+	// Add webhook receiver route
+	webhookreceiver.AMReceiver().AddRoute(r)
 
 	log.WithField("Port", port).Info("Start listening on port")
 
@@ -150,7 +149,7 @@ func HealthCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 func initLogging() {
-	logrus.SetLevel(logrus.Level(logLevel))
+	log.SetLevel(log.Level(logLevel))
 	log.SetFormatter(&log.TextFormatter{
 		FullTimestamp: true,
 		PadLevelText:  false,
