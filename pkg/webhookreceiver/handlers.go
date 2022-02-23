@@ -5,11 +5,24 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/openshift/ocm-agent/pkg/types"
+	"github.com/prometheus/alertmanager/template"
 	log "github.com/sirupsen/logrus"
 )
 
-func AMReceiver() Handler {
-	return Handler{
+// Alert Manager receiver response
+type AMReceiverResponse struct {
+	Status string
+}
+
+// Set webhook receiver path
+const AMReceiverPath = "/alertmanager-receiver"
+
+// Use prometheus alertmanager template type for post data
+type AMReceiverData template.Data
+
+func AMReceiver() types.Handler {
+	return types.Handler{
 		Route: func(r *mux.Route) {
 			r.Path(AMReceiverPath).Methods(http.MethodPost)
 		},

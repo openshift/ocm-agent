@@ -1,7 +1,6 @@
 package serve
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -12,6 +11,7 @@ import (
 	kcmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"k8s.io/kubectl/pkg/util/templates"
 
+	"github.com/openshift/ocm-agent/pkg/healthcheck"
 	"github.com/openshift/ocm-agent/pkg/webhookreceiver"
 )
 
@@ -128,24 +128,23 @@ func (o *serveOptions) Run() error {
 	// create a new router
 	r := mux.NewRouter()
 
-	r.HandleFunc("/readyz", HealthCheck).Methods("GET")
+	// Add healthcheck routes
+	healthcheck.Livez().AddRoute(r)
+	healthcheck.Readyz().AddRoute(r)
 	// Add webhook receiver route
 	webhookreceiver.AMReceiver().AddRoute(r)
 
 	log.WithField("Port", port).Info("Start listening on port")
 
-	err := http.ListenAndServe(":8081", r)
+	err := http.ListenAndServe(":8081", r) // Add healthcheck routes
+	healthcheck.Livez().AddRoute(r)
+	healthcheck.Readyz().AddRoute(r)
+
 	if err != nil {
 		log.WithError(err).Fatal("OCM Agent failed to serve")
 	}
 
 	return nil
-}
-
-func HealthCheck(w http.ResponseWriter, r *http.Request) {
-	log.Info("Registering health check end point")
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "API is up and running")
 }
 
 func initLogging() {
