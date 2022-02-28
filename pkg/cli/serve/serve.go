@@ -134,12 +134,9 @@ func (o *serveOptions) Run() error {
 	// Add webhook receiver route
 	webhookreceiver.AMReceiver().AddRoute(r)
 
+	// serve
 	log.WithField("Port", port).Info("Start listening on port")
-
-	err := http.ListenAndServe(":8081", r) // Add healthcheck routes
-	healthcheck.Livez().AddRoute(r)
-	healthcheck.Readyz().AddRoute(r)
-
+	err := http.ListenAndServe(":8081", r)
 	if err != nil {
 		log.WithError(err).Fatal("OCM Agent failed to serve")
 	}
