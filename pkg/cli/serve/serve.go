@@ -2,6 +2,7 @@ package serve
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gorilla/mux"
@@ -12,7 +13,9 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 
 	"github.com/openshift/ocm-agent/pkg/healthcheck"
+	"github.com/openshift/ocm-agent/pkg/metrics"
 	"github.com/openshift/ocm-agent/pkg/webhookreceiver"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type level log.Level
@@ -64,11 +67,12 @@ var (
 )
 
 const (
-	port                = 8081
-	accessTokenFlagName = "access-token"
-	servicesFlagName    = "services"
-	ocmURLFlagName      = "ocm-url"
-	debugFlagName       = "debug"
+	servicePort         int    = 8081
+	metricsPort         int    = 8383
+	accessTokenFlagName string = "access-token"
+	servicesFlagName    string = "services"
+	ocmURLFlagName      string = "ocm-url"
+	debugFlagName       string = "debug"
 )
 
 func NewServeOptions() *serveOptions {
@@ -131,12 +135,26 @@ func (o *serveOptions) Run() error {
 	// Add healthcheck routes
 	healthcheck.Livez().AddRoute(r)
 	healthcheck.Readyz().AddRoute(r)
+	// create new router for metrics
+	rMetrics := mux.NewRouter()
+	rMetrics.Path("/metrics").Handler(promhttp.Handler())
+
+	r.Use(metrics.PrometheusMiddleware)
+
+	// fake route for metrics testing
+	r.HandleFunc("/fake_sl", fakeCallServiceLog).Methods("GET")
+	r.HandleFunc("/failure_req", fakeReqFailure).Methods("GET")
+
 	// Add webhook receiver route
 	webhookreceiver.AMReceiver().AddRoute(r)
 
+	// Listen on the metrics port with a seprated goroutine
+	log.WithField("Port", metricsPort).Info("Start listening on metrics port")
+	go http.ListenAndServe(":"+strconv.Itoa(metricsPort), rMetrics)
+
 	// serve
-	log.WithField("Port", port).Info("Start listening on port")
-	err := http.ListenAndServe(":8081", r)
+	log.WithField("Port", servicePort).Info("Start listening on service port")
+	err := http.ListenAndServe(":"+strconv.Itoa(servicePort), r)
 	if err != nil {
 		log.WithError(err).Fatal("OCM Agent failed to serve")
 	}
@@ -156,4 +174,16 @@ func init() {
 	// Set default log level
 	_ = logLevel.Set(defaultLogLevel)
 	cobra.OnInitialize(initLogging)
+}
+
+// fake func for metrics testing
+func fakeCallServiceLog(w http.ResponseWriter, r *http.Request) {
+	log.Info("fake request to service log")
+	metrics.SetResponseMetricFailure("service_log")
+}
+
+// fake func for metrics testing
+func fakeReqFailure(w http.ResponseWriter, r *http.Request) {
+	log.Info("fake http non 200 response")
+	w.WriteHeader(http.StatusBadGateway)
 }
