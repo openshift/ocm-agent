@@ -8,10 +8,12 @@ import (
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	kcmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"k8s.io/kubectl/pkg/util/templates"
 
+	"github.com/openshift/ocm-agent/pkg/config"
 	"github.com/openshift/ocm-agent/pkg/healthcheck"
 	"github.com/openshift/ocm-agent/pkg/metrics"
 	"github.com/openshift/ocm-agent/pkg/webhookreceiver"
@@ -42,6 +44,7 @@ type serveOptions struct {
 	accessToken string
 	services    string
 	ocmURL      string
+	clusterID   string
 	debug       bool
 }
 
@@ -56,23 +59,19 @@ var (
 
 	serviceExample = templates.Examples(`
 	# Start the OCM agent server
-	ocm-agent serve --access-token "$TOKEN" --services "$SERVICE" --ocm-url "https://sample.example.com"
+	ocm-agent serve --access-token "$TOKEN" --services "$SERVICE" --ocm-url "https://sample.example.com" --cluster-id abcd-1234
 
 	# Start the OCM agent server by accepting token from a file (value starting with '@' is considered a file)
-	ocm-agent serve -t @tokenfile --services "$SERVICE" --ocm-url @urlfile
+	ocm-agent serve -t @tokenfile --services "$SERVICE" --ocm-url @urlfile --cluster-id @clusteridfile
 
 	# Start the OCM agent server in debug mode
-	ocm-agent serve -t @tokenfile --services "$SERVICE" --ocm-url @urlfile --debug
+	ocm-agent serve -t @tokenfile --services "$SERVICE" --ocm-url @urlfile --cluster-id @clusteridfile --debug
 	`)
 )
 
 const (
-	servicePort         int    = 8081
-	metricsPort         int    = 8383
-	accessTokenFlagName string = "access-token"
-	servicesFlagName    string = "services"
-	ocmURLFlagName      string = "ocm-url"
-	debugFlagName       string = "debug"
+	servicePort int = 8081
+	metricsPort int = 8383
 )
 
 func NewServeOptions() *serveOptions {
@@ -94,14 +93,17 @@ func NewServeCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&o.ocmURL, ocmURLFlagName, "", "", "OCM URL")
-	cmd.Flags().StringVarP(&o.services, servicesFlagName, "", "", "OCM service name")
-	cmd.Flags().StringVarP(&o.accessToken, accessTokenFlagName, "t", "", "Access token for OCM")
-	cmd.PersistentFlags().BoolVarP(&o.debug, debugFlagName, "d", false, "Debug mode enable")
+	cmd.Flags().StringVarP(&o.ocmURL, config.OcmURL, "", "", "OCM URL")
+	cmd.Flags().StringVarP(&o.services, config.Services, "", "", "OCM service name")
+	cmd.Flags().StringVarP(&o.accessToken, config.AccessToken, "t", "", "Access token for OCM")
+	cmd.Flags().StringVarP(&o.clusterID, config.ClusterID, "c", "", "Cluster ID")
+	cmd.PersistentFlags().BoolVarP(&o.debug, config.Debug, "d", false, "Debug mode enable")
+	viper.BindPFlags(cmd.Flags())
 
-	_ = cmd.MarkFlagRequired(ocmURLFlagName)
-	_ = cmd.MarkFlagRequired(servicesFlagName)
-	_ = cmd.MarkFlagRequired(accessTokenFlagName)
+	_ = cmd.MarkFlagRequired(config.OcmURL)
+	_ = cmd.MarkFlagRequired(config.Services)
+	_ = cmd.MarkFlagRequired(config.AccessToken)
+	_ = cmd.MarkFlagRequired(config.ClusterID)
 
 	return cmd
 }
@@ -110,7 +112,7 @@ func NewServeCmd() *cobra.Command {
 func (o *serveOptions) Complete(cmd *cobra.Command, args []string) error {
 
 	// ReadFlagsFromFile would read the values of flags from files (if any)
-	err := ReadFlagsFromFile(cmd, accessTokenFlagName, servicesFlagName, ocmURLFlagName)
+	err := ReadFlagsFromFile(cmd, config.AccessToken, config.Services, config.OcmURL, config.ClusterID)
 	if err != nil {
 		return err
 	}
