@@ -96,7 +96,7 @@ func NewServeCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&o.ocmURL, config.OcmURL, "", "", "OCM URL")
 	cmd.Flags().StringVarP(&o.services, config.Services, "", "", "OCM service name")
 	cmd.Flags().StringVarP(&o.accessToken, config.AccessToken, "t", "", "Access token for OCM")
-	cmd.Flags().StringVarP(&o.clusterID, config.ClusterID, "i", "", "Cluster ID")
+	cmd.Flags().StringVarP(&o.clusterID, config.ClusterID, "c", "", "Cluster ID")
 	cmd.PersistentFlags().BoolVarP(&o.debug, config.Debug, "d", false, "Debug mode enable")
 	viper.BindPFlags(cmd.Flags())
 
