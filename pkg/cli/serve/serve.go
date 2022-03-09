@@ -14,9 +14,9 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 
 	"github.com/openshift/ocm-agent/pkg/config"
-	"github.com/openshift/ocm-agent/pkg/healthcheck"
+	"github.com/openshift/ocm-agent/pkg/handlers"
+	"github.com/openshift/ocm-agent/pkg/k8s"
 	"github.com/openshift/ocm-agent/pkg/metrics"
-	"github.com/openshift/ocm-agent/pkg/webhookreceiver"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -131,32 +131,32 @@ func (o *serveOptions) Run() error {
 	log.WithField("URL", o.ocmURL).Debug("OCM URL configured")
 	log.WithField("Service", o.services).Debug("OCM Service configured")
 
-	// create a new router
-	r := mux.NewRouter()
-
-	// Add healthcheck routes
-	healthcheck.Livez().AddRoute(r)
-	healthcheck.Readyz().AddRoute(r)
 	// create new router for metrics
 	rMetrics := mux.NewRouter()
 	rMetrics.Path("/metrics").Handler(promhttp.Handler())
-
-	r.Use(metrics.PrometheusMiddleware)
-
-	// fake route for metrics testing
-	r.HandleFunc("/fake_sl", fakeCallServiceLog).Methods("GET")
-	r.HandleFunc("/failure_req", fakeReqFailure).Methods("GET")
-
-	// Add webhook receiver route
-	webhookreceiver.AMReceiver().AddRoute(r)
 
 	// Listen on the metrics port with a seprated goroutine
 	log.WithField("Port", metricsPort).Info("Start listening on metrics port")
 	go http.ListenAndServe(":"+strconv.Itoa(metricsPort), rMetrics)
 
+	// create a new router
+	client, err := k8s.NewClient()
+	if err != nil {
+		log.WithError(err).Fatal("Can't initialise k8s client, ensure KUBECONFIG is set")
+		return err
+	}
+	livezHandler := handlers.NewLivezHandler()
+	readyzHandler := handlers.NewReadyzHandler()
+	webhookReceiverHandler := handlers.NewWebhookReceiverHandler(client)
+
+	r := mux.NewRouter()
+	r.Path(handlers.LivezPath).Handler(livezHandler)
+	r.Path(handlers.ReadyzPath).Handler(readyzHandler)
+	r.Path(handlers.WebhookReceiverPath).Handler(webhookReceiverHandler)
+
 	// serve
 	log.WithField("Port", servicePort).Info("Start listening on service port")
-	err := http.ListenAndServe(":"+strconv.Itoa(servicePort), r)
+	err = http.ListenAndServe(":"+strconv.Itoa(servicePort), r)
 	if err != nil {
 		log.WithError(err).Fatal("OCM Agent failed to serve")
 	}

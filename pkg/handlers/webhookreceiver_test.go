@@ -1,25 +1,24 @@
-package webhookreceiver
+package handlers
 
 import (
 	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
-	"testing"
 
-	"github.com/gorilla/mux"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
 	"github.com/onsi/gomega/ghttp"
 )
 
-func TestWebhookHandlers(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Webhook Handler Suite")
-}
-
 var _ = Describe("Webhook Handlers", func() {
-	var server *ghttp.Server
+
+	var (
+		webhookReceiverHandler *WebhookReceiverHandler
+		server                 *ghttp.Server
+	)
+
 	BeforeEach(func() {
 		server = ghttp.NewServer()
 	})
@@ -30,11 +29,8 @@ var _ = Describe("Webhook Handlers", func() {
 		var resp *http.Response
 		var err error
 		BeforeEach(func() {
-			// setup handler
-			h := AMReceiver()
-			h.AddRoute(mux.NewRouter())
 			// add handler to the server
-			server.AppendHandlers(h.Func)
+			server.AppendHandlers(webhookReceiverHandler.ServeHTTP)
 			// Set data to post
 			postData := AMReceiverData{
 				Status: "foo",
@@ -68,11 +64,8 @@ var _ = Describe("Webhook Handlers", func() {
 		var resp *http.Response
 		var err error
 		BeforeEach(func() {
-			// setup handler
-			h := AMReceiver()
-			h.AddRoute(mux.NewRouter())
 			// add handler to the server
-			server.AppendHandlers(h.Func)
+			server.AppendHandlers(webhookReceiverHandler.ServeHTTP)
 			// Set data to post
 			postData := ""
 			// convert AMReceiverData to json for http request
@@ -98,11 +91,8 @@ var _ = Describe("Webhook Handlers", func() {
 		var resp *http.Response
 		var err error
 		BeforeEach(func() {
-			// setup handler
-			h := AMReceiver()
-			h.AddRoute(mux.NewRouter())
 			// add handler to the server
-			server.AppendHandlers(h.Func)
+			server.AppendHandlers(webhookReceiverHandler.ServeHTTP)
 			resp, err = http.Get(server.URL())
 		})
 		It("Returns the correct http status code", func() {
