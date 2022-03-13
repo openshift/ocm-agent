@@ -134,6 +134,7 @@ func (o *serveOptions) Run() error {
 	// create new router for metrics
 	rMetrics := mux.NewRouter()
 	rMetrics.Path("/metrics").Handler(promhttp.Handler())
+	rMetrics.Use(metrics.PrometheusMiddleware)
 
 	// Listen on the metrics port with a seprated goroutine
 	log.WithField("Port", metricsPort).Info("Start listening on metrics port")
