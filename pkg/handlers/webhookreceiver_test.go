@@ -3,24 +3,57 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	sdk "github.com/openshift-online/ocm-sdk-go"
 	"io"
 	"net/http"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
 	"github.com/onsi/gomega/ghttp"
+
+	"github.com/golang/mock/gomock"
+
+	clientmocks "github.com/openshift/ocm-agent/pkg/util/test/generated/mocks/client"
+)
+
+type RoundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (fn RoundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return fn(r)
+}
+
+const (
+	dummyJWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhbGciOiJIUzI1NiIsInR5cCI6IkJlYXJlciJ9.0rLPJ-zaY_wFsADkvKmW5nsZzeyFmCP0276XSrkctb4"
 )
 
 var _ = Describe("Webhook Handlers", func() {
 
 	var (
+		mockCtrl               *gomock.Controller
+		mockClient			   *clientmocks.MockClient
+		testConn			   *sdk.Connection
 		webhookReceiverHandler *WebhookReceiverHandler
 		server                 *ghttp.Server
 	)
 
 	BeforeEach(func() {
+		mockCtrl = gomock.NewController(GinkgoT())
+		mockClient = clientmocks.NewMockClient(mockCtrl)
 		server = ghttp.NewServer()
+		mockCtrl = mockCtrl
+		testConn, _ = sdk.NewConnectionBuilder().Tokens(dummyJWT).TransportWrapper(
+			func(tripper http.RoundTripper) http.RoundTripper {
+				return RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
+					// Assert on request attributes
+					// Return a response or error you want
+					return &http.Response{}, nil
+				})
+			},
+		).Build()
+		webhookReceiverHandler = &WebhookReceiverHandler{
+			c:   mockClient,
+			ocm: testConn,
+		}
 	})
 	AfterEach(func() {
 		server.Close()

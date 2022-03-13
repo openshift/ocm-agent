@@ -121,3 +121,10 @@ getlint:
 .PHONY: lint
 lint: getlint
 	$(GOPATH)/bin/golangci-lint run
+
+mockgen: ensure-mockgen
+	go generate $(GOBUILDFLAGS) ./...
+
+ensure-mockgen:
+	go install github.com/golang/mock/mockgen@v1.6.0
+

@@ -1,6 +1,7 @@
 package serve
 
 import (
+	"github.com/openshift/ocm-agent/pkg/ocm"
 	"net/http"
 	"strconv"
 	"strings"
@@ -140,17 +141,27 @@ func (o *serveOptions) Run() error {
 	log.WithField("Port", metricsPort).Info("Start listening on metrics port")
 	go http.ListenAndServe(":"+strconv.Itoa(metricsPort), rMetrics)
 
-	// create a new router
+	// Initialize k8s client
 	client, err := k8s.NewClient()
 	if err != nil {
 		log.WithError(err).Fatal("Can't initialise k8s client, ensure KUBECONFIG is set")
 		return err
 	}
+
+	// Initialize ocm client
+	ocmclient, err := ocm.NewConnection().Build(viper.GetString(config.OcmURL),
+		viper.GetString(config.ClusterID),
+		viper.GetString(config.AccessToken))
+	if err != nil {
+		log.WithError(err).Fatal("Can't initialise ocm client")
+		return err
+	}
+
+	// create a new router
+	r := mux.NewRouter()
 	livezHandler := handlers.NewLivezHandler()
 	readyzHandler := handlers.NewReadyzHandler()
-	webhookReceiverHandler := handlers.NewWebhookReceiverHandler(client)
-
-	r := mux.NewRouter()
+	webhookReceiverHandler := handlers.NewWebhookReceiverHandler(client, ocmclient)
 	r.Path(handlers.LivezPath).Handler(livezHandler)
 	r.Path(handlers.ReadyzPath).Handler(readyzHandler)
 	r.Path(handlers.WebhookReceiverPath).Handler(webhookReceiverHandler)
