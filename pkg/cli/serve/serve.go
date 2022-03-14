@@ -134,7 +134,6 @@ func (o *serveOptions) Run() error {
 	// create new router for metrics
 	rMetrics := mux.NewRouter()
 	rMetrics.Path("/metrics").Handler(promhttp.Handler())
-	rMetrics.Use(metrics.PrometheusMiddleware)
 
 	// Listen on the metrics port with a seprated goroutine
 	log.WithField("Port", metricsPort).Info("Start listening on metrics port")
@@ -154,6 +153,7 @@ func (o *serveOptions) Run() error {
 	r.Path(handlers.LivezPath).Handler(livezHandler)
 	r.Path(handlers.ReadyzPath).Handler(readyzHandler)
 	r.Path(handlers.WebhookReceiverPath).Handler(webhookReceiverHandler)
+	r.Use(metrics.PrometheusMiddleware)
 
 	// serve
 	log.WithField("Port", servicePort).Info("Start listening on service port")
