@@ -108,12 +108,13 @@ func (h *WebhookReceiverHandler) processAMReceiver(d AMReceiverData, ctx context
 		}
 
 		// Ignore alerts which don't have a template defined
-		if _, ok := alert.Labels[AMLabelTemplateName]; !ok {
+		templateName, foundTemplate := alert.Labels[AMLabelTemplateName]
+		if !foundTemplate {
 			log.WithField("alertname", alertname).Error("alert does not have template defined")
 			continue
 		}
 
-		template, mn, err := getTemplate(alert.Labels[AMLabelTemplateName], mnl)
+		template, mn, err := getTemplate(templateName, mnl)
 		if err != nil {
 			log.WithError(err).WithField("alertname", alertname).Warning("an alert fired which no template definition exists for")
 			continue
