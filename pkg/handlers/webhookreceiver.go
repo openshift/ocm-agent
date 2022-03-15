@@ -136,9 +136,9 @@ func (h *WebhookReceiverHandler) processAMReceiver(d AMReceiverData, ctx context
 	return &AMReceiverResponse{Error: nil, Status: "ok", Code: http.StatusOK}
 }
 
-func getTemplate(name string, m *oav1alpha1.ManagedNotificationList) (*oav1alpha1.Template, *oav1alpha1.ManagedNotification, error) {
+func getTemplate(name string, m *oav1alpha1.ManagedNotificationList) (*oav1alpha1.Notification, *oav1alpha1.ManagedNotification, error) {
 	for _, mn := range m.Items {
-		template, err := mn.GetTemplateForName(name)
+		template, err := mn.GetNotificationForName(name)
 		if template != nil && err == nil {
 			return template, &mn, nil
 		}
@@ -153,7 +153,7 @@ func alertName(a template.Alert) (*string, error) {
 	return nil, fmt.Errorf("no alertname defined in alert")
 }
 
-func (h *WebhookReceiverHandler) sendServiceLog(t *oav1alpha1.Template, firing bool) error {
+func (h *WebhookReceiverHandler) sendServiceLog(t *oav1alpha1.Notification, firing bool) error {
 	req := h.ocm.Post()
 	err := arguments.ApplyPathArg(req, "/api/service_logs/v1/cluster_logs")
 	if err != nil {
@@ -185,7 +185,7 @@ func (h *WebhookReceiverHandler) sendServiceLog(t *oav1alpha1.Template, firing b
 	return nil
 }
 
-func (h *WebhookReceiverHandler) updateTemplateStatus(t *oav1alpha1.Template, mn *oav1alpha1.ManagedNotification) error {
+func (h *WebhookReceiverHandler) updateTemplateStatus(t *oav1alpha1.Notification, mn *oav1alpha1.ManagedNotification) error {
 
 	// Update lastSent timestamp
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {

@@ -9,7 +9,7 @@ require (
 	github.com/onsi/gomega v1.18.1
 	github.com/openshift-online/ocm-cli v0.1.62
 	github.com/openshift-online/ocm-sdk-go v0.1.242
-	github.com/openshift/ocm-agent-operator v0.0.0-20220309073823-5dc17c0071ac
+	github.com/openshift/ocm-agent-operator v0.0.0-20220315043808-a190995e3fda
 	github.com/prometheus/alertmanager v0.23.0
 	github.com/prometheus/client_golang v1.11.0
 	github.com/sirupsen/logrus v1.8.1
