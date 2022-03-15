@@ -3,16 +3,20 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
-	sdk "github.com/openshift-online/ocm-sdk-go"
 	"io"
 	"net/http"
+	"reflect"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/ghttp"
 
 	"github.com/golang/mock/gomock"
+	sdk "github.com/openshift-online/ocm-sdk-go"
+	oav1alpha1 "github.com/openshift/ocm-agent-operator/pkg/apis/ocmagent/v1alpha1"
+	"github.com/prometheus/alertmanager/template"
 
+	testconst "github.com/openshift/ocm-agent/pkg/consts/test"
 	clientmocks "github.com/openshift/ocm-agent/pkg/util/test/generated/mocks/client"
 )
 
@@ -34,6 +38,7 @@ var _ = Describe("Webhook Handlers", func() {
 		testConn               *sdk.Connection
 		webhookReceiverHandler *WebhookReceiverHandler
 		server                 *ghttp.Server
+		testAlert              template.Alert
 	)
 
 	BeforeEach(func() {
@@ -53,6 +58,7 @@ var _ = Describe("Webhook Handlers", func() {
 			c:   mockClient,
 			ocm: testConn,
 		}
+		testAlert = testconst.TestAlert
 	})
 	AfterEach(func() {
 		server.Close()
@@ -139,6 +145,32 @@ var _ = Describe("Webhook Handlers", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 			body, _ := io.ReadAll(resp.Body)
 			Expect(string(body)).Should(Equal("Method Not Allowed\n"))
+		})
+	})
+
+	Context("When checking if an alert is valid", func() {
+		It("should indicate a valid alert is valid", func() {
+			r := isValidAlert(testconst.TestAlert)
+			Expect(r).To(BeTrue())
+		})
+		It("should invalidate an alert with no name", func() {
+			delete(testAlert.Labels, AMLabelAlertName)
+			r := isValidAlert(testconst.TestAlert)
+			Expect(r).To(BeFalse())
+		})
+	})
+
+	Context("When looking for a matching notification for an alert", func() {
+		It("will return one if one exists", func() {
+			mnl := &oav1alpha1.ManagedNotificationList{
+				Items: []oav1alpha1.ManagedNotification{
+					testconst.TestManagedNotification,
+				},
+			}
+			n, mn, err := getNotification(testconst.TestNotificationName, mnl)
+			Expect(err).To(BeNil())
+			Expect(reflect.DeepEqual(*n, testconst.TestNotification)).To(BeTrue())
+			Expect(reflect.DeepEqual(*mn, testconst.TestManagedNotification)).To(BeTrue())
 		})
 	})
 })
