@@ -107,43 +107,43 @@ func (h *WebhookReceiverHandler) processAMReceiver(d AMReceiverData, ctx context
 			continue
 		}
 
-		// Ignore alerts which don't have a template defined
-		templateName, foundTemplate := alert.Labels[AMLabelTemplateName]
-		if !foundTemplate {
+		// Ignore alerts which don't have a notification defined
+		notificationName, foundNotification := alert.Labels[AMLabelTemplateName]
+		if !foundNotification {
 			log.WithField("alertname", alertname).Error("alert does not have template defined")
 			continue
 		}
 
-		template, mn, err := getTemplate(templateName, mnl)
+		notification, mn, err := getNotification(notificationName, mnl)
 		if err != nil {
-			log.WithError(err).WithField("alertname", alertname).Warning("an alert fired which no template definition exists for")
+			log.WithError(err).WithField("alertname", alertname).Warning("an alert fired which no notification template definition exists for")
 			continue
 		}
-		log.WithFields(log.Fields{"template": template.Name, "alertname": alertname}).Info("Found a template")
+		log.WithFields(log.Fields{"notification": notification.Name, "alertname": alertname}).Info("Found a notification")
 
-		err = h.sendServiceLog(template, true)
+		err = h.sendServiceLog(notification, true)
 		if err != nil {
-			log.WithError(err).WithFields(log.Fields{"template": template.Name, "firing": "true"}).Error("unable to send service log")
+			log.WithError(err).WithFields(log.Fields{"notification": notification.Name, "firing": "true"}).Error("unable to send service log")
 			continue
 		}
 
-		err = h.updateTemplateStatus(template, mn)
+		err = h.updateNotificationStatus(notification, mn)
 		if err != nil {
-			log.WithFields(log.Fields{"template": template.Name, "managednotification": mn.Name}).WithError(err).Error("unable to update template status")
+			log.WithFields(log.Fields{"notification": notification.Name, "managednotification": mn.Name}).WithError(err).Error("unable to update notification status")
 			continue
 		}
 	}
 	return &AMReceiverResponse{Error: nil, Status: "ok", Code: http.StatusOK}
 }
 
-func getTemplate(name string, m *oav1alpha1.ManagedNotificationList) (*oav1alpha1.Notification, *oav1alpha1.ManagedNotification, error) {
+func getNotification(name string, m *oav1alpha1.ManagedNotificationList) (*oav1alpha1.Notification, *oav1alpha1.ManagedNotification, error) {
 	for _, mn := range m.Items {
-		template, err := mn.GetNotificationForName(name)
-		if template != nil && err == nil {
-			return template, &mn, nil
+		notification, err := mn.GetNotificationForName(name)
+		if notification != nil && err == nil {
+			return notification, &mn, nil
 		}
 	}
-	return nil, nil, fmt.Errorf("matching managed notification template not found for %s", name)
+	return nil, nil, fmt.Errorf("matching managed notification not found for %s", name)
 }
 
 func alertName(a template.Alert) (*string, error) {
@@ -153,7 +153,7 @@ func alertName(a template.Alert) (*string, error) {
 	return nil, fmt.Errorf("no alertname defined in alert")
 }
 
-func (h *WebhookReceiverHandler) sendServiceLog(t *oav1alpha1.Notification, firing bool) error {
+func (h *WebhookReceiverHandler) sendServiceLog(n *oav1alpha1.Notification, firing bool) error {
 	req := h.ocm.Post()
 	err := arguments.ApplyPathArg(req, "/api/service_logs/v1/cluster_logs")
 	if err != nil {
@@ -163,13 +163,13 @@ func (h *WebhookReceiverHandler) sendServiceLog(t *oav1alpha1.Notification, firi
 	sl := ocm.ServiceLog{
 		ServiceName:  "SREManualAction",
 		ClusterUUID:  viper.GetString(config.ClusterID),
-		Summary:      t.Summary,
+		Summary:      n.Summary,
 		InternalOnly: false,
 	}
 	if firing {
-		sl.Description = t.ActiveDesc
+		sl.Description = n.ActiveDesc
 	} else {
-		sl.Description = t.ResolvedDesc
+		sl.Description = n.ResolvedDesc
 	}
 	slAsBytes, err := json.Marshal(sl)
 	if err != nil {
@@ -185,7 +185,7 @@ func (h *WebhookReceiverHandler) sendServiceLog(t *oav1alpha1.Notification, firi
 	return nil
 }
 
-func (h *WebhookReceiverHandler) updateTemplateStatus(t *oav1alpha1.Notification, mn *oav1alpha1.ManagedNotification) error {
+func (h *WebhookReceiverHandler) updateNotificationStatus(n *oav1alpha1.Notification, mn *oav1alpha1.ManagedNotification) error {
 
 	// Update lastSent timestamp
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -199,11 +199,11 @@ func (h *WebhookReceiverHandler) updateTemplateStatus(t *oav1alpha1.Notification
 			return err
 		}
 
-		status, err := m.Status.GetNotificationRecord(t.Name)
+		status, err := m.Status.GetNotificationRecord(n.Name)
 		if err != nil {
 			// Status does not exist, create it
 			status = &oav1alpha1.NotificationRecord{
-				Name:                t.Name,
+				Name:                n.Name,
 				ServiceLogSentCount: 0,
 			}
 			status.SetStatus(oav1alpha1.ConditionServiceLogSent, "Service log sent")
