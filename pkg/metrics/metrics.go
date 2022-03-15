@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/openshift/ocm-agent/pkg/handlers"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -73,10 +74,11 @@ func (rw *responseWriter) WriteHeader(code int) {
 func PrometheusMiddleware(ph http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-		metricRequestsTotal.WithLabelValues().Inc()
-
 		path, _ := mux.CurrentRoute(r).GetPathTemplate()
-		metricRequestsByService.WithLabelValues(path).Inc()
+		if path != handlers.LivezPath && path != handlers.ReadyzPath {
+			metricRequestsTotal.WithLabelValues().Inc()
+			metricRequestsByService.WithLabelValues(path).Inc()
+		}
 
 		rw := NewResponseWriter(w)
 		ph.ServeHTTP(rw, r)
