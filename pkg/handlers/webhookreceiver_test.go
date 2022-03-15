@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"reflect"
 
+	sdk "github.com/openshift-online/ocm-sdk-go"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/ghttp"
@@ -64,39 +66,43 @@ var _ = Describe("Webhook Handlers", func() {
 		server.Close()
 	})
 	Context("AMReceiver handler post", func() {
-		//var resp *http.Response
-		//var err error
-		//BeforeEach(func() {
-		//	// add handler to the server
-		//	server.AppendHandlers(webhookReceiverHandler.ServeHTTP)
-		//	// Set data to post
-		//	postData := AMReceiverData{
-		//		Status: "foo",
-		//	}
-		//	// convert AMReceiverData to json for http request
-		//	postDataJson, _ := json.Marshal(postData)
-		//	// post to AMReceiver handler
-		//	resp, err = http.Post(server.URL(), "application/json", bytes.NewBuffer(postDataJson))
-		//})
-		//It("Returns the correct http status code", func() {
-		//	Expect(err).ShouldNot(HaveOccurred())
-		//	Expect(resp.StatusCode).Should(Equal(http.StatusOK))
-		//})
-		//It("Returns the correct content type", func() {
-		//	Expect(err).ShouldNot(HaveOccurred())
-		//	Expect(resp.Header.Get("Content-Type")).Should(Equal("application/json"))
-		//})
-		//It("Returns the correct response", func() {
-		//	Expect(err).ShouldNot(HaveOccurred())
-		//	// Set expected
-		//	expected := AMReceiverResponse{
-		//		Status: "ok",
-		//	}
-		//	// Set response
-		//	var response AMReceiverResponse
-		//	_ = json.NewDecoder(resp.Body).Decode(&response)
-		//	Expect(response).Should(Equal(expected))
-		//})
+		var resp *http.Response
+		var err error
+		BeforeEach(func() {
+			// add handler to the server
+			server.AppendHandlers(webhookReceiverHandler.ServeHTTP)
+			// Expect call *client.List(arg1, arg2, arg3) on mocked WebhookReceiverHandler
+			mockClient.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
+			// Set data to post
+			postData := AMReceiverData{
+				Status: "foo",
+			}
+			// convert AMReceiverData to json for http request
+			postDataJson, _ := json.Marshal(postData)
+			// post to AMReceiver handler
+			resp, err = http.Post(server.URL(), "application/json", bytes.NewBuffer(postDataJson))
+		})
+		It("Returns the correct http status code", func() {
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(resp.StatusCode).Should(Equal(http.StatusOK))
+		})
+		It("Returns the correct content type", func() {
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(resp.Header.Get("Content-Type")).Should(Equal("application/json"))
+		})
+		It("Returns the correct response", func() {
+			Expect(err).ShouldNot(HaveOccurred())
+			// Set expected
+			expected := AMReceiverResponse{
+				Status: "ok",
+				Code:   200,
+				Error:  nil,
+			}
+			// Set response
+			var response AMReceiverResponse
+			_ = json.NewDecoder(resp.Body).Decode(&response)
+			Expect(response).Should(Equal(expected))
+		})
 	})
 	Context("AMReceiver handler post bad data", func() {
 		var resp *http.Response
