@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/openshift/ocm-agent/pkg/ocm"
+
 	"github.com/prometheus/alertmanager/template"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -52,6 +54,17 @@ var (
 		},
 		StartsAt: time.Now(),
 		EndsAt:   time.Time{},
+	}
+	TestManagedNotificationList = &ocmagentv1alpha1.ManagedNotificationList{
+		Items: []ocmagentv1alpha1.ManagedNotification{
+			TestManagedNotification,
+		},
+	}
+	TestServiceLog = ocm.ServiceLog{
+		ServiceName:  "SREManualAction",
+		ClusterUUID:  "ddb5e04c-87ea-4fcd-b1f9-640981726cc5",
+		Summary:      "Test SL Summary",
+		InternalOnly: false,
 	}
 )
 

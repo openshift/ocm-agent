@@ -122,7 +122,7 @@ func (h *WebhookReceiverHandler) processAlert(alert template.Alert, mnl *oav1alp
 	// Can the alert be mapped to an existing notification definition?
 	notification, managedNotifications, err := getNotification(alert.Labels[AMLabelTemplateName], mnl)
 	if err != nil {
-		log.WithError(err).WithField(LogFieldAlert, alert).Warning("an alert fired which no notification template definition exists for")
+		log.WithError(err).WithField(LogFieldAlert, alert).Warning("an alert fired with no associated notification template definition")
 		return err
 	}
 
