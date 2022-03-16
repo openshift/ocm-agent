@@ -65,6 +65,24 @@ var _ = Describe("Webhook Handlers", func() {
 	AfterEach(func() {
 		server.Close()
 	})
+	Context("AMReceiver processAMReceiver", func() {
+		var r http.Request
+		BeforeEach(func() {
+			mockClient.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
+		})
+		It("Returns the correct AMReceiverResponse", func() {
+			alert := AMReceiverData{
+				Status: "foo",
+			}
+			response := webhookReceiverHandler.processAMReceiver(alert, r.Context())
+			expect := AMReceiverResponse{
+				Error:  nil,
+				Code:   200,
+				Status: "ok",
+			}
+			Expect(response.Status).Should(Equal(expect.Status))
+		})
+	})
 	Context("AMReceiver handler post", func() {
 		var resp *http.Response
 		var err error
