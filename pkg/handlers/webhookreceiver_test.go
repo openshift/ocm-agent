@@ -3,16 +3,19 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
-	sdk "github.com/openshift-online/ocm-sdk-go"
 	"io"
 	"net/http"
+	"reflect"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/ghttp"
 
 	"github.com/golang/mock/gomock"
+	sdk "github.com/openshift-online/ocm-sdk-go"
+	"github.com/prometheus/alertmanager/template"
 
+	testconst "github.com/openshift/ocm-agent/pkg/consts/test"
 	clientmocks "github.com/openshift/ocm-agent/pkg/util/test/generated/mocks/client"
 )
 
@@ -34,6 +37,7 @@ var _ = Describe("Webhook Handlers", func() {
 		testConn               *sdk.Connection
 		webhookReceiverHandler *WebhookReceiverHandler
 		server                 *ghttp.Server
+		testAlert              template.Alert
 	)
 
 	BeforeEach(func() {
@@ -53,6 +57,8 @@ var _ = Describe("Webhook Handlers", func() {
 			c:   mockClient,
 			ocm: testConn,
 		}
+		testAlert = testconst.TestAlert
+
 	})
 	AfterEach(func() {
 		server.Close()
@@ -141,4 +147,66 @@ var _ = Describe("Webhook Handlers", func() {
 			Expect(string(body)).Should(Equal("Method Not Allowed\n"))
 		})
 	})
+
+	Context("When checking if an alert is valid", func() {
+		It("should indicate a valid alert is valid", func() {
+			r := isValidAlert(testconst.TestAlert)
+			Expect(r).To(BeTrue())
+		})
+		It("should invalidate an alert with no name", func() {
+			delete(testAlert.Labels, AMLabelAlertName)
+			r := isValidAlert(testconst.TestAlert)
+			Expect(r).To(BeFalse())
+		})
+		It("should invalidate an alert with no send_managed_notification label", func() {
+			delete(testAlert.Labels, "send_managed_notification")
+			r := isValidAlert(testconst.TestAlert)
+			Expect(r).To(BeFalse())
+		})
+		It("should invalidate an alert with no managed_notification_template label", func() {
+			delete(testAlert.Labels, "managed_notification_template")
+			r := isValidAlert(testconst.TestAlert)
+			Expect(r).To(BeFalse())
+		})
+	})
+
+	Context("When looking for a matching notification for an alert", func() {
+		It("will return one if one exists", func() {
+			n, mn, err := getNotification(testconst.TestNotificationName, testconst.TestManagedNotificationList)
+			Expect(err).To(BeNil())
+			Expect(reflect.DeepEqual(*n, testconst.TestNotification)).To(BeTrue())
+			Expect(reflect.DeepEqual(*mn, testconst.TestManagedNotification)).To(BeTrue())
+		})
+		It("will return nil if one does not exist", func() {
+			_, _, err := getNotification("dummy-nonexistent-test", testconst.TestManagedNotificationList)
+			Expect(err).ToNot(BeNil())
+		})
+	})
+
+	Context("When processing an alert", func() {
+		It("will check if the alert is valid or not without name", func() {
+			delete(testAlert.Labels, "alertname")
+			err := webhookReceiverHandler.processAlert(testconst.TestAlert, testconst.TestManagedNotificationList)
+			Expect(err).ToNot(BeNil())
+		})
+		It("will check if the alert can be mapped to existing notification template definition or not", func() {
+			delete(testAlert.Labels, "managed_notification_template")
+			err := webhookReceiverHandler.processAlert(testAlert, testconst.TestManagedNotificationList)
+			Expect(err).ToNot(BeNil())
+		})
+	})
+
+	// Context("When sending service log", func() {
+	// 	It("will send service log with active description if alert is firing", func() {
+	// 		err := webhookReceiverHandler.sendServiceLog(&testconst.TestNotification, true)
+	// 		Expect(err).To(BeNil())
+	// 	})
+	// })
+
+	// Context("When updating Notification status", func() {
+	// 	It("will check if the alert is valid or not without name", func() {
+	// 		err := webhookReceiverHandler.updateNotificationStatus(&testconst.TestNotification, &testconst.TestManagedNotification)
+	// 		Expect(err).To(BeNil())
+	// 	})
+	// })
 })

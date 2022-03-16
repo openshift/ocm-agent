@@ -24,6 +24,13 @@ const (
 	AMLabelAlertName           = "alertname"
 	AMLabelTemplateName        = "managed_notification_template"
 	AMLabelManagedNotification = "send_managed_notification"
+
+	LogFieldNotificationName    = "notification"
+	LogFieldResendInterval      = "resend_interval"
+	LogFieldAlertname           = "alertname"
+	LogFieldAlert               = "alert"
+	LogFieldIsFiring            = "is_firing"
+	LogFieldManagedNotification = "managed_notification_cr"
 )
 
 type WebhookReceiverHandler struct {
@@ -82,7 +89,7 @@ func (h *WebhookReceiverHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 func (h *WebhookReceiverHandler) processAMReceiver(d AMReceiverData, ctx context.Context) *AMReceiverResponse {
 	log.WithField("AMReceiverData", d).Info("Process alert data")
 
-	// Let's get all ManagedNotifications
+	// Let's get all ManagedNotifications in the
 	mnl := &oav1alpha1.ManagedNotificationList{}
 	listOptions := []client.ListOption{
 		client.InNamespace("openshift-ocm-agent-operator"),
@@ -93,49 +100,91 @@ func (h *WebhookReceiverHandler) processAMReceiver(d AMReceiverData, ctx context
 		return &AMReceiverResponse{Error: err, Status: "unable to list managed notifications", Code: http.StatusInternalServerError}
 	}
 
+	// Handle each firing alert
 	for _, alert := range d.Alerts.Firing() {
-		// Ignore alerts which don't have a name
-		alertname, err := alertName(alert)
+		err = h.processAlert(alert, mnl)
 		if err != nil {
-			log.WithError(err).Error("alertname missing for alert")
-			continue
-		}
-
-		// Ignore alerts which don't have the send_managed_notification label
-		if val, ok := alert.Labels[AMLabelManagedNotification]; !ok || val == "false" {
-			log.WithField("alertname", alertname).Debug("ignoring alert with no send_managed_notification label")
-			continue
-		}
-
-		// Ignore alerts which don't have a notification defined
-		notificationName, foundNotification := alert.Labels[AMLabelTemplateName]
-		if !foundNotification {
-			log.WithField("alertname", alertname).Error("alert does not have template defined")
-			continue
-		}
-
-		notification, mn, err := getNotification(notificationName, mnl)
-		if err != nil {
-			log.WithError(err).WithField("alertname", alertname).Warning("an alert fired which no notification template definition exists for")
-			continue
-		}
-		log.WithFields(log.Fields{"notification": notification.Name, "alertname": alertname}).Info("Found a notification")
-
-		err = h.sendServiceLog(notification, true)
-		if err != nil {
-			log.WithError(err).WithFields(log.Fields{"notification": notification.Name, "firing": "true"}).Error("unable to send service log")
-			continue
-		}
-
-		err = h.updateNotificationStatus(notification, mn)
-		if err != nil {
-			log.WithFields(log.Fields{"notification": notification.Name, "managednotification": mn.Name}).WithError(err).Error("unable to update notification status")
-			continue
+			log.WithError(err).Error("an alert could not be successfully processed")
 		}
 	}
 	return &AMReceiverResponse{Error: nil, Status: "ok", Code: http.StatusOK}
 }
 
+// processAlert handles the pre-check verification and sending of a notification for a particular alert
+// and returns an error if that process completed successfully or false otherwise
+func (h *WebhookReceiverHandler) processAlert(alert template.Alert, mnl *oav1alpha1.ManagedNotificationList) error {
+	// Should this alert be handled?
+	if !isValidAlert(alert) {
+		log.WithField(LogFieldAlert, alert).Info("alert does not meet valid criteria")
+		return fmt.Errorf("alert does not meet valid criteria")
+	}
+
+	// Can the alert be mapped to an existing notification definition?
+	notification, managedNotifications, err := getNotification(alert.Labels[AMLabelTemplateName], mnl)
+	if err != nil {
+		log.WithError(err).WithField(LogFieldAlert, alert).Warning("an alert fired with no associated notification template definition")
+		return err
+	}
+
+	// Has a servicelog already been sent and we are within the notification's "do-not-resend" window?
+	canBeSent, err := managedNotifications.CanBeSent(notification.Name)
+	if err != nil {
+		log.WithError(err).WithField(LogFieldNotificationName, notification.Name).Error("unable to validate if notification can be sent")
+		return err
+	}
+	if !canBeSent {
+		log.WithFields(log.Fields{"notification": notification.Name,
+			LogFieldResendInterval: notification.ResendWait,
+		}).Info("not sending a notification as one was already sent recently")
+		// This is not an error state
+		return nil
+	}
+
+	// Send the servicelog for the alert
+	log.WithFields(log.Fields{LogFieldNotificationName: notification.Name}).Info("will send servicelog for notification")
+	err = h.sendServiceLog(notification, true)
+	if err != nil {
+		log.WithError(err).WithFields(log.Fields{LogFieldNotificationName: notification.Name, LogFieldIsFiring: true}).Error("unable to send a notification")
+		return err
+	}
+
+	// Update the notification status to indicate a servicelog has been sent
+	err = h.updateNotificationStatus(notification, managedNotifications)
+	if err != nil {
+		log.WithFields(log.Fields{LogFieldNotificationName: notification.Name, LogFieldManagedNotification: managedNotifications.Name}).WithError(err).Error("unable to update notification status")
+		return err
+	}
+
+	return nil
+}
+
+// isValidAlert indicates whether the supplied alert is one that warrants being processed for a notification.
+// Any or all of these situations should be treated as an error as it indicates that AlertManager is forwarding
+// alerts to ocm-agent that it should not be.
+func isValidAlert(alert template.Alert) bool {
+	// An invalid alert won't have a name
+	alertname, err := alertName(alert)
+	if err != nil {
+		log.WithError(err).Info("alertname missing for alert")
+		return false
+	}
+
+	// An invalid alert won't have a send_managed_notification label
+	if val, ok := alert.Labels[AMLabelManagedNotification]; !ok || val == "false" {
+		log.WithField(LogFieldAlertname, alertname).Error("alert has no send_managed_notification label")
+		return false
+	}
+
+	// An invalid alert won't have a managed_notification_template label
+	if _, ok := alert.Labels[AMLabelTemplateName]; !ok {
+		log.WithField(LogFieldAlertname, alertname).Error("alert has no managed notification defined")
+		return false
+	}
+
+	return true
+}
+
+// getNotification returns the notification from the ManagedNotification bundle if one exists, or error if one does not
 func getNotification(name string, m *oav1alpha1.ManagedNotificationList) (*oav1alpha1.Notification, *oav1alpha1.ManagedNotification, error) {
 	for _, mn := range m.Items {
 		notification, err := mn.GetNotificationForName(name)
@@ -146,6 +195,7 @@ func getNotification(name string, m *oav1alpha1.ManagedNotificationList) (*oav1a
 	return nil, nil, fmt.Errorf("matching managed notification not found for %s", name)
 }
 
+// alertName looks up the name of an AlertManager alert, or returns error if one does not exist
 func alertName(a template.Alert) (*string, error) {
 	if name, ok := a.Labels[AMLabelAlertName]; ok {
 		return &name, nil
@@ -153,6 +203,7 @@ func alertName(a template.Alert) (*string, error) {
 	return nil, fmt.Errorf("no alertname defined in alert")
 }
 
+// sendServiceLog sends a servicelog notification for the given alert
 func (h *WebhookReceiverHandler) sendServiceLog(n *oav1alpha1.Notification, firing bool) error {
 	req := h.ocm.Post()
 	err := arguments.ApplyPathArg(req, "/api/service_logs/v1/cluster_logs")
