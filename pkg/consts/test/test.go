@@ -60,11 +60,19 @@ var (
 			TestManagedNotification,
 		},
 	}
-	TestServiceLog = ocm.ServiceLog{
+	TestActiveServiceLog = ocm.ServiceLog{
 		ServiceName:  "SREManualAction",
 		ClusterUUID:  "ddb5e04c-87ea-4fcd-b1f9-640981726cc5",
 		Summary:      "Test SL Summary",
 		InternalOnly: false,
+		Description:  TestNotification.ActiveDesc,
+	}
+	TestResolvedServiceLog = ocm.ServiceLog{
+		ServiceName:  "SREManualAction",
+		ClusterUUID:  "ddb5e04c-87ea-4fcd-b1f9-640981726cc5",
+		Summary:      "Test SL Summary",
+		InternalOnly: false,
+		Description:  TestNotification.ResolvedDesc,
 	}
 )
 

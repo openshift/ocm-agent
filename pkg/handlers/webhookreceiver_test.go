@@ -223,14 +223,32 @@ var _ = Describe("Webhook Handlers", func() {
 	// Context("When sending service log", func() {
 	// 	It("will send service log with active description if alert is firing", func() {
 	// 		err := webhookReceiverHandler.sendServiceLog(&testconst.TestNotification, true)
-	// 		Expect(err).To(BeNil())
+	// 		resp := slresponse{
+	// 			"service_name":  "SREManualAction",
+	// 			"cluster_uuid":  "ddb5e04c-87ea-4fcd-b1f9-640981726cc5",
+	// 			"summary":       "Test SL Summary",
+	// 			"internal_only": false,
+	// 		}
+	// 		var response slresponse
+	// 		Expect(err).ShouldNot(HaveOccurred())
 	// 	})
+	// 	// It("will send service log with resolved description if alert is resolved", func() {
+	// 	// 	err = webhookReceiverHandler.sendServiceLog(&testconst.TestNotification, false)
+	// 	// 	Expect(err).ShouldNot(HaveOccurred())
+	// 	// 	Expect(resp).Should(Equal(testconst.TestNotification.ResolvedDesc))
+	// 	// })
 	// })
 
 	// Context("When updating Notification status", func() {
+	// 	BeforeEach(func() {
+	// 		mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	// 		mockClient.EXPECT().Status().Times(1)
+	// 		// //_ = webhookReceiverHandler.c.Status().Update(context.TODO(), &testconst.TestManagedNotification)
+	// 		// mockClient.EXPECT().Update(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	// 	})
 	// 	It("will check if the alert is valid or not without name", func() {
 	// 		err := webhookReceiverHandler.updateNotificationStatus(&testconst.TestNotification, &testconst.TestManagedNotification)
-	// 		Expect(err).To(BeNil())
+	// 		Expect(err).ShouldNot(BeNil())
 	// 	})
 	// })
 })
