@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/openshift-online/ocm-cli/pkg/arguments"
 	sdk "github.com/openshift-online/ocm-sdk-go"
@@ -15,6 +16,8 @@ import (
 	oav1alpha1 "github.com/openshift/ocm-agent-operator/pkg/apis/ocmagent/v1alpha1"
 	"github.com/openshift/ocm-agent/pkg/config"
 	"github.com/openshift/ocm-agent/pkg/ocm"
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -149,7 +152,7 @@ func (h *WebhookReceiverHandler) processAlert(alert template.Alert, mnl *oav1alp
 	}
 
 	// Update the notification status to indicate a servicelog has been sent
-	err = h.updateNotificationStatus(notification, managedNotifications)
+	err = h.updateNotificationStatus(notification, managedNotifications, true)
 	if err != nil {
 		log.WithFields(log.Fields{LogFieldNotificationName: notification.Name, LogFieldManagedNotification: managedNotifications.Name}).WithError(err).Error("unable to update notification status")
 		return err
@@ -236,7 +239,7 @@ func (h *WebhookReceiverHandler) sendServiceLog(n *oav1alpha1.Notification, firi
 	return nil
 }
 
-func (h *WebhookReceiverHandler) updateNotificationStatus(n *oav1alpha1.Notification, mn *oav1alpha1.ManagedNotification) error {
+func (h *WebhookReceiverHandler) updateNotificationStatus(n *oav1alpha1.Notification, mn *oav1alpha1.ManagedNotification, firing bool) error {
 
 	// Update lastSent timestamp
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -250,18 +253,52 @@ func (h *WebhookReceiverHandler) updateNotificationStatus(n *oav1alpha1.Notifica
 			return err
 		}
 
+		timeNow := &v1.Time{Time: time.Now()}
 		status, err := m.Status.GetNotificationRecord(n.Name)
 		if err != nil {
 			// Status does not exist, create it
+			// This will happen only when the alert is firing first time
 			status = &oav1alpha1.NotificationRecord{
 				Name:                n.Name,
 				ServiceLogSentCount: 0,
 			}
-			status.SetStatus(oav1alpha1.ConditionServiceLogSent, "Service log sent")
+			status.SetStatus(oav1alpha1.ConditionAlertFiring, "Alert is firing", corev1.ConditionTrue, timeNow)
+			status.SetStatus(oav1alpha1.ConditionAlertResolved, "Alert resolved", corev1.ConditionFalse, timeNow)
+			status.SetStatus(oav1alpha1.ConditionServiceLogSent, "Service log sent", corev1.ConditionTrue, timeNow)
 		} else {
 			// Status exists, update it
-			status.SetStatus(oav1alpha1.ConditionServiceLogSent, "Service log sent")
+			// When the alert is already firing
+			firingCondition := status.Conditions.GetCondition(oav1alpha1.ConditionAlertFiring).Status
+			if firingCondition == corev1.ConditionTrue {
+				firedConditionTime := status.Conditions.GetCondition(oav1alpha1.ConditionAlertFiring).LastTransitionTime
+				resolvedConditionTime := status.Conditions.GetCondition(oav1alpha1.ConditionAlertResolved).LastTransitionTime
+				if firing {
+					// Status transition is Firing to Firing
+					// Do not update the condition for AlertFiring and AlertResolved
+					// Only update the timestamp for the ServiceLogSent
+					status.SetStatus(oav1alpha1.ConditionAlertFiring, "Alert is firing", corev1.ConditionTrue, firedConditionTime)
+					status.SetStatus(oav1alpha1.ConditionAlertResolved, "Alert resolved", corev1.ConditionFalse, resolvedConditionTime)
+					status.SetStatus(oav1alpha1.ConditionServiceLogSent, "Service log sent", corev1.ConditionTrue, timeNow)
+				} else {
+					// Status transition is Firing to Resolved
+					// Update the condition status and timestamp for AlertFiring
+					// Update the condition status and timestamp for AlertResolved
+					// Update the timestamp for the ServiceLogSent
+					status.SetStatus(oav1alpha1.ConditionAlertFiring, "Alert is firing", corev1.ConditionFalse, timeNow)
+					status.SetStatus(oav1alpha1.ConditionAlertResolved, "Alert resolved", corev1.ConditionTrue, timeNow)
+					status.SetStatus(oav1alpha1.ConditionServiceLogSent, "Service log sent", corev1.ConditionTrue, timeNow)
+				}
+			} else {
+				// Status transition is Resolved to Firing
+				// Update the condition status and timestamp for AlertFiring
+				// Update the condition status and timestamp for AlertResolved
+				// Update the timestamp for the ServiceLogSent
+				status.SetStatus(oav1alpha1.ConditionAlertFiring, "Alert is firing", corev1.ConditionTrue, timeNow)
+				status.SetStatus(oav1alpha1.ConditionAlertResolved, "Alert resolved", corev1.ConditionFalse, timeNow)
+				status.SetStatus(oav1alpha1.ConditionServiceLogSent, "Service log sent", corev1.ConditionTrue, timeNow)
+			}
 		}
+
 		m.Status.Notifications.SetNotificationRecord(*status)
 
 		err = h.c.Status().Update(context.TODO(), m)
