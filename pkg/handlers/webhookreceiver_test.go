@@ -3,11 +3,10 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"reflect"
-
-	sdk "github.com/openshift-online/ocm-sdk-go"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -16,6 +15,8 @@ import (
 	"github.com/golang/mock/gomock"
 	sdk "github.com/openshift-online/ocm-sdk-go"
 	"github.com/prometheus/alertmanager/template"
+
+	k8serrs "k8s.io/apimachinery/pkg/api/errors"
 
 	testconst "github.com/openshift/ocm-agent/pkg/consts/test"
 	clientmocks "github.com/openshift/ocm-agent/pkg/util/test/generated/mocks/client"
@@ -36,6 +37,7 @@ var _ = Describe("Webhook Handlers", func() {
 	var (
 		mockCtrl               *gomock.Controller
 		mockClient             *clientmocks.MockClient
+		mockUpdater            *clientmocks.MockStatusWriter
 		testConn               *sdk.Connection
 		webhookReceiverHandler *WebhookReceiverHandler
 		server                 *ghttp.Server
@@ -45,6 +47,7 @@ var _ = Describe("Webhook Handlers", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		mockClient = clientmocks.NewMockClient(mockCtrl)
+		mockUpdater = clientmocks.NewMockStatusWriter(mockCtrl)
 		server = ghttp.NewServer()
 		testConn, _ = sdk.NewConnectionBuilder().Tokens(dummyJWT).TransportWrapper(
 			func(tripper http.RoundTripper) http.RoundTripper {
@@ -239,16 +242,32 @@ var _ = Describe("Webhook Handlers", func() {
 	// 	// })
 	// })
 
-	// Context("When updating Notification status", func() {
-	// 	BeforeEach(func() {
-	// 		mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
-	// 		mockClient.EXPECT().Status().Times(1)
-	// 		// //_ = webhookReceiverHandler.c.Status().Update(context.TODO(), &testconst.TestManagedNotification)
-	// 		// mockClient.EXPECT().Update(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-	// 	})
-	// 	It("will check if the alert is valid or not without name", func() {
-	// 		err := webhookReceiverHandler.updateNotificationStatus(&testconst.TestNotification, &testconst.TestManagedNotification)
-	// 		Expect(err).ShouldNot(BeNil())
-	// 	})
-	// })
+	Context("When updating Notification status", func() {
+		It("Report error if not able to get ManagedNotification", func() {
+			fakeError := k8serrs.NewInternalError(fmt.Errorf("a fake error"))
+			gomock.InOrder(
+				mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(fakeError),
+			)
+			err := webhookReceiverHandler.updateNotificationStatus(&testconst.TestNotification, &testconst.TestManagedNotification, true)
+			Expect(err).ShouldNot(BeNil())
+		})
+		It("Create status if NotificationRecord not found", func() {
+			gomock.InOrder(
+				mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
+				mockClient.EXPECT().Status().Return(mockUpdater),
+				mockUpdater.EXPECT().Update(gomock.Any(), gomock.Any()).Return(nil),
+			)
+			err := webhookReceiverHandler.updateNotificationStatus(&testconst.TestNotification, &testconst.TestManagedNotificationWithoutStatus, true)
+			Expect(err).Should(BeNil())
+		})
+		It("Update ManagedNotificationStatus without any error", func() {
+			gomock.InOrder(
+				mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).SetArg(2, testconst.TestManagedNotification),
+				mockClient.EXPECT().Status().Return(mockUpdater),
+				mockUpdater.EXPECT().Update(gomock.Any(), gomock.Any()).Return(nil),
+			)
+			err := webhookReceiverHandler.updateNotificationStatus(&testconst.TestNotification, &testconst.TestManagedNotification, true)
+			Expect(err).Should(BeNil())
+		})
+	})
 })
