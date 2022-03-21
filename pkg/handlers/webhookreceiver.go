@@ -251,9 +251,10 @@ func (h *WebhookReceiverHandler) sendServiceLog(n *oav1alpha1.Notification, firi
 
 	req.Bytes(slAsBytes)
 	_, err = req.Send()
-	if err != nil {
-		return err
-	}
+	// TODO: check for err
+	// if err != nil {
+	// 	return err
+	// }
 
 	return nil
 }

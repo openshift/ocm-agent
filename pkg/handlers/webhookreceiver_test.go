@@ -223,12 +223,12 @@ var _ = Describe("Webhook Handlers", func() {
 		})
 	})
 
-	// Context("When sending service log", func() {
-	// 	It("will send service log with active description if alert is firing", func() {
-	// 		err := webhookReceiverHandler.sendServiceLog(&testconst.TestNotification, true)
-	// 		Expect(err).To(BeNil())
-	// 	})
-	// })
+	Context("When sending service log", func() {
+		It("will send service log with active description if alert is firing", func() {
+			err := webhookReceiverHandler.sendServiceLog(&testconst.TestNotification, true)
+			Expect(err).To(BeNil())
+		})
+	})
 
 	Context("When updating Notification status", func() {
 		It("Report error if not able to get ManagedNotification", func() {
