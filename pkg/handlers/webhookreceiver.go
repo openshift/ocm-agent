@@ -34,6 +34,9 @@ const (
 	LogFieldAlert               = "alert"
 	LogFieldIsFiring            = "is_firing"
 	LogFieldManagedNotification = "managed_notification_cr"
+
+	ServiceLogActivePrefix  = "Issue Notification"
+	ServiceLogResolvePrefix = "Issue Resolution"
 )
 
 type WebhookReceiverHandler struct {
@@ -233,10 +236,13 @@ func (h *WebhookReceiverHandler) sendServiceLog(n *oav1alpha1.Notification, firi
 		Summary:      n.Summary,
 		InternalOnly: false,
 	}
+	// Use different Summary and Description for firing and resolved status for an alert
 	if firing {
 		sl.Description = n.ActiveDesc
+		sl.Summary = ServiceLogActivePrefix + ": " + n.Summary
 	} else {
 		sl.Description = n.ResolvedDesc
+		sl.Summary = ServiceLogResolvePrefix + ": " + n.Summary
 	}
 	slAsBytes, err := json.Marshal(sl)
 	if err != nil {
