@@ -13,12 +13,12 @@ import (
 	"github.com/onsi/gomega/ghttp"
 
 	"github.com/golang/mock/gomock"
-	sdk "github.com/openshift-online/ocm-sdk-go"
 	"github.com/prometheus/alertmanager/template"
 
 	k8serrs "k8s.io/apimachinery/pkg/api/errors"
 
 	testconst "github.com/openshift/ocm-agent/pkg/consts/test"
+	webhookreceivermock "github.com/openshift/ocm-agent/pkg/handlers/mocks"
 	clientmocks "github.com/openshift/ocm-agent/pkg/util/test/generated/mocks/client"
 )
 
@@ -28,17 +28,13 @@ func (fn RoundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 	return fn(r)
 }
 
-const (
-	dummyJWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhbGciOiJIUzI1NiIsInR5cCI6IkJlYXJlciJ9.0rLPJ-zaY_wFsADkvKmW5nsZzeyFmCP0276XSrkctb4"
-)
-
 var _ = Describe("Webhook Handlers", func() {
 
 	var (
 		mockCtrl               *gomock.Controller
 		mockClient             *clientmocks.MockClient
 		mockUpdater            *clientmocks.MockStatusWriter
-		testConn               *sdk.Connection
+		mockOCMClient          *webhookreceivermock.MockOCMClient
 		webhookReceiverHandler *WebhookReceiverHandler
 		server                 *ghttp.Server
 		testAlert              template.Alert
@@ -49,18 +45,10 @@ var _ = Describe("Webhook Handlers", func() {
 		mockClient = clientmocks.NewMockClient(mockCtrl)
 		mockUpdater = clientmocks.NewMockStatusWriter(mockCtrl)
 		server = ghttp.NewServer()
-		testConn, _ = sdk.NewConnectionBuilder().Tokens(dummyJWT).TransportWrapper(
-			func(tripper http.RoundTripper) http.RoundTripper {
-				return RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
-					// Assert on request attributes
-					// Return a response or error you want
-					return &http.Response{}, nil
-				})
-			},
-		).Build()
+		mockOCMClient = webhookreceivermock.NewMockOCMClient(mockCtrl)
 		webhookReceiverHandler = &WebhookReceiverHandler{
 			c:   mockClient,
-			ocm: testConn,
+			ocm: mockOCMClient,
 		}
 		testAlert = testconst.TestAlert
 
@@ -220,13 +208,6 @@ var _ = Describe("Webhook Handlers", func() {
 			delete(testAlert.Labels, "managed_notification_template")
 			err := webhookReceiverHandler.processAlert(testAlert, testconst.TestManagedNotificationList, true)
 			Expect(err).ToNot(BeNil())
-		})
-	})
-
-	Context("When sending service log", func() {
-		It("will send service log with active description if alert is firing", func() {
-			err := webhookReceiverHandler.sendServiceLog(&testconst.TestNotification, true)
-			Expect(err).To(BeNil())
 		})
 	})
 
