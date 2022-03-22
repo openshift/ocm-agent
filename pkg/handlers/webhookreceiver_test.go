@@ -186,12 +186,12 @@ var _ = Describe("Webhook Handlers", func() {
 	Context("When processing an alert", func() {
 		It("will check if the alert is valid or not without name", func() {
 			delete(testAlert.Labels, "alertname")
-			err := webhookReceiverHandler.processAlert(testconst.TestAlert, testconst.TestManagedNotificationList)
+			err := webhookReceiverHandler.processAlert(testconst.TestAlert, testconst.TestManagedNotificationList, true)
 			Expect(err).ToNot(BeNil())
 		})
 		It("will check if the alert can be mapped to existing notification template definition or not", func() {
 			delete(testAlert.Labels, "managed_notification_template")
-			err := webhookReceiverHandler.processAlert(testAlert, testconst.TestManagedNotificationList)
+			err := webhookReceiverHandler.processAlert(testAlert, testconst.TestManagedNotificationList, true)
 			Expect(err).ToNot(BeNil())
 		})
 	})
