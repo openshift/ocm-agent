@@ -39,9 +39,19 @@ const (
 	ServiceLogResolvePrefix = "Issue Resolution"
 )
 
+// OCMClient enables implementation of OCM Client
+//go:generate mockgen -destination=mocks/webhookreceiver.go -package=mocks github.com/openshift/ocm-agent/pkg/handlers OCMClient
+type OCMClient interface {
+	SendServiceLog(n *oav1alpha1.Notification, firing bool) error
+}
+
+type ocmsdkclient struct {
+	ocm *sdk.Connection
+}
+
 type WebhookReceiverHandler struct {
 	c   client.Client
-	ocm *sdk.Connection
+	ocm OCMClient
 }
 
 // Alert Manager receiver response
@@ -56,9 +66,15 @@ type AMReceiverData template.Data
 
 type AMReceiverAlert template.Alert
 
-func NewWebhookReceiverHandler(c client.Client, ocm *sdk.Connection) *WebhookReceiverHandler {
+func NewWebhookReceiverHandler(c client.Client, o OCMClient) *WebhookReceiverHandler {
 	return &WebhookReceiverHandler{
 		c:   c,
+		ocm: o,
+	}
+}
+
+func NewOcmClient(ocm *sdk.Connection) OCMClient {
+	return &ocmsdkclient{
 		ocm: ocm,
 	}
 }
@@ -161,7 +177,8 @@ func (h *WebhookReceiverHandler) processAlert(alert template.Alert, mnl *oav1alp
 
 	// Send the servicelog for the alert
 	log.WithFields(log.Fields{LogFieldNotificationName: notification.Name}).Info("will send servicelog for notification")
-	err = h.sendServiceLog(notification, firing)
+
+	err = h.ocm.SendServiceLog(notification, true)
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{LogFieldNotificationName: notification.Name, LogFieldIsFiring: true}).Error("unable to send a notification")
 		return err
@@ -222,9 +239,9 @@ func alertName(a template.Alert) (*string, error) {
 	return nil, fmt.Errorf("no alertname defined in alert")
 }
 
-// sendServiceLog sends a servicelog notification for the given alert
-func (h *WebhookReceiverHandler) sendServiceLog(n *oav1alpha1.Notification, firing bool) error {
-	req := h.ocm.Post()
+// SendServiceLog sends a servicelog notification for the given alert
+func (o *ocmsdkclient) SendServiceLog(n *oav1alpha1.Notification, firing bool) error {
+	req := o.ocm.Post()
 	err := arguments.ApplyPathArg(req, "/api/service_logs/v1/cluster_logs")
 	if err != nil {
 		return err
@@ -250,12 +267,10 @@ func (h *WebhookReceiverHandler) sendServiceLog(n *oav1alpha1.Notification, firi
 	}
 
 	req.Bytes(slAsBytes)
-	_, err = req.Send()
-	if err != nil {
-		return err
-	}
 
-	return nil
+	_, err = req.Send()
+
+	return err
 }
 
 func (h *WebhookReceiverHandler) updateNotificationStatus(n *oav1alpha1.Notification, mn *oav1alpha1.ManagedNotification, firing bool) error {

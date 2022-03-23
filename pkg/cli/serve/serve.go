@@ -1,10 +1,11 @@
 package serve
 
 import (
-	"github.com/openshift/ocm-agent/pkg/ocm"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/openshift/ocm-agent/pkg/ocm"
 
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
@@ -147,14 +148,17 @@ func (o *serveOptions) Run() error {
 		return err
 	}
 
-	// Initialize ocm client
-	ocmclient, err := ocm.NewConnection().Build(viper.GetString(config.OcmURL),
+	// Initialize ocm sdk connection client
+	sdkclient, err := ocm.NewConnection().Build(viper.GetString(config.OcmURL),
 		viper.GetString(config.ClusterID),
 		viper.GetString(config.AccessToken))
 	if err != nil {
-		log.WithError(err).Fatal("Can't initialise ocm client")
+		log.WithError(err).Fatal("Can't initialise OCM sdk.Connection client")
 		return err
 	}
+
+	// Initialize OCMClient
+	ocmclient := handlers.NewOcmClient(sdkclient)
 
 	// create a new router
 	r := mux.NewRouter()

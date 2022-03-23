@@ -31,7 +31,25 @@ var (
 		Severity:     "test-severity",
 		ResendWait:   1,
 	}
+	TestNotificationRecord = ocmagentv1alpha1.NotificationRecord{
+		Name:                TestNotificationName,
+		ServiceLogSentCount: 0,
+	}
 	TestManagedNotification = ocmagentv1alpha1.ManagedNotification{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-mn",
+			Namespace: "openshift-ocm-agent-operator",
+		},
+		Spec: ocmagentv1alpha1.ManagedNotificationSpec{
+			Notifications: []ocmagentv1alpha1.Notification{TestNotification},
+		},
+		Status: ocmagentv1alpha1.ManagedNotificationStatus{
+			// Notifications: ocmagentv1alpha1.NotificationRecords{
+			// 	TestNotificationRecord,
+			// },
+		},
+	}
+	TestManagedNotificationWithoutStatus = ocmagentv1alpha1.ManagedNotification{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-mn",
 			Namespace: "openshift-ocm-agent-operator",
@@ -60,11 +78,19 @@ var (
 			TestManagedNotification,
 		},
 	}
-	TestServiceLog = ocm.ServiceLog{
+	TestActiveServiceLog = ocm.ServiceLog{
 		ServiceName:  "SREManualAction",
 		ClusterUUID:  "ddb5e04c-87ea-4fcd-b1f9-640981726cc5",
 		Summary:      "Test SL Summary",
 		InternalOnly: false,
+		Description:  TestNotification.ActiveDesc,
+	}
+	TestResolvedServiceLog = ocm.ServiceLog{
+		ServiceName:  "SREManualAction",
+		ClusterUUID:  "ddb5e04c-87ea-4fcd-b1f9-640981726cc5",
+		Summary:      "Test SL Summary",
+		InternalOnly: false,
+		Description:  TestNotification.ResolvedDesc,
 	}
 )
 
