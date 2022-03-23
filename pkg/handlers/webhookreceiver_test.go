@@ -33,7 +33,7 @@ var _ = Describe("Webhook Handlers", func() {
 	var (
 		mockCtrl               *gomock.Controller
 		mockClient             *clientmocks.MockClient
-		mockUpdater            *clientmocks.MockStatusWriter
+		mockStatusWriter       *clientmocks.MockStatusWriter
 		mockOCMClient          *webhookreceivermock.MockOCMClient
 		webhookReceiverHandler *WebhookReceiverHandler
 		server                 *ghttp.Server
@@ -43,7 +43,7 @@ var _ = Describe("Webhook Handlers", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		mockClient = clientmocks.NewMockClient(mockCtrl)
-		mockUpdater = clientmocks.NewMockStatusWriter(mockCtrl)
+		mockStatusWriter = clientmocks.NewMockStatusWriter(mockCtrl)
 		server = ghttp.NewServer()
 		mockOCMClient = webhookreceivermock.NewMockOCMClient(mockCtrl)
 		webhookReceiverHandler = &WebhookReceiverHandler{
@@ -223,8 +223,8 @@ var _ = Describe("Webhook Handlers", func() {
 		It("Create status if NotificationRecord not found", func() {
 			gomock.InOrder(
 				mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
-				mockClient.EXPECT().Status().Return(mockUpdater),
-				mockUpdater.EXPECT().Update(gomock.Any(), gomock.Any()).Return(nil),
+				mockClient.EXPECT().Status().Return(mockStatusWriter),
+				mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any()).Return(nil),
 			)
 			err := webhookReceiverHandler.updateNotificationStatus(&testconst.TestNotification, &testconst.TestManagedNotificationWithoutStatus, true)
 			Expect(err).Should(BeNil())
@@ -232,8 +232,8 @@ var _ = Describe("Webhook Handlers", func() {
 		It("Update ManagedNotificationStatus without any error", func() {
 			gomock.InOrder(
 				mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).SetArg(2, testconst.TestManagedNotification),
-				mockClient.EXPECT().Status().Return(mockUpdater),
-				mockUpdater.EXPECT().Update(gomock.Any(), gomock.Any()).Return(nil),
+				mockClient.EXPECT().Status().Return(mockStatusWriter),
+				mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any()).Return(nil),
 			)
 			err := webhookReceiverHandler.updateNotificationStatus(&testconst.TestNotification, &testconst.TestManagedNotification, true)
 			Expect(err).Should(BeNil())
