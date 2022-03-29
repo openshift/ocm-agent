@@ -109,7 +109,7 @@ func (h *WebhookReceiverHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *WebhookReceiverHandler) processAMReceiver(d AMReceiverData, ctx context.Context) *AMReceiverResponse {
-	log.WithField("AMReceiverData", d).Info("Process alert data")
+	log.WithField("AMReceiverData", fmt.Sprintf("%+v", d)).Info("Process alert data")
 
 	// Let's get all ManagedNotifications in the
 	mnl := &oav1alpha1.ManagedNotificationList{}
@@ -146,14 +146,14 @@ func (h *WebhookReceiverHandler) processAMReceiver(d AMReceiverData, ctx context
 func (h *WebhookReceiverHandler) processAlert(alert template.Alert, mnl *oav1alpha1.ManagedNotificationList, firing bool) error {
 	// Should this alert be handled?
 	if !isValidAlert(alert) {
-		log.WithField(LogFieldAlert, alert).Info("alert does not meet valid criteria")
+		log.WithField(LogFieldAlert, fmt.Sprintf("%+v", alert)).Info("alert does not meet valid criteria")
 		return fmt.Errorf("alert does not meet valid criteria")
 	}
 
 	// Can the alert be mapped to an existing notification definition?
 	notification, managedNotifications, err := getNotification(alert.Labels[AMLabelTemplateName], mnl)
 	if err != nil {
-		log.WithError(err).WithField(LogFieldAlert, alert).Warning("an alert fired with no associated notification template definition")
+		log.WithError(err).WithField(LogFieldAlert, fmt.Sprintf("%+v", alert)).Warning("an alert fired with no associated notification template definition")
 		return err
 	}
 
