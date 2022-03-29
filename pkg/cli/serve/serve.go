@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/openshift/ocm-agent/pkg/consts"
 	"github.com/openshift/ocm-agent/pkg/ocm"
 
 	"github.com/gorilla/mux"
@@ -71,11 +72,6 @@ var (
 	`)
 )
 
-const (
-	servicePort int = 8081
-	metricsPort int = 8383
-)
-
 func NewServeOptions() *serveOptions {
 	return &serveOptions{}
 }
@@ -135,11 +131,11 @@ func (o *serveOptions) Run() error {
 
 	// create new router for metrics
 	rMetrics := mux.NewRouter()
-	rMetrics.Path("/metrics").Handler(promhttp.Handler())
+	rMetrics.Path(consts.MetricsPath).Handler(promhttp.Handler())
 
 	// Listen on the metrics port with a seprated goroutine
-	log.WithField("Port", metricsPort).Info("Start listening on metrics port")
-	go http.ListenAndServe(":"+strconv.Itoa(metricsPort), rMetrics)
+	log.WithField("Port", consts.OCMAgentMetricsPort).Info("Start listening on metrics port")
+	go http.ListenAndServe(":"+strconv.Itoa(consts.OCMAgentMetricsPort), rMetrics)
 
 	// Initialize k8s client
 	client, err := k8s.NewClient()
@@ -165,14 +161,14 @@ func (o *serveOptions) Run() error {
 	livezHandler := handlers.NewLivezHandler()
 	readyzHandler := handlers.NewReadyzHandler()
 	webhookReceiverHandler := handlers.NewWebhookReceiverHandler(client, ocmclient)
-	r.Path(handlers.LivezPath).Handler(livezHandler)
-	r.Path(handlers.ReadyzPath).Handler(readyzHandler)
-	r.Path(handlers.WebhookReceiverPath).Handler(webhookReceiverHandler)
+	r.Path(consts.LivezPath).Handler(livezHandler)
+	r.Path(consts.ReadyzPath).Handler(readyzHandler)
+	r.Path(consts.WebhookReceiverPath).Handler(webhookReceiverHandler)
 	r.Use(metrics.PrometheusMiddleware)
 
 	// serve
-	log.WithField("Port", servicePort).Info("Start listening on service port")
-	err = http.ListenAndServe(":"+strconv.Itoa(servicePort), r)
+	log.WithField("Port", consts.OCMAgentServicePort).Info("Start listening on service port")
+	err = http.ListenAndServe(":"+strconv.Itoa(consts.OCMAgentServicePort), r)
 	if err != nil {
 		log.WithError(err).Fatal("OCM Agent failed to serve")
 	}
@@ -192,16 +188,4 @@ func init() {
 	// Set default log level
 	_ = logLevel.Set(defaultLogLevel)
 	cobra.OnInitialize(initLogging)
-}
-
-// fake func for metrics testing
-func fakeCallServiceLog(w http.ResponseWriter, r *http.Request) {
-	log.Info("fake request to service log")
-	metrics.SetResponseMetricFailure("service_log")
-}
-
-// fake func for metrics testing
-func fakeReqFailure(w http.ResponseWriter, r *http.Request) {
-	log.Info("fake http non 200 response")
-	w.WriteHeader(http.StatusBadGateway)
 }
