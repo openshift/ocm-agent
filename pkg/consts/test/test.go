@@ -7,6 +7,7 @@ import (
 	"github.com/openshift/ocm-agent/pkg/ocm"
 
 	"github.com/prometheus/alertmanager/template"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -34,6 +35,20 @@ var (
 	TestNotificationRecord = ocmagentv1alpha1.NotificationRecord{
 		Name:                TestNotificationName,
 		ServiceLogSentCount: 0,
+		Conditions: []ocmagentv1alpha1.NotificationCondition{
+			{
+				Type:   ocmagentv1alpha1.ConditionAlertFiring,
+				Status: corev1.ConditionTrue,
+			},
+			{
+				Type:   ocmagentv1alpha1.ConditionAlertResolved,
+				Status: corev1.ConditionFalse,
+			},
+			{
+				Type:   ocmagentv1alpha1.ConditionServiceLogSent,
+				Status: corev1.ConditionTrue,
+			},
+		},
 	}
 	TestManagedNotification = ocmagentv1alpha1.ManagedNotification{
 		ObjectMeta: metav1.ObjectMeta{
@@ -44,9 +59,9 @@ var (
 			Notifications: []ocmagentv1alpha1.Notification{TestNotification},
 		},
 		Status: ocmagentv1alpha1.ManagedNotificationStatus{
-			// Notifications: ocmagentv1alpha1.NotificationRecords{
-			// 	TestNotificationRecord,
-			// },
+			NotificationRecords: ocmagentv1alpha1.NotificationRecords{
+				TestNotificationRecord,
+			},
 		},
 	}
 	TestManagedNotificationWithoutStatus = ocmagentv1alpha1.ManagedNotification{
