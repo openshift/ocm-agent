@@ -39,14 +39,13 @@ func (fn RoundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 var _ = Describe("Webhook Handlers", func() {
 
 	var (
-		mockCtrl               *gomock.Controller
-		mockClient             *clientmocks.MockClient
-		mockStatusWriter       *clientmocks.MockStatusWriter
-		mockOCMClient          *webhookreceivermock.MockOCMClient
-		webhookReceiverHandler *WebhookReceiverHandler
-		server                 *ghttp.Server
-		testAlert              template.Alert
-		// testNotification            *ocmagentv1alpha1.Notification
+		mockCtrl                    *gomock.Controller
+		mockClient                  *clientmocks.MockClient
+		mockStatusWriter            *clientmocks.MockStatusWriter
+		mockOCMClient               *webhookreceivermock.MockOCMClient
+		webhookReceiverHandler      *WebhookReceiverHandler
+		server                      *ghttp.Server
+		testAlert                   template.Alert
 		testManagedNotificationList *ocmagentv1alpha1.ManagedNotificationList
 	)
 
@@ -61,8 +60,6 @@ var _ = Describe("Webhook Handlers", func() {
 			ocm: mockOCMClient,
 		}
 		testAlert = testconst.TestAlert
-		// testNotification = &testconst.TestNotification
-
 	})
 	AfterEach(func() {
 		server.Close()
