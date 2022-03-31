@@ -318,7 +318,7 @@ func (h *WebhookReceiverHandler) updateNotificationStatus(n *oav1alpha1.Notifica
 					// Update the condition status and timestamp for AlertFiring
 					// Update the condition status and timestamp for AlertResolved
 					// Update the timestamp for the ServiceLogSent
-					status.SetStatus(oav1alpha1.ConditionAlertFiring, "Alert resolved", corev1.ConditionFalse, timeNow)
+					status.SetStatus(oav1alpha1.ConditionAlertFiring, "Alert is not firing", corev1.ConditionFalse, timeNow)
 					status.SetStatus(oav1alpha1.ConditionAlertResolved, "Alert resolved", corev1.ConditionTrue, timeNow)
 					status.SetStatus(oav1alpha1.ConditionServiceLogSent, "Service log sent for alert resolved", corev1.ConditionTrue, timeNow)
 				}
