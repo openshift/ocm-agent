@@ -15,6 +15,8 @@ import (
 
 	oav1alpha1 "github.com/openshift/ocm-agent-operator/pkg/apis/ocmagent/v1alpha1"
 	"github.com/openshift/ocm-agent/pkg/config"
+	"github.com/openshift/ocm-agent/pkg/consts"
+	"github.com/openshift/ocm-agent/pkg/metrics"
 	"github.com/openshift/ocm-agent/pkg/ocm"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -91,6 +93,7 @@ func (h *WebhookReceiverHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		log.Errorf("Failed to process request body: %s\n", err)
 		http.Error(w, "Bad request body", http.StatusBadRequest)
+		metrics.SetRequestMetricFailure(consts.WebhookReceiverPath)
 		return
 	}
 
@@ -104,8 +107,11 @@ func (h *WebhookReceiverHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		log.Errorf("Failed to write to response: %s\n", err)
 		http.Error(w, "Failed to write to response", http.StatusInternalServerError)
+		metrics.SetRequestMetricFailure(consts.WebhookReceiverPath)
 		return
 	}
+
+	metrics.ResetMetric(metrics.MetricRequestFailure)
 }
 
 func (h *WebhookReceiverHandler) processAMReceiver(d AMReceiverData, ctx context.Context) *AMReceiverResponse {
@@ -181,7 +187,17 @@ func (h *WebhookReceiverHandler) processAlert(alert template.Alert, mnl *oav1alp
 	err = h.ocm.SendServiceLog(notification, firing)
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{LogFieldNotificationName: notification.Name, LogFieldIsFiring: true}).Error("unable to send a notification")
+		metrics.SetResponseMetricFailure("service_logs")
 		return err
+	}
+	// Reset the metric if we got correct Response from OCM
+	metrics.ResetMetric(metrics.MetricResponseFailure)
+
+	// Count the service log sent by the template name
+	if firing {
+		metrics.CountServiceLogSent(notification.Name, "firing")
+	} else {
+		metrics.CountServiceLogSent(notification.Name, "resolved")
 	}
 
 	// Update the notification status to indicate a servicelog has been sent
@@ -248,7 +264,7 @@ func (o *ocmsdkclient) SendServiceLog(n *oav1alpha1.Notification, firing bool) e
 	}
 
 	sl := ocm.ServiceLog{
-		ServiceName:  "SREManualAction",
+		ServiceName:  consts.ServiceLogServiceName,
 		ClusterUUID:  viper.GetString(config.ClusterID),
 		Summary:      n.Summary,
 		InternalOnly: false,
