@@ -30,15 +30,16 @@ const (
 	AMLabelTemplateName        = "managed_notification_template"
 	AMLabelManagedNotification = "send_managed_notification"
 
-	LogFieldNotificationName    = "notification"
-	LogFieldResendInterval      = "resend_interval"
-	LogFieldAlertname           = "alertname"
-	LogFieldAlert               = "alert"
-	LogFieldIsFiring            = "is_firing"
-	LogFieldManagedNotification = "managed_notification_cr"
-
-	ServiceLogActivePrefix  = "Issue Notification"
-	ServiceLogResolvePrefix = "Issue Resolution"
+	LogFieldNotificationName           = "notification"
+	LogFieldResendInterval             = "resend_interval"
+	LogFieldAlertname                  = "alertname"
+	LogFieldAlert                      = "alert"
+	LogFieldIsFiring                   = "is_firing"
+	LogFieldManagedNotification        = "managed_notification_cr"
+	LogFieldPostServiceLogOpId         = "post_servicelog_operation_id"
+	LogFieldPostServiceLogFailedReason = "post_servicelog_failed_reason"
+	ServiceLogActivePrefix             = "Issue Notification"
+	ServiceLogResolvePrefix            = "Issue Resolution"
 )
 
 // OCMClient enables implementation of OCM Client
@@ -284,9 +285,52 @@ func (o *ocmsdkclient) SendServiceLog(n *oav1alpha1.Notification, firing bool) e
 
 	req.Bytes(slAsBytes)
 
-	_, err = req.Send()
+	res, err := req.Send()
+	if err != nil {
+		return err
+	}
 
-	return err
+	err = responseChecker(res)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// responseChecker checks the ocm response returns error or not
+func responseChecker(r *sdk.Response) error {
+	opId := r.Header("X-Operation-ID")
+
+	if r.Status() == 201 {
+		log.WithField(LogFieldPostServiceLogOpId, opId).Info("service log sent succeeded")
+		return nil
+	}
+
+	var ocmRes OCMResponseBody
+	err := json.Unmarshal(r.Bytes(), &ocmRes)
+	if err != nil {
+		return err
+	}
+
+	log.WithFields(log.Fields{LogFieldPostServiceLogOpId: opId, LogFieldPostServiceLogFailedReason: ocmRes.Reason}).Error("service log sent failed")
+
+	switch r.Status() {
+	case 400:
+		return fmt.Errorf("validation errors occurred")
+	case 401:
+		return fmt.Errorf("invalid auth token")
+	case 403:
+		return fmt.Errorf("unauthorized to perform operation")
+	case 500:
+		return fmt.Errorf("internal server error")
+	default:
+		return fmt.Errorf("unknown Service Log return code")
+	}
+}
+
+type OCMResponseBody struct {
+	Reason string `json:"reason"`
 }
 
 func (h *WebhookReceiverHandler) updateNotificationStatus(n *oav1alpha1.Notification, mn *oav1alpha1.ManagedNotification, firing bool) error {
