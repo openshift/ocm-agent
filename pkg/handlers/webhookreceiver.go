@@ -40,6 +40,9 @@ const (
 	LogFieldPostServiceLogFailedReason = "post_servicelog_failed_reason"
 	ServiceLogActivePrefix             = "Issue Notification"
 	ServiceLogResolvePrefix            = "Issue Resolution"
+
+	// Header returned in OCM responses
+	HeaderOperationId = "X-Operation-Id"
 )
 
 // OCMClient enables implementation of OCM Client
@@ -290,7 +293,8 @@ func (o *ocmsdkclient) SendServiceLog(n *oav1alpha1.Notification, firing bool) e
 		return err
 	}
 
-	err = responseChecker(res)
+	operationId := res.Header(HeaderOperationId)
+	err = responseChecker(operationId, res.Status(), res.Bytes())
 	if err != nil {
 		return err
 	}
@@ -299,30 +303,28 @@ func (o *ocmsdkclient) SendServiceLog(n *oav1alpha1.Notification, firing bool) e
 }
 
 // responseChecker checks the ocm response returns error or not
-func responseChecker(r *sdk.Response) error {
-	opId := r.Header("X-Operation-ID")
-
-	if r.Status() == 201 {
+func responseChecker(opId string, statusCode int, asBytes []byte) error {
+	if statusCode == http.StatusCreated {
 		log.WithField(LogFieldPostServiceLogOpId, opId).Info("service log sent succeeded")
 		return nil
 	}
 
 	var ocmRes OCMResponseBody
-	err := json.Unmarshal(r.Bytes(), &ocmRes)
+	err := json.Unmarshal(asBytes, &ocmRes)
 	if err != nil {
 		return err
 	}
 
 	log.WithFields(log.Fields{LogFieldPostServiceLogOpId: opId, LogFieldPostServiceLogFailedReason: ocmRes.Reason}).Error("service log sent failed")
 
-	switch r.Status() {
-	case 400:
+	switch statusCode {
+	case http.StatusBadRequest:
 		return fmt.Errorf("validation errors occurred")
-	case 401:
+	case http.StatusUnauthorized:
 		return fmt.Errorf("invalid auth token")
-	case 403:
+	case http.StatusForbidden:
 		return fmt.Errorf("unauthorized to perform operation")
-	case 500:
+	case http.StatusInternalServerError:
 		return fmt.Errorf("internal server error")
 	default:
 		return fmt.Errorf("unknown Service Log return code")

@@ -536,4 +536,27 @@ var _ = Describe("Webhook Handlers", func() {
 			Expect(err).Should(BeNil())
 		})
 	})
+
+	Context("Checking the response from OCM", func() {
+		var testOperationId = "test"
+		var testResponseBody = "{\"reason\": \"test\"}"
+
+		It("will treat 201 as a successful response", func() {
+			err := responseChecker(testOperationId, http.StatusCreated, []byte(testResponseBody))
+			Expect(err).To(BeNil())
+		})
+		It("will treat all other responses as failures", func() {
+			var testFailedResponseCodes = []int{
+				http.StatusForbidden,
+				http.StatusBadRequest,
+				http.StatusUnauthorized,
+				http.StatusInternalServerError,
+				http.StatusOK,
+			}
+			for _, code := range testFailedResponseCodes {
+				err := responseChecker(testOperationId, code, []byte(testResponseBody))
+				Expect(err).NotTo(BeNil())
+			}
+		})
+	})
 })
