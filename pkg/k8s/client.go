@@ -22,7 +22,7 @@ func NewClient() (client.Client, error) {
 		return nil, err
 	}
 	scheme := runtime.NewScheme()
-	addKnownTypes(scheme)
+	_ = addKnownTypes(scheme)
 	c, err := client.New(cfg, client.Options{
 		Scheme: scheme,
 	})
