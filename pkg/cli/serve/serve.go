@@ -96,7 +96,7 @@ func NewServeCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&o.accessToken, config.AccessToken, "t", "", "Access token for OCM")
 	cmd.Flags().StringVarP(&o.clusterID, config.ClusterID, "c", "", "Cluster ID")
 	cmd.PersistentFlags().BoolVarP(&o.debug, config.Debug, "d", false, "Debug mode enable")
-	viper.BindPFlags(cmd.Flags())
+	kcmdutil.CheckErr(viper.BindPFlags(cmd.Flags()))
 
 	_ = cmd.MarkFlagRequired(config.OcmURL)
 	_ = cmd.MarkFlagRequired(config.Services)
@@ -135,7 +135,7 @@ func (o *serveOptions) Run() error {
 
 	// Listen on the metrics port with a seprated goroutine
 	log.WithField("Port", consts.OCMAgentMetricsPort).Info("Start listening on metrics port")
-	go http.ListenAndServe(":"+strconv.Itoa(consts.OCMAgentMetricsPort), rMetrics)
+	go log.Fatal(http.ListenAndServe(":"+strconv.Itoa(consts.OCMAgentMetricsPort), rMetrics))
 
 	// Initialize k8s client
 	client, err := k8s.NewClient()

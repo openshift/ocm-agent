@@ -358,9 +358,9 @@ func (h *WebhookReceiverHandler) updateNotificationStatus(n *oav1alpha1.Notifica
 				Name:                n.Name,
 				ServiceLogSentCount: 0,
 			}
-			status.SetStatus(oav1alpha1.ConditionAlertFiring, "Alert starts firing", corev1.ConditionTrue, timeNow)
-			status.SetStatus(oav1alpha1.ConditionAlertResolved, "Alert has not resolved", corev1.ConditionFalse, timeNow)
-			status.SetStatus(oav1alpha1.ConditionServiceLogSent, "Service log sent for firing alert", corev1.ConditionTrue, timeNow)
+			_ = status.SetStatus(oav1alpha1.ConditionAlertFiring, "Alert starts firing", corev1.ConditionTrue, timeNow)
+			_ = status.SetStatus(oav1alpha1.ConditionAlertResolved, "Alert has not resolved", corev1.ConditionFalse, timeNow)
+			_ = status.SetStatus(oav1alpha1.ConditionServiceLogSent, "Service log sent for firing alert", corev1.ConditionTrue, timeNow)
 		} else {
 			// Status exists, update it
 			// When the alert is already firing
@@ -372,26 +372,26 @@ func (h *WebhookReceiverHandler) updateNotificationStatus(n *oav1alpha1.Notifica
 					// Status transition is Firing to Firing
 					// Do not update the condition for AlertFiring and AlertResolved
 					// Only update the timestamp for the ServiceLogSent
-					status.SetStatus(oav1alpha1.ConditionAlertFiring, "Alert is still firing", corev1.ConditionTrue, firedConditionTime)
-					status.SetStatus(oav1alpha1.ConditionAlertResolved, "Alert has not resolved", corev1.ConditionFalse, resolvedConditionTime)
-					status.SetStatus(oav1alpha1.ConditionServiceLogSent, "Service log sent again after the resend window passed", corev1.ConditionTrue, timeNow)
+					_ = status.SetStatus(oav1alpha1.ConditionAlertFiring, "Alert is still firing", corev1.ConditionTrue, firedConditionTime)
+					_ = status.SetStatus(oav1alpha1.ConditionAlertResolved, "Alert has not resolved", corev1.ConditionFalse, resolvedConditionTime)
+					_ = status.SetStatus(oav1alpha1.ConditionServiceLogSent, "Service log sent again after the resend window passed", corev1.ConditionTrue, timeNow)
 				} else {
 					// Status transition is Firing to Resolved
 					// Update the condition status and timestamp for AlertFiring
 					// Update the condition status and timestamp for AlertResolved
 					// Update the timestamp for the ServiceLogSent
-					status.SetStatus(oav1alpha1.ConditionAlertFiring, "Alert is not firing", corev1.ConditionFalse, timeNow)
-					status.SetStatus(oav1alpha1.ConditionAlertResolved, "Alert resolved", corev1.ConditionTrue, timeNow)
-					status.SetStatus(oav1alpha1.ConditionServiceLogSent, "Service log sent for alert resolved", corev1.ConditionTrue, timeNow)
+					_ = status.SetStatus(oav1alpha1.ConditionAlertFiring, "Alert is not firing", corev1.ConditionFalse, timeNow)
+					_ = status.SetStatus(oav1alpha1.ConditionAlertResolved, "Alert resolved", corev1.ConditionTrue, timeNow)
+					_ = status.SetStatus(oav1alpha1.ConditionServiceLogSent, "Service log sent for alert resolved", corev1.ConditionTrue, timeNow)
 				}
 			} else {
 				// Status transition is Resolved to Firing
 				// Update the condition status and timestamp for AlertFiring
 				// Update the condition status and timestamp for AlertResolved
 				// Update the timestamp for the ServiceLogSent
-				status.SetStatus(oav1alpha1.ConditionAlertFiring, "Alert fired again", corev1.ConditionTrue, timeNow)
-				status.SetStatus(oav1alpha1.ConditionAlertResolved, "Alert has not resolved", corev1.ConditionFalse, timeNow)
-				status.SetStatus(oav1alpha1.ConditionServiceLogSent, "Service log sent for alert firing", corev1.ConditionTrue, timeNow)
+				_ = status.SetStatus(oav1alpha1.ConditionAlertFiring, "Alert fired again", corev1.ConditionTrue, timeNow)
+				_ = status.SetStatus(oav1alpha1.ConditionAlertResolved, "Alert has not resolved", corev1.ConditionFalse, timeNow)
+				_ = status.SetStatus(oav1alpha1.ConditionServiceLogSent, "Service log sent for alert firing", corev1.ConditionTrue, timeNow)
 			}
 		}
 
