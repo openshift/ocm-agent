@@ -9,7 +9,7 @@ To contribute you need to be familiar with:
 
 ## Prerequisites
 
-Make sure that all the necessary dependencies are already in place. The `ginkgo` and `mockgen` binaries that are required for testing will be installed as part of tool dependencies.
+Make sure that all the necessary dependencies are already in place. The `ginkgo` and `mockgen` binaries that are required for testing will be installed as part of tool dependencies. Run `make ensure-mockgen` to have the `mockgen` binary locally.
 
 ## Bootstrapping the tests
 
