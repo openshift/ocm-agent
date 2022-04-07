@@ -135,7 +135,9 @@ func (o *serveOptions) Run() error {
 
 	// Listen on the metrics port with a seprated goroutine
 	log.WithField("Port", consts.OCMAgentMetricsPort).Info("Start listening on metrics port")
-	go log.Fatal(http.ListenAndServe(":"+strconv.Itoa(consts.OCMAgentMetricsPort), rMetrics))
+	go func() {
+		_ = http.ListenAndServe(":"+strconv.Itoa(consts.OCMAgentMetricsPort), rMetrics)
+	}()
 
 	// Initialize k8s client
 	client, err := k8s.NewClient()
