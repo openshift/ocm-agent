@@ -80,8 +80,7 @@ func (rw *responseWriter) WriteHeader(code int) {
 // A middleware to collect all the requests received by the web service
 func PrometheusMiddleware(ph http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-		path, _ := mux.CurrentRoute(r).GetPathTemplate()
+		path := getRouteName(r)
 		if path != consts.LivezPath && path != consts.ReadyzPath {
 			metricRequestsTotal.WithLabelValues().Inc()
 			metricRequestsByService.WithLabelValues(path).Inc()
@@ -95,6 +94,18 @@ func PrometheusMiddleware(ph http.Handler) http.Handler {
 			SetRequestMetricFailure(path)
 		}
 	})
+}
+
+// getRouteName safely extracts route from the request, preferring gorilla mux route if available
+func getRouteName(r *http.Request) string {
+	if mux.CurrentRoute(r) != nil {
+		if path, err := mux.CurrentRoute(r).GetPathTemplate(); err == nil {
+			if len(path) > 0 {
+				return path
+			}
+		}
+	}
+	return r.RequestURI
 }
 
 // SetResponseMetricFailure sets the metric when a call to the external service has failed
