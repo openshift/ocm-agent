@@ -84,7 +84,6 @@ tags
 *.out
 
 # Local manifest creation
-manifests
 LocalRegistryDockerfile
 
 ### Boilerplate ###
