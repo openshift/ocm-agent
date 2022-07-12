@@ -205,11 +205,18 @@ func (h *WebhookReceiverHandler) processAlert(alert template.Alert, mnl *oav1alp
 	}
 
 	// Update the notification status to indicate a servicelog has been sent
-	err = h.updateNotificationStatus(notification, managedNotifications, firing)
+	m, err := h.updateNotificationStatus(notification, managedNotifications, firing)
 	if err != nil {
 		log.WithFields(log.Fields{LogFieldNotificationName: notification.Name, LogFieldManagedNotification: managedNotifications.Name}).WithError(err).Error("unable to update notification status")
 		return err
 	}
+
+	status, err := m.Status.GetNotificationRecord(notification.Name)
+	if err != nil {
+		return err
+	}
+
+	metrics.SetTotalServiceLogCount(notification.Name, status.ServiceLogSentCount)
 
 	return nil
 }
@@ -335,11 +342,12 @@ type OCMResponseBody struct {
 	Reason string `json:"reason"`
 }
 
-func (h *WebhookReceiverHandler) updateNotificationStatus(n *oav1alpha1.Notification, mn *oav1alpha1.ManagedNotification, firing bool) error {
+func (h *WebhookReceiverHandler) updateNotificationStatus(n *oav1alpha1.Notification, mn *oav1alpha1.ManagedNotification, firing bool) (*oav1alpha1.ManagedNotification, error) {
+	var m *oav1alpha1.ManagedNotification
 
 	// Update lastSent timestamp
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		m := &oav1alpha1.ManagedNotification{}
+		m = &oav1alpha1.ManagedNotification{}
 
 		err := h.c.Get(context.TODO(), client.ObjectKey{
 			Namespace: mn.Namespace,
@@ -402,5 +410,5 @@ func (h *WebhookReceiverHandler) updateNotificationStatus(n *oav1alpha1.Notifica
 		return err
 	})
 
-	return err
+	return m, err
 }
