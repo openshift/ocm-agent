@@ -21,7 +21,8 @@ OCM Agent are managed by [OCM Agent operator](https://github.com/openshift/ocm-a
 |ocm_agent_failed_requests_total|Counter|A count of total failed requests received by the OCM Agent service|
 |ocm_agent_request_failure|Gauge|Indicates that OCM Agent could not successfully process a request|
 |ocm_agent_response_failure|Gauge|Indicates that the call to the OCM service endpoint failed|
-|ocm_agent_service_log_sent|Counter|A count of total service log sent based on managedNotification template|
+|ocm_agent_service_log_sent|Counter|A count of service log sent based on managedNotification template for the current session|
+|ocm_agent_service_log_sent_total|Gauge|A total number of service log being sent based on managedNotification template|
 
 ## Metrics reset
 

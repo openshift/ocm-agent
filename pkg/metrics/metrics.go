@@ -42,8 +42,14 @@ var (
 	metricServiceLogSent = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "ocm_agent_service_log_sent",
-			Help: "A count of total service log sent based on managedNotification template",
+			Help: "A count of service log sent based on managedNotification template for the current session",
 		}, []string{"ocm_service", "template", "state"})
+
+	metricServiceLogSentTotal = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "ocm_agent_service_log_sent_total",
+			Help: "A total number of service log being sent based on managedNotification template",
+		}, []string{"ocm_service", "template"})
 
 	metricsList = []prometheus.Collector{
 		metricRequestsTotal,
@@ -52,6 +58,7 @@ var (
 		MetricRequestFailure,
 		MetricResponseFailure,
 		metricServiceLogSent,
+		metricServiceLogSentTotal,
 	}
 )
 
@@ -129,6 +136,14 @@ func CountServiceLogSent(template, state string) {
 		"template":    template,
 		"state":       state,
 	}).Inc()
+}
+
+// SetTotalServiceLogCount used to set the total sent service log number based on the managedNotification status
+func SetTotalServiceLogCount(template string, count int32) {
+	metricServiceLogSentTotal.With(prometheus.Labels{
+		"ocm_service": "service_logs",
+		"template":    template,
+	}).Set(float64(count))
 }
 
 // ResetMetric reset the metric with Gauge values

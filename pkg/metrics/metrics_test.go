@@ -135,7 +135,7 @@ var _ = Describe("Webhook Handlers", func() {
 	Context("Service Log Sent metric", func() {
 		var (
 			metricHelpHeader = `
-# HELP ocm_agent_service_log_sent A count of total service log sent based on managedNotification template
+# HELP ocm_agent_service_log_sent A count of service log sent based on managedNotification template for the current session
 # TYPE ocm_agent_service_log_sent counter
 `
 			metricValueHeader = fmt.Sprintf(`ocm_agent_service_log_sent{ocm_service="service_logs",state="%s",template="%s"} `, testState, testTemplate)
