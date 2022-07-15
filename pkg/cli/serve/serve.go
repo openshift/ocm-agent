@@ -3,13 +3,12 @@ package serve
 import (
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/openshift/ocm-agent/pkg/consts"
 	"github.com/openshift/ocm-agent/pkg/ocm"
+	"github.com/sirupsen/logrus"
 
 	"github.com/gorilla/mux"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -19,27 +18,9 @@ import (
 	"github.com/openshift/ocm-agent/pkg/config"
 	"github.com/openshift/ocm-agent/pkg/handlers"
 	"github.com/openshift/ocm-agent/pkg/k8s"
+	"github.com/openshift/ocm-agent/pkg/logging"
 	"github.com/openshift/ocm-agent/pkg/metrics"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-)
-
-type level log.Level
-
-func (l *level) String() string {
-	return log.Level(*l).String()
-}
-
-func (l *level) Set(value string) error {
-	lvl, err := log.ParseLevel(strings.TrimSpace(value))
-	if err == nil {
-		*l = level(lvl)
-	}
-	return err
-}
-
-var (
-	defaultLogLevel = log.InfoLevel.String()
-	logLevel        level
 )
 
 // serveOptions define the configuration options required by OCM agent to serve.
@@ -49,6 +30,7 @@ type serveOptions struct {
 	ocmURL      string
 	clusterID   string
 	debug       bool
+	logger      logrus.Logger
 }
 
 var (
@@ -79,6 +61,8 @@ func NewServeOptions() *serveOptions {
 // NewServeCmd initializes serve command and it's flags
 func NewServeCmd() *cobra.Command {
 	o := NewServeOptions()
+	o.logger = *logging.NewLogger()
+
 	var cmd = &cobra.Command{
 		Use:     "serve",
 		Short:   "Starts the OCM Agent server",
@@ -117,7 +101,7 @@ func (o *serveOptions) Complete(cmd *cobra.Command, args []string) error {
 
 	// Check if debug mode is enabled and set the logging level accordingly
 	if o.debug {
-		log.SetLevel(log.DebugLevel)
+		o.logger.Level = logging.DebugLogLevel
 	}
 
 	return nil
@@ -125,16 +109,16 @@ func (o *serveOptions) Complete(cmd *cobra.Command, args []string) error {
 
 func (o *serveOptions) Run() error {
 
-	log.Info("Starting ocm-agent server")
-	log.WithField("URL", o.ocmURL).Debug("OCM URL configured")
-	log.WithField("Service", o.services).Debug("OCM Service configured")
+	o.logger.Info("Starting ocm-agent server")
+	o.logger.WithField("URL", o.ocmURL).Debug("OCM URL configured")
+	o.logger.WithField("Service", o.services).Debug("OCM Service configured")
 
 	// create new router for metrics
 	rMetrics := mux.NewRouter()
 	rMetrics.Path(consts.MetricsPath).Handler(promhttp.Handler())
 
 	// Listen on the metrics port with a seprated goroutine
-	log.WithField("Port", consts.OCMAgentMetricsPort).Info("Start listening on metrics port")
+	o.logger.WithField("Port", consts.OCMAgentMetricsPort).Info("Start listening on metrics port")
 	go func() {
 		_ = http.ListenAndServe(":"+strconv.Itoa(consts.OCMAgentMetricsPort), rMetrics)
 	}()
@@ -142,7 +126,7 @@ func (o *serveOptions) Run() error {
 	// Initialize k8s client
 	client, err := k8s.NewClient()
 	if err != nil {
-		log.WithError(err).Fatal("Can't initialise k8s client, ensure KUBECONFIG is set")
+		o.logger.WithError(err).Fatal("Can't initialise k8s client, ensure KUBECONFIG is set")
 		return err
 	}
 
@@ -151,7 +135,7 @@ func (o *serveOptions) Run() error {
 		viper.GetString(config.ClusterID),
 		viper.GetString(config.AccessToken))
 	if err != nil {
-		log.WithError(err).Fatal("Can't initialise OCM sdk.Connection client")
+		o.logger.WithError(err).Fatal("Can't initialise OCM sdk.Connection client")
 		return err
 	}
 
@@ -169,25 +153,11 @@ func (o *serveOptions) Run() error {
 	r.Use(metrics.PrometheusMiddleware)
 
 	// serve
-	log.WithField("Port", consts.OCMAgentServicePort).Info("Start listening on service port")
+	o.logger.WithField("Port", consts.OCMAgentServicePort).Info("Start listening on service port")
 	err = http.ListenAndServe(":"+strconv.Itoa(consts.OCMAgentServicePort), r)
 	if err != nil {
-		log.WithError(err).Fatal("OCM Agent failed to serve")
+		o.logger.WithError(err).Fatal("OCM Agent failed to serve")
 	}
 
 	return nil
-}
-
-func initLogging() {
-	log.SetLevel(log.Level(logLevel))
-	log.SetFormatter(&log.TextFormatter{
-		FullTimestamp: true,
-		PadLevelText:  false,
-	})
-}
-
-func init() {
-	// Set default log level
-	_ = logLevel.Set(defaultLogLevel)
-	cobra.OnInitialize(initLogging)
 }
