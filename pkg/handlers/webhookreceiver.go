@@ -46,6 +46,7 @@ const (
 )
 
 // OCMClient enables implementation of OCM Client
+//
 //go:generate mockgen -destination=mocks/webhookreceiver.go -package=mocks github.com/openshift/ocm-agent/pkg/handlers OCMClient
 type OCMClient interface {
 	SendServiceLog(n *oav1alpha1.Notification, firing bool) error
@@ -201,7 +202,9 @@ func (h *WebhookReceiverHandler) processAlert(alert template.Alert, mnl *oav1alp
 	if firing {
 		metrics.CountServiceLogSent(notification.Name, "firing")
 	} else {
-		metrics.CountServiceLogSent(notification.Name, "resolved")
+		if len(notification.ResolvedDesc) > 0 {
+			metrics.CountServiceLogSent(notification.Name, "resolved")
+		}
 	}
 
 	// Update the notification status to indicate a servicelog has been sent
@@ -285,8 +288,10 @@ func (o *ocmsdkclient) SendServiceLog(n *oav1alpha1.Notification, firing bool) e
 		sl.Description = n.ActiveDesc
 		sl.Summary = ServiceLogActivePrefix + ": " + n.Summary
 	} else {
-		sl.Description = n.ResolvedDesc
-		sl.Summary = ServiceLogResolvePrefix + ": " + n.Summary
+		if len(n.ResolvedDesc) > 0 {
+			sl.Description = n.ResolvedDesc
+			sl.Summary = ServiceLogResolvePrefix + ": " + n.Summary
+		}
 	}
 	slAsBytes, err := json.Marshal(sl)
 	if err != nil {
@@ -295,15 +300,17 @@ func (o *ocmsdkclient) SendServiceLog(n *oav1alpha1.Notification, firing bool) e
 
 	req.Bytes(slAsBytes)
 
-	res, err := req.Send()
-	if err != nil {
-		return err
-	}
+	if firing || len(n.ResolvedDesc) > 0 {
+		res, err := req.Send()
+		if err != nil {
+			return err
+		}
 
-	operationId := res.Header(HeaderOperationId)
-	err = responseChecker(operationId, res.Status(), res.Bytes())
-	if err != nil {
-		return err
+		operationId := res.Header(HeaderOperationId)
+		err = responseChecker(operationId, res.Status(), res.Bytes())
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -390,7 +397,11 @@ func (h *WebhookReceiverHandler) updateNotificationStatus(n *oav1alpha1.Notifica
 					// Update the timestamp for the ServiceLogSent
 					_ = status.SetStatus(oav1alpha1.ConditionAlertFiring, "Alert is not firing", corev1.ConditionFalse, timeNow)
 					_ = status.SetStatus(oav1alpha1.ConditionAlertResolved, "Alert resolved", corev1.ConditionTrue, timeNow)
-					_ = status.SetStatus(oav1alpha1.ConditionServiceLogSent, "Service log sent for alert resolved", corev1.ConditionTrue, timeNow)
+					if len(n.ResolvedDesc) > 0 {
+						_ = status.SetStatus(oav1alpha1.ConditionServiceLogSent, "Service log sent for alert resolved", corev1.ConditionTrue, timeNow)
+					} else {
+						status.ServiceLogSentCount--
+					}
 				}
 			} else {
 				// Status transition is Resolved to Firing

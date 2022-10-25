@@ -46,6 +46,7 @@ var _ = Describe("Webhook Handlers", func() {
 		webhookReceiverHandler      *WebhookReceiverHandler
 		server                      *ghttp.Server
 		testAlert                   template.Alert
+		testAlertResolved           template.Alert
 		testManagedNotificationList *ocmagentv1alpha1.ManagedNotificationList
 	)
 
@@ -60,6 +61,7 @@ var _ = Describe("Webhook Handlers", func() {
 			ocm: mockOCMClient,
 		}
 		testAlert = testconst.TestAlert
+		testAlertResolved = testconst.TestAlertResolved
 	})
 	AfterEach(func() {
 		server.Close()
@@ -373,6 +375,56 @@ var _ = Describe("Webhook Handlers", func() {
 					},
 				}
 				err := webhookReceiverHandler.processAlert(testAlert, testManagedNotificationList, false)
+				Expect(err).ShouldNot(HaveOccurred())
+			})
+			It("Should not send resolved servicelog if the resolved body is empty", func() {
+				testManagedNotificationList = &ocmagentv1alpha1.ManagedNotificationList{
+					Items: []ocmagentv1alpha1.ManagedNotification{
+						{
+							Spec: ocmagentv1alpha1.ManagedNotificationSpec{
+								Notifications: []ocmagentv1alpha1.Notification{
+									testconst.NotificationWithoutResolvedBody,
+								},
+							},
+							Status: ocmagentv1alpha1.ManagedNotificationStatus{
+								NotificationRecords: ocmagentv1alpha1.NotificationRecords{
+									ocmagentv1alpha1.NotificationRecord{
+										Name:                "test-notification",
+										ServiceLogSentCount: 1,
+										Conditions: []ocmagentv1alpha1.NotificationCondition{
+											{
+												Type:               ocmagentv1alpha1.ConditionAlertFiring,
+												Status:             corev1.ConditionTrue,
+												LastTransitionTime: &metav1.Time{Time: time.Now()},
+											},
+											{
+												Type:               ocmagentv1alpha1.ConditionAlertResolved,
+												Status:             corev1.ConditionFalse,
+												LastTransitionTime: &metav1.Time{Time: time.Now()},
+											},
+											{
+												Type:               ocmagentv1alpha1.ConditionServiceLogSent,
+												Status:             corev1.ConditionTrue,
+												LastTransitionTime: &metav1.Time{Time: time.Now()},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}
+				gomock.InOrder(
+					mockOCMClient.EXPECT().SendServiceLog(gomock.Any(), gomock.Any()).DoAndReturn(
+						func(n *ocmagentv1alpha1.Notification, firing bool) error {
+							Expect(n.ResolvedDesc).To(Equal(""))
+							return nil
+						}),
+					mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testManagedNotificationList.Items[0]),
+					mockClient.EXPECT().Status().Return(mockStatusWriter),
+					mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
+				)
+				err := webhookReceiverHandler.processAlert(testAlertResolved, testManagedNotificationList, false)
 				Expect(err).ShouldNot(HaveOccurred())
 			})
 			It("Should report error if not able to send service log", func() {

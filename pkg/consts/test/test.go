@@ -32,6 +32,13 @@ var (
 		Severity:     "test-severity",
 		ResendWait:   1,
 	}
+	NotificationWithoutResolvedBody = ocmagentv1alpha1.Notification{
+		Name:       TestNotificationName,
+		Summary:    "test-summary",
+		ActiveDesc: "test-active-desc",
+		Severity:   "test-severity",
+		ResendWait: 1,
+	}
 	TestNotificationRecord = ocmagentv1alpha1.NotificationRecord{
 		Name:                TestNotificationName,
 		ServiceLogSentCount: 0,
@@ -80,6 +87,21 @@ var (
 			"send_managed_notification":     "true",
 			"alertname":                     "TestAlertName",
 			"alertstate":                    "firing",
+			"namespace":                     "openshift-monitoring",
+			"openshift_io_alert_source":     "platform",
+			"prometheus":                    "openshift-monitoring/k8s",
+			"severity":                      "info",
+		},
+		StartsAt: time.Now(),
+		EndsAt:   time.Time{},
+	}
+	TestAlertResolved = template.Alert{
+		Status: "resolved",
+		Labels: map[string]string{
+			"managed_notification_template": TestNotificationName,
+			"send_managed_notification":     "true",
+			"alertname":                     "TestAlertName",
+			"alertstate":                    "resolved",
 			"namespace":                     "openshift-monitoring",
 			"openshift_io_alert_source":     "platform",
 			"prometheus":                    "openshift-monitoring/k8s",
