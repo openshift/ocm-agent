@@ -24,7 +24,7 @@ import (
 	k8serrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	ocmagentv1alpha1 "github.com/openshift/ocm-agent-operator/pkg/apis/ocmagent/v1alpha1"
+	ocmagentv1alpha1 "github.com/openshift/ocm-agent-operator/api/v1alpha1"
 	testconst "github.com/openshift/ocm-agent/pkg/consts/test"
 	webhookreceivermock "github.com/openshift/ocm-agent/pkg/handlers/mocks"
 	clientmocks "github.com/openshift/ocm-agent/pkg/util/test/generated/mocks/client"
@@ -415,11 +415,6 @@ var _ = Describe("Webhook Handlers", func() {
 					},
 				}
 				gomock.InOrder(
-					mockOCMClient.EXPECT().SendServiceLog(gomock.Any(), gomock.Any()).DoAndReturn(
-						func(n *ocmagentv1alpha1.Notification, firing bool) error {
-							Expect(n.ResolvedDesc).To(Equal(""))
-							return nil
-						}),
 					mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testManagedNotificationList.Items[0]),
 					mockClient.EXPECT().Status().Return(mockStatusWriter),
 					mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),

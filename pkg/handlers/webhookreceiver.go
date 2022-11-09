@@ -13,7 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 
-	oav1alpha1 "github.com/openshift/ocm-agent-operator/pkg/apis/ocmagent/v1alpha1"
+	oav1alpha1 "github.com/openshift/ocm-agent-operator/api/v1alpha1"
 	"github.com/openshift/ocm-agent/pkg/config"
 	"github.com/openshift/ocm-agent/pkg/consts"
 	"github.com/openshift/ocm-agent/pkg/metrics"
@@ -180,15 +180,27 @@ func (h *WebhookReceiverHandler) processAlert(alert template.Alert, mnl *oav1alp
 				LogFieldResendInterval: notification.ResendWait,
 			}).Info("not sending a notification as one was already sent recently")
 		} else {
-			log.WithFields(log.Fields{"notification": notification.Name}).Info("not sending a resolve notification if it was not firing")
+			log.WithFields(log.Fields{"notification": notification.Name}).Info("not sending a resolve notification if it was not firing or resolved body is empty")
+			s, err := managedNotifications.Status.GetNotificationRecord(notification.Name)
+			// If a status history exists but can't be fetched, this is an irregular situation
+			if err != nil {
+				return err
+			}
+			firingStatus := s.Conditions.GetCondition(oav1alpha1.ConditionAlertFiring).Status
+			if firingStatus == corev1.ConditionTrue {
+				// Update the notification status to indicate a servicelog has been sent
+				_, err := h.updateNotificationStatus(notification, managedNotifications, firing)
+				if err != nil {
+					log.WithFields(log.Fields{LogFieldNotificationName: notification.Name, LogFieldManagedNotification: managedNotifications.Name}).WithError(err).Error("unable to update notification status")
+					return err
+				}
+			}
 		}
 		// This is not an error state
 		return nil
 	}
-
 	// Send the servicelog for the alert
 	log.WithFields(log.Fields{LogFieldNotificationName: notification.Name}).Info("will send servicelog for notification")
-
 	err = h.ocm.SendServiceLog(notification, firing)
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{LogFieldNotificationName: notification.Name, LogFieldIsFiring: true}).Error("unable to send a notification")
@@ -202,18 +214,14 @@ func (h *WebhookReceiverHandler) processAlert(alert template.Alert, mnl *oav1alp
 	if firing {
 		metrics.CountServiceLogSent(notification.Name, "firing")
 	} else {
-		if len(notification.ResolvedDesc) > 0 {
-			metrics.CountServiceLogSent(notification.Name, "resolved")
-		}
+		metrics.CountServiceLogSent(notification.Name, "resolved")
 	}
-
 	// Update the notification status to indicate a servicelog has been sent
 	m, err := h.updateNotificationStatus(notification, managedNotifications, firing)
 	if err != nil {
 		log.WithFields(log.Fields{LogFieldNotificationName: notification.Name, LogFieldManagedNotification: managedNotifications.Name}).WithError(err).Error("unable to update notification status")
 		return err
 	}
-
 	status, err := m.Status.GetNotificationRecord(notification.Name)
 	if err != nil {
 		return err
@@ -288,10 +296,8 @@ func (o *ocmsdkclient) SendServiceLog(n *oav1alpha1.Notification, firing bool) e
 		sl.Description = n.ActiveDesc
 		sl.Summary = ServiceLogActivePrefix + ": " + n.Summary
 	} else {
-		if len(n.ResolvedDesc) > 0 {
-			sl.Description = n.ResolvedDesc
-			sl.Summary = ServiceLogResolvePrefix + ": " + n.Summary
-		}
+		sl.Description = n.ResolvedDesc
+		sl.Summary = ServiceLogResolvePrefix + ": " + n.Summary
 	}
 	slAsBytes, err := json.Marshal(sl)
 	if err != nil {
@@ -300,17 +306,15 @@ func (o *ocmsdkclient) SendServiceLog(n *oav1alpha1.Notification, firing bool) e
 
 	req.Bytes(slAsBytes)
 
-	if firing || len(n.ResolvedDesc) > 0 {
-		res, err := req.Send()
-		if err != nil {
-			return err
-		}
+	res, err := req.Send()
+	if err != nil {
+		return err
+	}
 
-		operationId := res.Header(HeaderOperationId)
-		err = responseChecker(operationId, res.Status(), res.Bytes())
-		if err != nil {
-			return err
-		}
+	operationId := res.Header(HeaderOperationId)
+	err = responseChecker(operationId, res.Status(), res.Bytes())
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -400,6 +404,7 @@ func (h *WebhookReceiverHandler) updateNotificationStatus(n *oav1alpha1.Notifica
 					if len(n.ResolvedDesc) > 0 {
 						_ = status.SetStatus(oav1alpha1.ConditionServiceLogSent, "Service log sent for alert resolved", corev1.ConditionTrue, timeNow)
 					} else {
+						// This is for the total serviceLogSentCount while should not be increased by SetNotificationRecord if resolved SL is not sent
 						status.ServiceLogSentCount--
 					}
 				}
