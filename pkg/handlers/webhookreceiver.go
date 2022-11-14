@@ -188,7 +188,7 @@ func (h *WebhookReceiverHandler) processAlert(alert template.Alert, mnl *oav1alp
 			}
 			firingStatus := s.Conditions.GetCondition(oav1alpha1.ConditionAlertFiring).Status
 			if firingStatus == corev1.ConditionTrue {
-				// Update the notification status to indicate a servicelog has been sent
+				// Update the notification status for the resolved alert without sending resolved SL
 				_, err := h.updateNotificationStatus(notification, managedNotifications, firing)
 				if err != nil {
 					log.WithFields(log.Fields{LogFieldNotificationName: notification.Name, LogFieldManagedNotification: managedNotifications.Name}).WithError(err).Error("unable to update notification status")
