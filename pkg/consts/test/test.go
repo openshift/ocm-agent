@@ -13,7 +13,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 
-	ocmagentv1alpha1 "github.com/openshift/ocm-agent-operator/pkg/apis/ocmagent/v1alpha1"
+	ocmagentv1alpha1 "github.com/openshift/ocm-agent-operator/api/v1alpha1"
 )
 
 const (
@@ -31,6 +31,13 @@ var (
 		ResolvedDesc: "test-resolved-desc",
 		Severity:     "test-severity",
 		ResendWait:   1,
+	}
+	NotificationWithoutResolvedBody = ocmagentv1alpha1.Notification{
+		Name:       TestNotificationName,
+		Summary:    "test-summary",
+		ActiveDesc: "test-active-desc",
+		Severity:   "test-severity",
+		ResendWait: 1,
 	}
 	TestNotificationRecord = ocmagentv1alpha1.NotificationRecord{
 		Name:                TestNotificationName,
@@ -80,6 +87,21 @@ var (
 			"send_managed_notification":     "true",
 			"alertname":                     "TestAlertName",
 			"alertstate":                    "firing",
+			"namespace":                     "openshift-monitoring",
+			"openshift_io_alert_source":     "platform",
+			"prometheus":                    "openshift-monitoring/k8s",
+			"severity":                      "info",
+		},
+		StartsAt: time.Now(),
+		EndsAt:   time.Time{},
+	}
+	TestAlertResolved = template.Alert{
+		Status: "resolved",
+		Labels: map[string]string{
+			"managed_notification_template": TestNotificationName,
+			"send_managed_notification":     "true",
+			"alertname":                     "TestAlertName",
+			"alertstate":                    "resolved",
 			"namespace":                     "openshift-monitoring",
 			"openshift_io_alert_source":     "platform",
 			"prometheus":                    "openshift-monitoring/k8s",
