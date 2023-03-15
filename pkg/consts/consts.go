@@ -16,7 +16,7 @@ const (
 	WebhookReceiverPath = "/alertmanager-receiver"
 
 	// OCMAgentAccessFleetSecretPathBase is the base path where to find the secret
-	OCMAgentAccessFleetSecretPathBase = "/secrets"
+	OCMAgentAccessFleetSecretPathBase = "/secrets/"
 	// OCMAgentAccessFleetSecretClientKey is the secret of client_id key for OA HS
 	OCMAgentAccessFleetSecretClientKey = "OA_OCM_CLIENT_ID" //#nosec G101 -- This is a false positive
 	// OCMAgentAccessFleetSecretClientSecretKey is the secret of client_secret key for OA HS
