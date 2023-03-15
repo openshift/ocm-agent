@@ -1,7 +1,9 @@
 package serve
 
 import (
+	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 
 	"github.com/openshift/ocm-agent/pkg/consts"
@@ -21,6 +23,8 @@ import (
 	"github.com/openshift/ocm-agent/pkg/logging"
 	"github.com/openshift/ocm-agent/pkg/metrics"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	sdk "github.com/openshift-online/ocm-sdk-go"
 )
 
 // serveOptions define the configuration options required by OCM agent to serve.
@@ -30,6 +34,7 @@ type serveOptions struct {
 	ocmURL      string
 	clusterID   string
 	debug       bool
+	fleetMode   bool
 	logger      logrus.Logger
 }
 
@@ -37,21 +42,28 @@ var (
 	serviceLong = templates.LongDesc(`
 	Start the OCM Agent server
 
-	The OCM Agent would receive alerts from AlertManager and post to OCM services such as "Service Log".
+	The OCM Agent would receive alerts from AlertManager/RHOBS and post to OCM services such as "Service Log". The ocm-agent CLI
+	is able to operate in traditional OSD/ROSA mode (default) as well as in Fleet (HyperShift) mode.
 
-	This requires an access token to be able to post to a service in OCM.
+	In case of traditional OSD/ROSA, this requires an access token to be able to post to a service in OCM and in case of HyperShift
+	mode, it requires a serviceaccount to be mounted to be able to authenticate with OCM.
 	`)
 
 	serviceExample = templates.Examples(`
-	# Start the OCM agent server
+	# Start the OCM agent server in traditional OSD/ROSA mode
 	ocm-agent serve --access-token "$TOKEN" --services "$SERVICE" --ocm-url "https://sample.example.com" --cluster-id abcd-1234
 
-	# Start the OCM agent server by accepting token from a file (value starting with '@' is considered a file)
+	# Start the OCM agent server in traditional OSD/ROSA mode by accepting token from a file (value starting with '@' is considered a file)
 	ocm-agent serve -t @tokenfile --services "$SERVICE" --ocm-url @urlfile --cluster-id @clusteridfile
 
-	# Start the OCM agent server in debug mode
+	# Start the OCM agent server in traditional OSD/ROSA in debug mode
 	ocm-agent serve -t @tokenfile --services "$SERVICE" --ocm-url @urlfile --cluster-id @clusteridfile --debug
+
+	# Start OCM agent server in Fleet mode
+	ocm-agent serve --fleet-mode --services "$SERVICE" --ocm-url @urlfile
 	`)
+
+	sdkclient *sdk.Connection
 )
 
 func NewServeOptions() *serveOptions {
@@ -69,23 +81,31 @@ func NewServeCmd() *cobra.Command {
 		Long:    serviceLong,
 		Example: serviceExample,
 		Args:    cobra.OnlyValidArgs,
+		PreRun: func(cmd *cobra.Command, args []string) {
+			mode, _ := cmd.Flags().GetBool(config.FleetMode)
+			if !mode {
+				_ = cmd.MarkFlagRequired(config.AccessToken)
+				_ = cmd.MarkFlagRequired(config.ClusterID)
+			}
+		},
 		Run: func(cmd *cobra.Command, args []string) {
 			kcmdutil.CheckErr(o.Complete(cmd, args))
 			kcmdutil.CheckErr(o.Run())
 		},
 	}
 
-	cmd.Flags().StringVarP(&o.ocmURL, config.OcmURL, "", "", "OCM URL")
-	cmd.Flags().StringVarP(&o.services, config.Services, "", "", "OCM service name")
-	cmd.Flags().StringVarP(&o.accessToken, config.AccessToken, "t", "", "Access token for OCM")
-	cmd.Flags().StringVarP(&o.clusterID, config.ClusterID, "c", "", "Cluster ID")
+	cmd.Flags().StringVarP(&o.ocmURL, config.OcmURL, "", "", "OCM URL (string)")
+	cmd.Flags().StringVarP(&o.services, config.Services, "", "", "OCM service name (string)")
+	cmd.Flags().StringVarP(&o.accessToken, config.AccessToken, "t", "", "Access token for OCM (string)")
+	cmd.Flags().StringVarP(&o.clusterID, config.ClusterID, "c", "", "Cluster ID (string)")
+	cmd.Flags().BoolVar(&o.fleetMode, config.FleetMode, false, "Fleet Mode (bool)")
 	cmd.PersistentFlags().BoolVarP(&o.debug, config.Debug, "d", false, "Debug mode enable")
 	kcmdutil.CheckErr(viper.BindPFlags(cmd.Flags()))
 
 	_ = cmd.MarkFlagRequired(config.OcmURL)
 	_ = cmd.MarkFlagRequired(config.Services)
-	_ = cmd.MarkFlagRequired(config.AccessToken)
-	_ = cmd.MarkFlagRequired(config.ClusterID)
+	cmd.MarkFlagsRequiredTogether(config.AccessToken, config.ClusterID)
+	cmd.MarkFlagsMutuallyExclusive(config.ClusterID, config.FleetMode)
 
 	return cmd
 }
@@ -113,6 +133,12 @@ func (o *serveOptions) Run() error {
 	o.logger.WithField("URL", o.ocmURL).Debug("OCM URL configured")
 	o.logger.WithField("Service", o.services).Debug("OCM Service configured")
 
+	if o.fleetMode {
+		o.logger.WithField("FleetMode", o.fleetMode).Debug("Fleet mode configured")
+	} else {
+		o.logger.WithField("FleetMode", o.fleetMode).Debug("Fleet mode not configured")
+	}
+
 	// create new router for metrics
 	rMetrics := mux.NewRouter()
 	rMetrics.Path(consts.MetricsPath).Handler(promhttp.Handler())
@@ -130,13 +156,26 @@ func (o *serveOptions) Run() error {
 		return err
 	}
 
-	// Initialize ocm sdk connection client
-	sdkclient, err := ocm.NewConnection().Build(viper.GetString(config.OcmURL),
-		viper.GetString(config.ClusterID),
-		viper.GetString(config.AccessToken))
-	if err != nil {
-		o.logger.WithError(err).Fatal("Can't initialise OCM sdk.Connection client")
-		return err
+	// Depending on whether the FleetMode is enabled or not, we need to initiate the OCM SDK connection accordingly
+	if !o.fleetMode {
+		sdkclient, err = ocm.NewConnection().Build(viper.GetString(config.OcmURL),
+			viper.GetString(config.ClusterID),
+			viper.GetString(config.AccessToken))
+		if err != nil {
+			o.logger.WithError(err).Fatal("Can't initialise OCM sdk.Connection client in non-fleet mode")
+			return err
+		}
+	} else {
+		ocmAgentClientID, hasOcmAgentClientID := os.LookupEnv("OA_OCM_CLIENT_ID")
+		ocmAgentClientSecret, hasOcmAgentClientSecret := os.LookupEnv("OA_OCM_CLIENT_SECRET")
+		ocmAgentURL, hasOcmURL := os.LookupEnv("OA_OCM_URL")
+		if !hasOcmAgentClientID || !hasOcmAgentClientSecret || !hasOcmURL {
+			_ = fmt.Errorf("missing environment variables: OA_OCM_CLIENT_ID OA_OCM_CLIENT_SECRET OA_OCM_URL")
+		}
+		sdkclient, err = sdk.NewConnectionBuilder().URL(ocmAgentURL).Client(ocmAgentClientID, ocmAgentClientSecret).Insecure(false).Build()
+		if err != nil {
+			o.logger.WithError(err).Fatal("Can't initialise OCM sdk.connection client in fleet mode")
+		}
 	}
 
 	// Initialize OCMClient

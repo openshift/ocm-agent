@@ -11,4 +11,6 @@ const (
 	Debug string = "debug"
 	// ClusterID represents the ID of the cluster used for OCM notifications
 	ClusterID string = "cluster-id"
+	// FleetMode represents if ocm-agent is going to run in default OSD/ROSA mode or HyperShift mode
+	FleetMode string = "fleet-mode"
 )
