@@ -165,17 +165,17 @@ func (o *serveOptions) Run() error {
 			return err
 		}
 	} else {
-		ocmAgentClientID, err := os.ReadFile("/secrets/" + consts.OCMAgentAccessFleetSecretClientKey)
+		ocmAgentClientID, err := os.ReadFile("/secrets/ocm-agent-staging-hypershift/" + consts.OCMAgentAccessFleetSecretClientKey)
 		if err != nil {
 			o.logger.WithError(err).Fatal("Can't find value for secret key ", consts.OCMAgentAccessFleetSecretClientKey)
 		}
 
-		ocmAgentClientSecret, err := os.ReadFile("/secrets/" + consts.OCMAgentAccessFleetSecretClientSecretKey)
+		ocmAgentClientSecret, err := os.ReadFile("/secrets/ocm-agent-staging-hypershift/" + consts.OCMAgentAccessFleetSecretClientSecretKey)
 		if err != nil {
 			o.logger.WithError(err).Fatal("Can't find value for secret key ", consts.OCMAgentAccessFleetSecretClientSecretKey)
 		}
 
-		ocmAgentURL, err := os.ReadFile("/secrets/" + consts.OCMAgentAccessFleetSecretURLKey)
+		ocmAgentURL, err := os.ReadFile("/secrets/ocm-agent-staging-hypershift/" + consts.OCMAgentAccessFleetSecretURLKey)
 		if err != nil {
 			o.logger.WithError(err).Fatal("Can't find value for secret key ", consts.OCMAgentAccessFleetSecretURLKey)
 		}
