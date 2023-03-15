@@ -1,7 +1,6 @@
 package serve
 
 import (
-	"fmt"
 	"net/http"
 	"os"
 	"strconv"
@@ -166,13 +165,22 @@ func (o *serveOptions) Run() error {
 			return err
 		}
 	} else {
-		ocmAgentClientID, hasOcmAgentClientID := os.LookupEnv("OA_OCM_CLIENT_ID")
-		ocmAgentClientSecret, hasOcmAgentClientSecret := os.LookupEnv("OA_OCM_CLIENT_SECRET")
-		ocmAgentURL, hasOcmURL := os.LookupEnv("OA_OCM_URL")
-		if !hasOcmAgentClientID || !hasOcmAgentClientSecret || !hasOcmURL {
-			_ = fmt.Errorf("missing environment variables: OA_OCM_CLIENT_ID OA_OCM_CLIENT_SECRET OA_OCM_URL")
+		ocmAgentClientID, err := os.ReadFile("/secrets/" + consts.OCMAgentAccessFleetSecretClientKey)
+		if err != nil {
+			o.logger.WithError(err).Fatal("Can't find value for secret key ", consts.OCMAgentAccessFleetSecretClientKey)
 		}
-		sdkclient, err = sdk.NewConnectionBuilder().URL(ocmAgentURL).Client(ocmAgentClientID, ocmAgentClientSecret).Insecure(false).Build()
+
+		ocmAgentClientSecret, err := os.ReadFile("/secrets/" + consts.OCMAgentAccessFleetSecretClientSecretKey)
+		if err != nil {
+			o.logger.WithError(err).Fatal("Can't find value for secret key ", consts.OCMAgentAccessFleetSecretClientSecretKey)
+		}
+
+		ocmAgentURL, err := os.ReadFile("/secrets/" + consts.OCMAgentAccessFleetSecretURLKey)
+		if err != nil {
+			o.logger.WithError(err).Fatal("Can't find value for secret key ", consts.OCMAgentAccessFleetSecretURLKey)
+		}
+
+		sdkclient, err = sdk.NewConnectionBuilder().URL(string(ocmAgentURL)).Client(string(ocmAgentClientID), string(ocmAgentClientSecret)).Insecure(false).Build()
 		if err != nil {
 			o.logger.WithError(err).Fatal("Can't initialise OCM sdk.connection client in fleet mode")
 		}
