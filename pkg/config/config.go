@@ -13,4 +13,10 @@ const (
 	ClusterID string = "cluster-id"
 	// FleetMode represents if ocm-agent is going to run in default OSD/ROSA mode or HyperShift mode
 	FleetMode string = "fleet-mode"
+	// TestFleetMode represents if ocm-agent is being run locally simulating fleet-mode run
+	TestFleetMode string = "test-fleet-mode"
+	// OCMClientID represents the OCM Client ID that will be used for testing fleet-mode run
+	OCMClientID string = "ocm-client-id"
+	// OCMClientSecret represents the OCM Client ID that will be used for testing fleet-mode run
+	OCMClientSecret string = "ocm-client-secret"
 )
