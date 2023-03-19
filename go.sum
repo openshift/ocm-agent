@@ -878,6 +878,8 @@ github.com/openshift/api v0.0.0-20220414050251-a83e6f8f1d50/go.mod h1:F/eU6jgr6Q
 github.com/openshift/build-machinery-go v0.0.0-20211213093930-7e33a7eb4ce3/go.mod h1:b1BuldmJlbA/xYtdZvKi+7j5YGB44qJUJDZ9zwiNCfE=
 github.com/openshift/ocm-agent-operator v0.0.0-20221113232116-4a8efab3d7ce h1:aSqedTvJ8OLnHkNB12mK3fswZNXs57Bjo8RlYNlEHQc=
 github.com/openshift/ocm-agent-operator v0.0.0-20221113232116-4a8efab3d7ce/go.mod h1:BxgryWN2dB1dJvw3aL/8HsbksL2Ghndoi81V4+Dy80Q=
+github.com/openshift/ocm-agent-operator v0.0.0-20230313081955-c44006bed2a6 h1:i/MJTOAK1FT9aqB//kaBdF6SRm89BJcq7o3bSkPASWM=
+github.com/openshift/ocm-agent-operator v0.0.0-20230313081955-c44006bed2a6/go.mod h1:BxgryWN2dB1dJvw3aL/8HsbksL2Ghndoi81V4+Dy80Q=
 github.com/openshift/operator-custom-metrics v0.4.3-0.20220322205053-7b528cc0d6eb/go.mod h1:ttINLaaHI1UhCW8j282QsUeDPb3qbkudMBtbHPntBM4=
 github.com/openshift/rosa v1.1.7/go.mod h1:Ap4vfflxHXfzY0MIt1l9dckwG+DkPUDc/vv1mk1cSCQ=
 github.com/opentracing-contrib/go-observer v0.0.0-20170622124052-a52f23424492/go.mod h1:Ngi6UdF0k5OKD5t5wlmGhe/EDKPoUM3BXZSSfIuJbis=
