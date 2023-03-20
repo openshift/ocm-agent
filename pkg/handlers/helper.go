@@ -7,20 +7,24 @@ import (
 
 	"github.com/openshift-online/ocm-cli/pkg/arguments"
 	sdk "github.com/openshift-online/ocm-sdk-go"
-	oav1alpha1 "github.com/openshift/ocm-agent-operator/api/v1alpha1"
-	"github.com/openshift/ocm-agent/pkg/config"
 	"github.com/openshift/ocm-agent/pkg/consts"
 	"github.com/openshift/ocm-agent/pkg/ocm"
 	"github.com/prometheus/alertmanager/template"
 	log "github.com/sirupsen/logrus"
-	"github.com/spf13/viper"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	_ "github.com/golang/mock/mockgen/model"
 )
 
 const (
 	AMLabelAlertName           = "alertname"
 	AMLabelTemplateName        = "managed_notification_template"
 	AMLabelManagedNotification = "send_managed_notification"
+	AMLabelAlertSourceName     = "source"
+	AMLabelAlertSourceHCP      = "HCP"
+	AMLabelAlertSourceDP       = "DP"
+	AMLabelAlertMCID           = "_mc_id"
+	AMLabelAlertHCID           = "_id"
 
 	LogFieldNotificationName           = "notification"
 	LogFieldResendInterval             = "resend_interval"
@@ -51,9 +55,9 @@ type AMReceiverAlert template.Alert
 
 // OCMClient enables implementation of OCM Client
 //
-//go:generate mockgen -destination=mocks/webhookreceiver.go -package=mocks github.com/openshift/ocm-agent/pkg/handlers OCMClient
+//go:generate mockgen -destination=mocks/helper.go -package=mocks github.com/openshift/ocm-agent/pkg/handlers OCMClient
 type OCMClient interface {
-	SendServiceLog(n *oav1alpha1.Notification, firing bool) error
+	SendServiceLog(summary, firingDesc, resolveDesc, clusterID string, firing bool) error
 }
 
 type ocmsdkclient struct {
@@ -78,7 +82,7 @@ func NewOcmClient(ocm *sdk.Connection) OCMClient {
 // isValidAlert indicates whether the supplied alert is one that warrants being processed for a notification.
 // Any or all of these situations should be treated as an error as it indicates that AlertManager is forwarding
 // alerts to ocm-agent that it should not be.
-func isValidAlert(alert template.Alert) bool {
+func isValidAlert(alert template.Alert, fleetMode bool) bool {
 	// An invalid alert won't have a name
 	alertname, err := alertName(alert)
 	if err != nil {
@@ -98,6 +102,27 @@ func isValidAlert(alert template.Alert) bool {
 		return false
 	}
 
+	if fleetMode {
+		// An alert in fleet mode should come from a source of HCP/DP
+		if name, ok := alert.Labels[AMLabelAlertSourceName]; ok {
+			if name != AMLabelAlertSourceHCP && name != AMLabelAlertSourceDP {
+				log.WithField(LogFieldAlertname, alertname).Error("fleet mode alert has no valid source")
+				return false
+			}
+		}
+
+		// An alert in fleet mode must have a management cluster ID label
+		if _, ok := alert.Labels[AMLabelAlertMCID]; !ok {
+			log.WithField(LogFieldAlertname, alertname).Error("fleet mode alert has no management cluster ID")
+			return false
+		}
+
+		// An alert in fleet mode must have a hosted cluster ID label
+		if _, ok := alert.Labels[AMLabelAlertHCID]; !ok {
+			log.WithField(LogFieldAlertname, alertname).Error("fleet mode alert has no hosted cluster ID")
+			return false
+		}
+	}
 	return true
 }
 
@@ -110,51 +135,7 @@ func alertName(a template.Alert) (*string, error) {
 }
 
 // SendServiceLog sends a servicelog notification for the given alert
-func (o *ocmsdkclient) SendServiceLog(n *oav1alpha1.Notification, firing bool) error {
-	req := o.ocm.Post()
-	err := arguments.ApplyPathArg(req, "/api/service_logs/v1/cluster_logs")
-	if err != nil {
-		return err
-	}
-
-	sl := ocm.ServiceLog{
-		ServiceName:  consts.ServiceLogServiceName,
-		ClusterUUID:  viper.GetString(config.ClusterID),
-		Summary:      n.Summary,
-		InternalOnly: false,
-	}
-
-	// Use different Summary and Description for firing and resolved status for an alert
-	if firing {
-		sl.Description = n.ActiveDesc
-		sl.Summary = ServiceLogActivePrefix + ": " + n.Summary
-	} else {
-		sl.Description = n.ResolvedDesc
-		sl.Summary = ServiceLogResolvePrefix + ": " + n.Summary
-	}
-	slAsBytes, err := json.Marshal(sl)
-	if err != nil {
-		return err
-	}
-
-	req.Bytes(slAsBytes)
-
-	res, err := req.Send()
-	if err != nil {
-		return err
-	}
-
-	operationId := res.Header(HeaderOperationId)
-	err = responseChecker(operationId, res.Status(), res.Bytes())
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// SendServiceLog sends a servicelog notification for the given alert in fleetmode
-func (o *ocmsdkclient) SendServiceLogInFleetMode(n *oav1alpha1.FleetNotification, firing bool, clusterID string) error {
+func (o *ocmsdkclient) SendServiceLog(summary, firingDesc, resolveDesc, clusterID string, firing bool) error {
 	req := o.ocm.Post()
 	err := arguments.ApplyPathArg(req, "/api/service_logs/v1/cluster_logs")
 	if err != nil {
@@ -164,14 +145,17 @@ func (o *ocmsdkclient) SendServiceLogInFleetMode(n *oav1alpha1.FleetNotification
 	sl := ocm.ServiceLog{
 		ServiceName:  consts.ServiceLogServiceName,
 		ClusterUUID:  clusterID,
-		Summary:      n.Summary,
+		Summary:      summary,
 		InternalOnly: false,
 	}
 
 	// Use different Summary and Description for firing and resolved status for an alert
 	if firing {
-		sl.Description = n.NotificationMessage
-		sl.Summary = ServiceLogActivePrefix + ": " + n.Summary
+		sl.Description = firingDesc
+		sl.Summary = ServiceLogActivePrefix + ": " + summary
+	} else {
+		sl.Description = resolveDesc
+		sl.Summary = ServiceLogResolvePrefix + ": " + summary
 	}
 	slAsBytes, err := json.Marshal(sl)
 	if err != nil {
