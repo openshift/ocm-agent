@@ -22,9 +22,11 @@ const (
 )
 
 var (
-	Context          = context.TODO()
-	Scheme           = setScheme(runtime.NewScheme())
-	TestNotification = ocmagentv1alpha1.Notification{
+	Context              = context.TODO()
+	Scheme               = setScheme(runtime.NewScheme())
+	TestManagedClusterID = "test-managed-cluster-id"
+	TestHostedClusterID  = "test-hosted-cluster-id"
+	TestNotification     = ocmagentv1alpha1.Notification{
 		Name:         TestNotificationName,
 		Summary:      "test-summary",
 		ActiveDesc:   "test-active-desc",
@@ -56,6 +58,29 @@ var (
 				Status: corev1.ConditionTrue,
 			},
 		},
+	}
+	TestFleetNotification = ocmagentv1alpha1.FleetNotification{
+		Name:                TestNotificationName,
+		Summary:             "test-summary",
+		NotificationMessage: "test-notification",
+		Severity:            "test-severity",
+		ResendWait:          1,
+	}
+	TestManagedFleetNotification = ocmagentv1alpha1.ManagedFleetNotification{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-mfn",
+			Namespace: "openshift-ocm-agent-operator",
+		},
+		Spec: ocmagentv1alpha1.ManagedFleetNotificationSpec{
+			FleetNotification: TestFleetNotification,
+		},
+	}
+	TestManagedFleetNotificationRecord = ocmagentv1alpha1.ManagedFleetNotificationRecord{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TestManagedClusterID,
+			Namespace: "openshift-ocm-agent-operator",
+		},
+		Status: ocmagentv1alpha1.ManagedFleetNotificationRecordStatus{},
 	}
 	TestManagedNotification = ocmagentv1alpha1.ManagedNotification{
 		ObjectMeta: metav1.ObjectMeta{
@@ -91,6 +116,24 @@ var (
 			"openshift_io_alert_source":     "platform",
 			"prometheus":                    "openshift-monitoring/k8s",
 			"severity":                      "info",
+		},
+		StartsAt: time.Now(),
+		EndsAt:   time.Time{},
+	}
+	TestFleetAlert = template.Alert{
+		Status: "firing",
+		Labels: map[string]string{
+			"managed_notification_template": TestNotificationName,
+			"send_managed_notification":     "true",
+			"alertname":                     "TestAlertName",
+			"alertstate":                    "firing",
+			"namespace":                     "openshift-monitoring",
+			"openshift_io_alert_source":     "platform",
+			"prometheus":                    "openshift-monitoring/k8s",
+			"severity":                      "info",
+			"source":                        "HCP",
+			"_mc_id":                        TestManagedClusterID,
+			"_id":                           TestHostedClusterID,
 		},
 		StartsAt: time.Now(),
 		EndsAt:   time.Time{},

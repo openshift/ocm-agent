@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/openshift/ocm-agent/pkg/config"
+	"github.com/spf13/viper"
 	"net/http"
 	"time"
 
@@ -97,7 +99,7 @@ func (h *WebhookReceiverHandler) processAMReceiver(d AMReceiverData, ctx context
 // and returns an error if that process completed successfully or false otherwise
 func (h *WebhookReceiverHandler) processAlert(alert template.Alert, mnl *oav1alpha1.ManagedNotificationList, firing bool) error {
 	// Should this alert be handled?
-	if !isValidAlert(alert) {
+	if !isValidAlert(alert, false) {
 		log.WithField(LogFieldAlert, fmt.Sprintf("%+v", alert)).Info("alert does not meet valid criteria")
 		return fmt.Errorf("alert does not meet valid criteria")
 	}
@@ -142,7 +144,11 @@ func (h *WebhookReceiverHandler) processAlert(alert template.Alert, mnl *oav1alp
 	}
 	// Send the servicelog for the alert
 	log.WithFields(log.Fields{LogFieldNotificationName: notification.Name}).Info("will send servicelog for notification")
-	err = h.ocm.SendServiceLog(notification, firing)
+	if firing {
+		err = h.ocm.SendServiceLog(notification.Summary, notification.ActiveDesc, notification.ResolvedDesc, viper.GetString(config.ClusterID), firing)
+	} else {
+
+	}
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{LogFieldNotificationName: notification.Name, LogFieldIsFiring: true}).Error("unable to send a notification")
 		metrics.SetResponseMetricFailure("service_logs")
