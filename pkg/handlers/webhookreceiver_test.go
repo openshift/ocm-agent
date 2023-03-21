@@ -60,8 +60,8 @@ var _ = Describe("Webhook Handlers", func() {
 			c:   mockClient,
 			ocm: mockOCMClient,
 		}
-		testAlert = testconst.TestAlert
-		testAlertResolved = testconst.TestAlertResolved
+		testAlert = testconst.NewTestAlert(false, false)
+		testAlertResolved = testconst.NewTestAlert(true, false)
 	})
 	AfterEach(func() {
 		server.Close()

@@ -110,7 +110,7 @@ func (h *WebhookRHOBSReceiverHandler) processAlert(alert template.Alert, mfn oav
 	for !slSent {
 
 		// Fetch the ManagedFleetNotificationRecord, or create it if it does not already exist
-		var mfnr *oav1alpha1.ManagedFleetNotificationRecord
+		mfnr := &oav1alpha1.ManagedFleetNotificationRecord{}
 		err := h.c.Get(context.Background(), client.ObjectKey{
 			Namespace: OCMAgentNamespaceName,
 			Name:      mcID,
@@ -128,16 +128,25 @@ func (h *WebhookRHOBSReceiverHandler) processAlert(alert template.Alert, mfn oav
 		}
 
 		// Fetch notificationRecordByName and ADD if it doesn't exist
-		_, err = mfnr.GetNotificationRecordByName(mcID, fn.Name)
+		nfr, err := mfnr.GetNotificationRecordByName(mcID, fn.Name)
 		if err != nil {
 			//  add NotificationRecordByName
-			addNotificationRecordByName(fn.Name, fn.ResendWait, hcID, mfnr)
+			nfr, err = addNotificationRecordByName(fn.Name, fn.ResendWait, hcID, mfnr)
+			if err != nil {
+				return err
+			}
 		}
 
-		nri, err := mfnr.GetNotificationRecordItem(mcID, fn.Name, hcID)
-		if err != nil || nri == nil {
-			return err
+		// Check if we already have a notification record for this hosted cluster
+		_, err = mfnr.GetNotificationRecordItem(mcID, fn.Name, hcID)
+		if err != nil {
+			// We mustn't, so create one
+			_, err = mfnr.AddNotificationRecordItem(hcID, nfr)
+			if err != nil {
+				return err
+			}
 		}
+
 		// Has a servicelog already been sent
 		canBeSent, err := mfnr.CanBeSent(mcID, fn.Name, hcID)
 		if err != nil {
@@ -148,7 +157,6 @@ func (h *WebhookRHOBSReceiverHandler) processAlert(alert template.Alert, mfn oav
 			log.WithFields(log.Fields{"notification": fn.Name,
 				LogFieldResendInterval: fn.ResendWait,
 			}).Info("not sending a notification as one was already sent recently")
-			// TODO: don't return nil, update the MNFR status
 			return nil
 		}
 
@@ -167,13 +175,17 @@ func (h *WebhookRHOBSReceiverHandler) processAlert(alert template.Alert, mfn oav
 		// Count the service log sent by the template name
 		metrics.CountServiceLogSent(fn.Name, "firing")
 
-		ri := mfnr.UpdateNotificationRecordItem(nri)
-		if ri == nil {
-			log.WithFields(log.Fields{LogFieldNotificationName: fn.Name, LogFieldManagedNotification: mfn.Name}).WithError(err).Error("unable to update notification status")
+		ri, err := mfnr.UpdateNotificationRecordItem(fn.Name, hcID)
+		if err != nil || ri == nil {
+			log.WithFields(log.Fields{LogFieldNotificationName: fn.Name, LogFieldManagedNotification: mfn.Name}).WithError(err).Error("unable to update notification status in CR")
 			return err
 		}
 
 		err = h.c.Status().Update(context.TODO(), mfnr)
+		if err != nil {
+			log.WithFields(log.Fields{LogFieldNotificationName: fn.Name, LogFieldManagedNotification: mfn.Name}).WithError(err).Error("unable to update notification status on cluster")
+			return err
+		}
 	}
 	return nil
 }
@@ -198,13 +210,13 @@ func (h *WebhookRHOBSReceiverHandler) createManagedFleetNotificationRecord(mcID 
 }
 
 // add NotificationRecordByName for fleetnotification
-func addNotificationRecordByName(name string, rswait int32, hcID string, mfrn *oav1alpha1.ManagedFleetNotificationRecord) *oav1alpha1.NotificationRecordByName {
+func addNotificationRecordByName(name string, rswait int32, hcID string, mfrn *oav1alpha1.ManagedFleetNotificationRecord) (*oav1alpha1.NotificationRecordByName, error) {
 	nfrbn := oav1alpha1.NotificationRecordByName{
 		NotificationName:        name,
 		ResendWait:              rswait,
 		NotificationRecordItems: nil,
 	}
-	mfrn.AddNotificationRecordItem(hcID, &nfrbn)
 	mfrn.Status.NotificationRecordByName = append(mfrn.Status.NotificationRecordByName, nfrbn)
-	return &nfrbn
+	_, err := mfrn.AddNotificationRecordItem(hcID, &nfrbn)
+	return &nfrbn, err
 }

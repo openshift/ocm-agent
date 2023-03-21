@@ -109,6 +109,9 @@ func isValidAlert(alert template.Alert, fleetMode bool) bool {
 				log.WithField(LogFieldAlertname, alertname).Error("fleet mode alert has no valid source")
 				return false
 			}
+		} else {
+			log.WithField(LogFieldAlertname, alertname).Error("fleet mode alert has no source")
+			return false
 		}
 
 		// An alert in fleet mode must have a management cluster ID label

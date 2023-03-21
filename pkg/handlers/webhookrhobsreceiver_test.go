@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	oav1alpha1 "github.com/openshift/ocm-agent-operator/api/v1alpha1"
@@ -29,6 +31,9 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 		testHandler      *WebhookRHOBSReceiverHandler
 		server           *ghttp.Server
 		testAlert        template.Alert
+		testFN           oav1alpha1.FleetNotification
+		testMFN          oav1alpha1.ManagedFleetNotification
+		testMFNR         oav1alpha1.ManagedFleetNotificationRecord
 		mockStatusWriter *clientmocks.MockStatusWriter
 	)
 
@@ -42,7 +47,10 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 			c:   mockClient,
 			ocm: mockOCMClient,
 		}
-		testAlert = testconst.TestFleetAlert
+		testAlert = testconst.NewTestAlert(false, true)
+		testFN = testconst.NewFleetNotification()
+		testMFN = testconst.NewManagedFleetNotification()
+		testMFNR = testconst.NewManagedFleetNotificationRecord()
 	})
 	AfterEach(func() {
 		server.Close()
@@ -63,16 +71,143 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 							return nil
 						}),
 					// Send the SL
-					mockOCMClient.EXPECT().SendServiceLog(testconst.TestFleetNotification.Summary,
-						testconst.TestFleetNotification.NotificationMessage,
-						"",
-						testconst.TestHostedClusterID, true),
+					mockOCMClient.EXPECT().SendServiceLog(testFN.Summary, testFN.NotificationMessage, "", testconst.TestHostedClusterID, true),
 					mockClient.EXPECT().Status().Return(mockStatusWriter),
 					mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
 				)
 
-				err := testHandler.processAlert(testAlert, testconst.TestManagedFleetNotification)
+				err := testHandler.processAlert(testAlert, testMFN)
 				Expect(err).ShouldNot(HaveOccurred())
+			})
+		})
+
+		Context("When a managed fleet notification record does exist", func() {
+			It("Uses the existing one", func() {
+				gomock.InOrder(
+					// Fetch the MFNR
+					mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNR),
+					// Send the SL
+					mockOCMClient.EXPECT().SendServiceLog(testFN.Summary, testFN.NotificationMessage, "", testconst.TestHostedClusterID, true),
+					mockClient.EXPECT().Status().Return(mockStatusWriter),
+					mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
+				)
+
+				err := testHandler.processAlert(testAlert, testMFN)
+				Expect(err).ShouldNot(HaveOccurred())
+			})
+			Context("When a notification record doesn't exist", func() {
+				It("Creates one", func() {
+					// Let's add a notification record, but named differently to the one we want,
+					// so we can verify the handler doesn't try and use it
+					testMFNR.Status.NotificationRecordByName = []oav1alpha1.NotificationRecordByName{
+						{
+							NotificationName:        "dummy-name",
+							ResendWait:              24,
+							NotificationRecordItems: []oav1alpha1.NotificationRecordItem{},
+						},
+					}
+					gomock.InOrder(
+						// Fetch the MFNR
+						mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNR),
+						// Send the SL
+						mockOCMClient.EXPECT().SendServiceLog(testFN.Summary, testFN.NotificationMessage, "", testconst.TestHostedClusterID, true),
+						mockClient.EXPECT().Status().Return(mockStatusWriter),
+						mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+							func(ctx context.Context, mfnr *oav1alpha1.ManagedFleetNotificationRecord, co ...client.UpdateOptions) error {
+								Expect(len(mfnr.Status.NotificationRecordByName)).To(Equal(2))
+								Expect(mfnr.Status.NotificationRecordByName[1].NotificationRecordItems[0].ServiceLogSentCount).To(Equal(1))
+								Expect(mfnr.Status.NotificationRecordByName[1].NotificationRecordItems[0].HostedClusterID).To(Equal(testconst.TestHostedClusterID))
+								return nil
+							}),
+					)
+					err := testHandler.processAlert(testAlert, testMFN)
+					Expect(err).ShouldNot(HaveOccurred())
+				})
+			})
+			Context("When a notification record item for the hosted cluster already exists", func() {
+				var testTime = &metav1.Time{Time: time.Now().Add(time.Duration(-48) * time.Hour)}
+				It("Updates the existing one", func() {
+					testMFNR.Status.NotificationRecordByName = []oav1alpha1.NotificationRecordByName{
+						{
+							NotificationName: testconst.TestNotificationName,
+							ResendWait:       24,
+							NotificationRecordItems: []oav1alpha1.NotificationRecordItem{
+								{
+									HostedClusterID:     testconst.TestHostedClusterID,
+									ServiceLogSentCount: 1,
+									LastTransitionTime:  testTime,
+								},
+							},
+						},
+					}
+					gomock.InOrder(
+						// Fetch the MFNR
+						mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNR),
+						// Send the SL
+						mockOCMClient.EXPECT().SendServiceLog(testFN.Summary, testFN.NotificationMessage, "", testconst.TestHostedClusterID, true),
+						mockClient.EXPECT().Status().Return(mockStatusWriter),
+						mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+							func(ctx context.Context, mfnr *oav1alpha1.ManagedFleetNotificationRecord, co ...client.UpdateOptions) error {
+								Expect(mfnr.Status.NotificationRecordByName[0].NotificationRecordItems[0].ServiceLogSentCount).To(Equal(2))
+								Expect(mfnr.Status.NotificationRecordByName[0].NotificationRecordItems[0].HostedClusterID).To(Equal(testconst.TestHostedClusterID))
+								Expect(mfnr.Status.NotificationRecordByName[0].NotificationRecordItems[0].LastTransitionTime.After(testTime.Time)).To(BeTrue())
+								return nil
+							}),
+					)
+					err := testHandler.processAlert(testAlert, testMFN)
+					Expect(err).ShouldNot(HaveOccurred())
+				})
+			})
+			Context("When a notification record item for a hosted cluster does not exist", func() {
+				It("Creates one", func() {
+					testMFNR.Status.NotificationRecordByName = []oav1alpha1.NotificationRecordByName{
+						{
+							NotificationName:        testconst.TestNotificationName,
+							ResendWait:              24,
+							NotificationRecordItems: []oav1alpha1.NotificationRecordItem{},
+						},
+					}
+					gomock.InOrder(
+						// Fetch the MFNR
+						mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNR),
+						// Send the SL
+						mockOCMClient.EXPECT().SendServiceLog(testFN.Summary, testFN.NotificationMessage, "", testconst.TestHostedClusterID, true),
+						mockClient.EXPECT().Status().Return(mockStatusWriter),
+						mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+							func(ctx context.Context, mfnr *oav1alpha1.ManagedFleetNotificationRecord, co ...client.UpdateOptions) error {
+								Expect(mfnr.Status.NotificationRecordByName[0].NotificationRecordItems[0].ServiceLogSentCount).To(Equal(1))
+								Expect(mfnr.Status.NotificationRecordByName[0].NotificationRecordItems[0].HostedClusterID).To(Equal(testconst.TestHostedClusterID))
+								return nil
+							}),
+					)
+					err := testHandler.processAlert(testAlert, testMFN)
+					Expect(err).ShouldNot(HaveOccurred())
+				})
+			})
+			Context("When a SL has been sent for the alert recently", func() {
+				It("Does not re-send", func() {
+					// Set a notification record item with a last sent time within the 24 hour window of the notification record
+					testMFNR.Status.NotificationRecordByName = []oav1alpha1.NotificationRecordByName{
+						{
+							NotificationName: testconst.TestNotificationName,
+							ResendWait:       24,
+							NotificationRecordItems: []oav1alpha1.NotificationRecordItem{
+								{
+									HostedClusterID:     testconst.TestHostedClusterID,
+									ServiceLogSentCount: 1,
+									LastTransitionTime:  &metav1.Time{Time: time.Now().Add(time.Duration(-1) * time.Hour)},
+								},
+							},
+						},
+					}
+					gomock.InOrder(
+						// Fetch the MFNR
+						mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNR),
+					)
+
+					err := testHandler.processAlert(testAlert, testMFN)
+					Expect(err).ShouldNot(HaveOccurred())
+				})
 			})
 		})
 	})
