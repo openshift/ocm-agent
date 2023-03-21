@@ -36,7 +36,6 @@ type serveOptions struct {
 	ocmClientSecret string
 	debug           bool
 	fleetMode       bool
-	testFleetMode   bool
 	logger          logrus.Logger
 }
 
@@ -61,11 +60,11 @@ var (
 	# Start the OCM agent server in traditional OSD/ROSA in debug mode
 	ocm-agent serve -t @tokenfile --services "$SERVICE" --ocm-url @urlfile --cluster-id @clusteridfile --debug
 
-	# Start OCM agent server in fleet mode
+	# Start OCM agent server in fleet mode on production clusters
 	ocm-agent serve --fleet-mode --services "$SERVICE" --ocm-url @urlfile
 
-	# Start OCM agent server to test fleet mode (for development purposes only)
-	ocm-agent serve --services $SERVICE --ocm-url $URL --fleet-mode --test-fleet-mode --ocm-client-id $CLIENT_ID --ocm-client-secret $CLIENT_SECRET
+	# Start OCM agent server in fleet mode on staging clusters (in development/testing mode)
+	ocm-agent serve --services $SERVICE --ocm-url $URL --fleet-mode --ocm-client-id $CLIENT_ID --ocm-client-secret $CLIENT_SECRET
 	`)
 
 	sdkclient *sdk.Connection
@@ -87,16 +86,19 @@ func NewServeCmd() *cobra.Command {
 		Example: serviceExample,
 		Args:    cobra.OnlyValidArgs,
 		PreRun: func(cmd *cobra.Command, args []string) {
+			clientID, _ := cmd.Flags().GetString(config.OCMClientID)
+			clientSecret, _ := cmd.Flags().GetString(config.OCMClientSecret)
 			mode, _ := cmd.Flags().GetBool(config.FleetMode)
-			if !mode {
+
+			// Mark AccessToken and ClusterID as required only in default mode
+			if !mode && clientID == "" && clientSecret == "" {
 				_ = cmd.MarkFlagRequired(config.AccessToken)
 				_ = cmd.MarkFlagRequired(config.ClusterID)
 			}
-			testMode, _ := cmd.Flags().GetBool(config.TestFleetMode)
-			if testMode {
-				_ = cmd.MarkFlagRequired(config.OCMClientID)
-				_ = cmd.MarkFlagRequired(config.OCMClientSecret)
-				cmd.Flag(config.FleetMode)
+
+			// If any of the OCM Client flags is set, it will require Fleet mode
+			if clientID != "" || clientSecret != "" {
+				_ = cmd.MarkFlagRequired(config.FleetMode)
 			}
 		},
 		Run: func(cmd *cobra.Command, args []string) {
@@ -109,18 +111,27 @@ func NewServeCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&o.services, config.Services, "", "", "OCM service name (string)")
 	cmd.Flags().StringVarP(&o.accessToken, config.AccessToken, "t", "", "Access token for OCM (string)")
 	cmd.Flags().StringVarP(&o.clusterID, config.ClusterID, "c", "", "Cluster ID (string)")
-	cmd.Flags().StringVarP(&o.ocmClientID, config.OCMClientID, "", "", "OCM Client ID (string)")
-	cmd.Flags().StringVarP(&o.ocmClientSecret, config.OCMClientSecret, "", "", "OCM Client Secret (string)")
+	cmd.Flags().StringVarP(&o.ocmClientID, config.OCMClientID, "", "", "OCM Client ID for testing fleet mode (string)")
+	cmd.Flags().StringVarP(&o.ocmClientSecret, config.OCMClientSecret, "", "", "OCM Client Secret for testing fleet mode (string)")
 	cmd.Flags().BoolVar(&o.fleetMode, config.FleetMode, false, "Fleet Mode (bool)")
-	cmd.Flags().BoolVar(&o.testFleetMode, config.TestFleetMode, false, "Test Fleet Mode (bool)")
 	cmd.PersistentFlags().BoolVarP(&o.debug, config.Debug, "d", false, "Debug mode enable")
 	kcmdutil.CheckErr(viper.BindPFlags(cmd.Flags()))
 
+	// ocm-url and services flags are always required
 	_ = cmd.MarkFlagRequired(config.OcmURL)
 	_ = cmd.MarkFlagRequired(config.Services)
+	// AccessToken and ClusterID required together in default mode
 	cmd.MarkFlagsRequiredTogether(config.AccessToken, config.ClusterID)
-	cmd.MarkFlagsMutuallyExclusive(config.ClusterID, config.FleetMode)
-	cmd.MarkFlagsMutuallyExclusive(config.TestFleetMode, config.ClusterID)
+	// OCM Client ID and Secret required together in fleet mode
+	cmd.MarkFlagsRequiredTogether(config.OCMClientID, config.OCMClientSecret)
+	// Can't pass combination of fleet mode and default mode flags together
+	cmd.MarkFlagsMutuallyExclusive(config.FleetMode, config.AccessToken)
+	cmd.MarkFlagsMutuallyExclusive(config.FleetMode, config.ClusterID)
+	// Can't pass OCM Client and default mode flags together
+	cmd.MarkFlagsMutuallyExclusive(config.AccessToken, config.OCMClientID)
+	cmd.MarkFlagsMutuallyExclusive(config.AccessToken, config.OCMClientSecret)
+	cmd.MarkFlagsMutuallyExclusive(config.ClusterID, config.OCMClientID)
+	cmd.MarkFlagsMutuallyExclusive(config.ClusterID, config.OCMClientSecret)
 
 	return cmd
 }
@@ -190,11 +201,11 @@ func (o *serveOptions) Run() error {
 		// If fleet mode is enabled, the connection to OCM needs to initiate using client ID and client secret
 		// On the managed cluster, the client ID and secret will be fetched from the secret volume however for
 		// local testing, the client ID and secret can be passed directly as flags for ocm-agent CLI.
-		if o.testFleetMode {
-			ocmAgentClientID = viper.GetString(config.OCMClientID)
-			ocmAgentClientSecret = viper.GetString(config.OCMClientSecret)
-			ocmAgentURL = viper.GetString(config.OcmURL)
-		} else {
+		ocmAgentClientID = viper.GetString(config.OCMClientID)
+		ocmAgentClientSecret = viper.GetString(config.OCMClientSecret)
+		ocmAgentURL = viper.GetString(config.OcmURL)
+
+		if ocmAgentClientID == "" && ocmAgentClientSecret == "" {
 			clientID, err := os.ReadFile(consts.OCMAgentAccessFleetSecretPathBase + os.Getenv("OCM_AGENT_SECRET_NAME") + "/" + consts.OCMAgentAccessFleetSecretClientKey)
 			ocmAgentClientID = string(clientID)
 			if err != nil {
