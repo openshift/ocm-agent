@@ -15,6 +15,15 @@ const (
 	// Alertmanger webhook receiver path
 	WebhookReceiverPath = "/alertmanager-receiver"
 
+	// OCMAgentAccessFleetSecretPathBase is the base path where to find the secret
+	OCMAgentAccessFleetSecretPathBase = "/secrets/"
+	// OCMAgentAccessFleetSecretClientKey is the secret of client_id key for OA HS
+	OCMAgentAccessFleetSecretClientKey = "OA_OCM_CLIENT_ID" //#nosec G101 -- This is a false positive
+	// OCMAgentAccessFleetSecretClientSecretKey is the secret of client_secret key for OA HS
+	OCMAgentAccessFleetSecretClientSecretKey = "OA_OCM_CLIENT_SECRET" //#nosec G101 -- This is a false positive
+	// OCMAgentAccessFleetSecretURLKey is the secret of URL key for OA HS
+	OCMAgentAccessFleetSecretURLKey = "OA_OCM_URL" //#nosec G101 -- This is a false positive
+
 	// Service name for the sending service logs
 	ServiceLogServiceName = "SREManualAction"
 )
