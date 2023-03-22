@@ -106,86 +106,84 @@ func (h *WebhookRHOBSReceiverHandler) processAlert(alert template.Alert, mfn oav
 	fn := mfn.Spec.FleetNotification
 	mcID := alert.Labels[AMLabelAlertMCID]
 	hcID := alert.Labels[AMLabelAlertHCID]
-	slSent := false
-	for !slSent {
 
-		// Fetch the ManagedFleetNotificationRecord, or create it if it does not already exist
-		mfnr := &oav1alpha1.ManagedFleetNotificationRecord{}
-		err := h.c.Get(context.Background(), client.ObjectKey{
-			Namespace: OCMAgentNamespaceName,
-			Name:      mcID,
-		}, mfnr)
-		if err != nil {
-			if !errors.IsNotFound(err) {
-				log.WithError(err).Error("unable to fetch managedFleetNotificationRecord")
-				return fmt.Errorf("unable to fetch managedFleetNotificationRecord for %s", mcID)
-			}
-			// create ManagedFleetNotificationRecord if not found
-			mfnr, err = h.createManagedFleetNotificationRecord(mcID)
-			if err != nil {
-				return err
-			}
+	// Fetch the ManagedFleetNotificationRecord, or create it if it does not already exist
+	mfnr := &oav1alpha1.ManagedFleetNotificationRecord{}
+	err := h.c.Get(context.Background(), client.ObjectKey{
+		Namespace: OCMAgentNamespaceName,
+		Name:      mcID,
+	}, mfnr)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			log.WithError(err).Error("unable to fetch managedFleetNotificationRecord")
+			return fmt.Errorf("unable to fetch managedFleetNotificationRecord for %s", mcID)
 		}
-
-		// Fetch notificationRecordByName and ADD if it doesn't exist
-		nfr, err := mfnr.GetNotificationRecordByName(mcID, fn.Name)
+		// create ManagedFleetNotificationRecord if not found
+		mfnr, err = h.createManagedFleetNotificationRecord(mcID)
 		if err != nil {
-			//  add NotificationRecordByName
-			nfr, err = addNotificationRecordByName(fn.Name, fn.ResendWait, hcID, mfnr)
-			if err != nil {
-				return err
-			}
-		}
-
-		// Check if we already have a notification record for this hosted cluster
-		_, err = mfnr.GetNotificationRecordItem(mcID, fn.Name, hcID)
-		if err != nil {
-			// We mustn't, so create one
-			_, err = mfnr.AddNotificationRecordItem(hcID, nfr)
-			if err != nil {
-				return err
-			}
-		}
-
-		// Has a servicelog already been sent
-		canBeSent, err := mfnr.CanBeSent(mcID, fn.Name, hcID)
-		if err != nil {
-			log.WithError(err).WithField(LogFieldNotificationName, fn.Name).Error("unable to fetch NotificationrecordByName or NotificationRecordItem")
 			return err
 		}
-		if !canBeSent {
-			log.WithFields(log.Fields{"notification": fn.Name,
-				LogFieldResendInterval: fn.ResendWait,
-			}).Info("not sending a notification as one was already sent recently")
-			return nil
-		}
+	}
 
-		// Send the servicelog for the alert
-		log.WithFields(log.Fields{LogFieldNotificationName: fn.Name}).Info("will send servicelog for notification")
-		err = h.ocm.SendServiceLog(fn.Summary, fn.NotificationMessage, "", hcID, true)
+	// Fetch notificationRecordByName and ADD if it doesn't exist
+	nfr, err := mfnr.GetNotificationRecordByName(mcID, fn.Name)
+	if err != nil {
+		//  add NotificationRecordByName
+		nfr, err = addNotificationRecordByName(fn.Name, fn.ResendWait, hcID, mfnr)
 		if err != nil {
-			log.WithError(err).WithFields(log.Fields{LogFieldNotificationName: fn.Name, LogFieldIsFiring: true}).Error("unable to send a notification")
-			metrics.SetResponseMetricFailure("service_logs")
 			return err
 		}
-		slSent = true
-		// Reset the metric if we got correct Response from OCM
-		metrics.ResetMetric(metrics.MetricResponseFailure)
+	}
 
-		// Count the service log sent by the template name
-		metrics.CountServiceLogSent(fn.Name, "firing")
-
-		ri, err := mfnr.UpdateNotificationRecordItem(fn.Name, hcID)
-		if err != nil || ri == nil {
-			log.WithFields(log.Fields{LogFieldNotificationName: fn.Name, LogFieldManagedNotification: mfn.Name}).WithError(err).Error("unable to update notification status in CR")
-			return err
-		}
-
-		err = h.c.Status().Update(context.TODO(), mfnr)
+	// Check if we already have a notification record for this hosted cluster
+	_, err = mfnr.GetNotificationRecordItem(mcID, fn.Name, hcID)
+	if err != nil {
+		// A notification record doesn't exist, so create one
+		_, err = mfnr.AddNotificationRecordItem(hcID, nfr)
 		if err != nil {
-			log.WithFields(log.Fields{LogFieldNotificationName: fn.Name, LogFieldManagedNotification: mfn.Name}).WithError(err).Error("unable to update notification status on cluster")
 			return err
 		}
+	}
+
+	// Check if a service log can be sent
+	canBeSent, err := mfnr.CanBeSent(mcID, fn.Name, hcID)
+	if err != nil {
+		log.WithError(err).WithField(LogFieldNotificationName, fn.Name).Error("unable to fetch NotificationrecordByName or NotificationRecordItem")
+		return err
+	}
+	// There's no need to send a service log, so just return
+	if !canBeSent {
+		log.WithFields(log.Fields{"notification": fn.Name,
+			LogFieldResendInterval: fn.ResendWait,
+		}).Info("not sending a notification as one was already sent recently")
+		return nil
+	}
+
+	// Send the servicelog for the alert
+	log.WithFields(log.Fields{LogFieldNotificationName: fn.Name}).Info("will send servicelog for notification")
+	err = h.ocm.SendServiceLog(fn.Summary, fn.NotificationMessage, "", hcID, true)
+	if err != nil {
+		log.WithError(err).WithFields(log.Fields{LogFieldNotificationName: fn.Name, LogFieldIsFiring: true}).Error("unable to send a notification")
+		metrics.SetResponseMetricFailure("service_logs")
+		return err
+	}
+
+	// Reset the metric if we got correct Response from OCM
+	metrics.ResetMetric(metrics.MetricResponseFailure)
+
+	// Count the service log sent by the template name
+	metrics.CountServiceLogSent(fn.Name, "firing")
+
+	ri, err := mfnr.UpdateNotificationRecordItem(fn.Name, hcID)
+	if err != nil || ri == nil {
+		log.WithFields(log.Fields{LogFieldNotificationName: fn.Name, LogFieldManagedNotification: mfn.Name}).WithError(err).Error("unable to update notification status in CR")
+		return err
+	}
+
+	err = h.c.Status().Update(context.TODO(), mfnr)
+	if err != nil {
+		log.WithFields(log.Fields{LogFieldNotificationName: fn.Name, LogFieldManagedNotification: mfn.Name}).WithError(err).Error("unable to update notification status on cluster")
+		return err
 	}
 	return nil
 }
