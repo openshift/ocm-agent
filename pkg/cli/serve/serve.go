@@ -243,10 +243,17 @@ func (o *serveOptions) Run() error {
 	r := mux.NewRouter()
 	livezHandler := handlers.NewLivezHandler()
 	readyzHandler := handlers.NewReadyzHandler()
-	webhookReceiverHandler := handlers.NewWebhookReceiverHandler(client, ocmclient)
 	r.Path(consts.LivezPath).Handler(livezHandler)
 	r.Path(consts.ReadyzPath).Handler(readyzHandler)
-	r.Path(consts.WebhookReceiverPath).Handler(webhookReceiverHandler)
+	if o.fleetMode {
+		o.logger.Info("Initialising alertmanager webhook handler in fleet mode")
+		webhookReceiverHandler := handlers.NewWebhookRHOBSReceiverHandler(client, ocmclient)
+		r.Path(consts.WebhookReceiverPath).Handler(webhookReceiverHandler)
+	} else {
+		o.logger.Info("Initialising alertmanager webhook handler in NON-fleet mode")
+		webhookReceiverHandler := handlers.NewWebhookReceiverHandler(client, ocmclient)
+		r.Path(consts.WebhookReceiverPath).Handler(webhookReceiverHandler)
+	}
 	r.Use(metrics.PrometheusMiddleware)
 
 	// serve
