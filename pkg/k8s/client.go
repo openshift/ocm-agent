@@ -33,6 +33,10 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&oav1alpha1.ManagedNotification{},
 		&oav1alpha1.ManagedNotificationList{},
+		&oav1alpha1.ManagedFleetNotification{},
+		&oav1alpha1.ManagedFleetNotificationList{},
+		&oav1alpha1.ManagedFleetNotificationRecord{},
+		&oav1alpha1.ManagedFleetNotificationRecordList{},
 	)
 
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)

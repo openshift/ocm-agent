@@ -4,19 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/openshift/ocm-agent/pkg/config"
 	"github.com/spf13/viper"
 	"net/http"
 	"time"
+
+	"github.com/openshift/ocm-agent/pkg/config"
 
 	"github.com/prometheus/alertmanager/template"
 	log "github.com/sirupsen/logrus"
 
 	oav1alpha1 "github.com/openshift/ocm-agent-operator/api/v1alpha1"
-	"github.com/openshift/ocm-agent/pkg/consts"
-	"github.com/openshift/ocm-agent/pkg/metrics"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/openshift/ocm-agent/pkg/consts"
+	"github.com/openshift/ocm-agent/pkg/metrics"
 
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"

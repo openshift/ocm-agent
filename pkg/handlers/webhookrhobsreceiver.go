@@ -11,9 +11,10 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	oav1alpha1 "github.com/openshift/ocm-agent-operator/api/v1alpha1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/openshift/ocm-agent/pkg/consts"
 	"github.com/openshift/ocm-agent/pkg/metrics"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -75,6 +76,7 @@ func (h *WebhookRHOBSReceiverHandler) processAMReceiver(d AMReceiverData, ctx co
 		// Can we find a notification template for this alert?
 		templateName := alert.Labels[AMLabelTemplateName]
 		mfn := oav1alpha1.ManagedFleetNotification{}
+		//TODO: fix
 		err := h.c.Get(ctx, client.ObjectKey{
 			Namespace: OCMAgentNamespaceName,
 			Name:      templateName,
