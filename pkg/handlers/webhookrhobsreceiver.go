@@ -123,6 +123,23 @@ func (h *WebhookRHOBSReceiverHandler) processAlert(alert template.Alert, mfn oav
 		// create ManagedFleetNotificationRecord if not found
 		mfnr, err = h.createManagedFleetNotificationRecord(mcID)
 		if err != nil {
+			log.WithError(err).Error("unable to create managedFleetNotificationRecord")
+			return err
+		}
+	}
+
+	// Verify that our MFNR has a status. If it doesn't, it's a new one, so let's
+	// set an initial status.
+	if mfnr.Status.ManagementCluster == "" {
+		// Set an initial status
+		mfnr.Status.ManagementCluster = mcID
+		mfnr.Status.NotificationRecordByName = []oav1alpha1.NotificationRecordByName{}
+
+		// Ensure that we can set the initial status successfully
+		// (Just in case the rest of the function logic fails)
+		err = h.c.Status().Update(context.TODO(), mfnr)
+		if err != nil {
+			log.WithError(err).Error("unable to set initial managedFleetNotificationRecord status")
 			return err
 		}
 	}
