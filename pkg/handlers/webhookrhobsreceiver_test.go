@@ -82,6 +82,28 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 		})
 
 		Context("When a managed fleet notification record does exist", func() {
+			Context("And doesn't have a Management Cluster in the status", func() {
+				BeforeEach(func() {
+					testMFNR.Status.ManagementCluster = ""
+					testMFNR.Status.NotificationRecordByName = []oav1alpha1.NotificationRecordByName{}
+				})
+				It("Updates the status", func() {
+					gomock.InOrder(
+						// Fetch the MFNR
+						mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNR),
+						// Update the status
+						mockClient.EXPECT().Status().Return(mockStatusWriter),
+						mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
+						// Send the SL
+						mockOCMClient.EXPECT().SendServiceLog(testFN.Summary, testFN.NotificationMessage, "", testconst.TestHostedClusterID, true),
+						mockClient.EXPECT().Status().Return(mockStatusWriter),
+						mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
+					)
+
+					err := testHandler.processAlert(testAlert, testMFN)
+					Expect(err).ShouldNot(HaveOccurred())
+				})
+			})
 			It("Uses the existing one", func() {
 				gomock.InOrder(
 					// Fetch the MFNR
