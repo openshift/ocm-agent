@@ -2,7 +2,6 @@ package serve
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 
@@ -20,7 +19,7 @@ func ReadFlagsFromFile(cmd *cobra.Command, names ...string) error {
 		if strings.HasPrefix(value, "@") {
 
 			value = value[1:]
-			data, err := ioutil.ReadFile(value)
+			data, err := os.ReadFile(value)
 			if err != nil {
 				return fmt.Errorf(
 					"can't read value of flag '%s' from file '%s': %w",

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/openshift/ocm-agent/pkg/consts"
 	"github.com/openshift/ocm-agent/pkg/ocm"
@@ -173,10 +174,18 @@ func (o *serveOptions) Run() error {
 	rMetrics := mux.NewRouter()
 	rMetrics.Path(consts.MetricsPath).Handler(promhttp.Handler())
 
-	// Listen on the metrics port with a seprated goroutine
+	// Listen on the metrics port with a separated goroutine
 	o.logger.WithField("Port", consts.OCMAgentMetricsPort).Info("Start listening on metrics port")
 	go func() {
-		_ = http.ListenAndServe(":"+strconv.Itoa(consts.OCMAgentMetricsPort), rMetrics)
+		server := &http.Server{
+			Addr:              ":" + strconv.Itoa(consts.OCMAgentMetricsPort),
+			ReadHeaderTimeout: 3 * time.Second,
+		}
+		err := server.ListenAndServe()
+		if err != nil {
+			o.logger.WithError(err).Fatal("Failed to start listening on metrics port")
+			os.Exit(1)
+		}
 	}()
 
 	// Initialize k8s client
@@ -258,9 +267,14 @@ func (o *serveOptions) Run() error {
 
 	// serve
 	o.logger.WithField("Port", consts.OCMAgentServicePort).Info("Start listening on service port")
-	err = http.ListenAndServe(":"+strconv.Itoa(consts.OCMAgentServicePort), r)
+	server := &http.Server{
+		Addr:              ":" + strconv.Itoa(consts.OCMAgentServicePort),
+		ReadHeaderTimeout: 3 * time.Second,
+	}
+	err = server.ListenAndServe()
 	if err != nil {
 		o.logger.WithError(err).Fatal("OCM Agent failed to serve")
+		os.Exit(1)
 	}
 
 	return nil

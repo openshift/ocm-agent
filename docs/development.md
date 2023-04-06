@@ -4,11 +4,11 @@
 
 ### golang
 
-A recent Go distribution (>=1.16) with enabled Go modules.
+A recent Go distribution (>=1.19) with enabled Go modules.
 
 ```shell
 $ go version
-go version go1.16.12 linux/amd64
+go version go1.19.7 linux/amd64
 ```
 
 ## Makefile

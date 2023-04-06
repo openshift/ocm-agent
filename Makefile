@@ -116,7 +116,7 @@ docs:
 # Installed using instructions from: https://golangci-lint.run/usage/install/#linux-and-windows
 getlint:
 	@mkdir -p $(GOPATH)/bin
-	@ls $(GOPATH)/bin/golangci-lint 1>/dev/null || (echo "Installing golangci-lint..." && curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOPATH)/bin v1.42.0)
+	@ls $(GOPATH)/bin/golangci-lint 1>/dev/null || (echo "Installing golangci-lint..." && curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOPATH)/bin v1.52.2)
 
 .PHONY: lint
 lint: getlint

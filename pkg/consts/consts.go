@@ -5,6 +5,8 @@ const (
 	OCMAgentServicePort = 8081
 	// Listening port for the OCM Agent metrics
 	OCMAgentMetricsPort = 8383
+	// Request header timeout for http header
+	OCMAgentHeaderTimeout = 3
 
 	// Metrics path for OCM Agent service
 	MetricsPath = "/metrics"
