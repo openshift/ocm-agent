@@ -177,9 +177,12 @@ func (o *serveOptions) Run() error {
 	// Listen on the metrics port with a separated goroutine
 	o.logger.WithField("Port", consts.OCMAgentMetricsPort).Info("Start listening on metrics port")
 	go func() {
+		// Adding ReadHeaderTimeout to fix below gosec error
+		// G114: Use of net/http serve function that has no support for setting timeouts
 		server := &http.Server{
 			Addr:              ":" + strconv.Itoa(consts.OCMAgentMetricsPort),
 			ReadHeaderTimeout: 3 * time.Second,
+			Handler:           rMetrics,
 		}
 		err := server.ListenAndServe()
 		if err != nil {
@@ -267,11 +270,15 @@ func (o *serveOptions) Run() error {
 
 	// serve
 	o.logger.WithField("Port", consts.OCMAgentServicePort).Info("Start listening on service port")
+	// Adding ReadHeaderTimeout to fix below gosec error
+	// G114: Use of net/http serve function that has no support for setting timeouts
 	server := &http.Server{
 		Addr:              ":" + strconv.Itoa(consts.OCMAgentServicePort),
 		ReadHeaderTimeout: 3 * time.Second,
+		Handler:           r,
 	}
 	err = server.ListenAndServe()
+	// err = http.ListenAndServe(":"+strconv.Itoa(consts.OCMAgentServicePort), r)
 	if err != nil {
 		o.logger.WithError(err).Fatal("OCM Agent failed to serve")
 		os.Exit(1)
