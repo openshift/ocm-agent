@@ -48,6 +48,7 @@ export OCM_CLUSTERID=$(ocm list clusters --managed | grep -w ${CLUSTER} | awk '{
 export EXT_CLUSTERID=$(ocm describe cluster $CLUSTER --json | jq -r '.external_id')
 ocm get /api/clusters_mgmt/v1/clusters/$OCM_CLUSTERID/credentials | jq -r .kubeconfig > $TEMPKUBECONFIG
 export KUBECONFIG=${TEMPKUBECONFIG}
+export OCM_AGENT_CONFIGMAP="ocm-agent-cm"
 
 echo
 echo "--- Building ocm-agent locally..."
@@ -59,8 +60,9 @@ echo "(Keep this terminal open to follow log of ocm-agent. Open new terminal and
 echo "Link: http://localhost:8081"
 echo
 
+# Defaulting configmap name to ocm-agent-cm
 ACCESS_TOKEN=$(oc -n openshift-ocm-agent-operator exec -ti deployment/ocm-agent -- cat /secrets/ocm-access-token/access_token)
-SERVICE=$(oc -n openshift-ocm-agent-operator exec -ti deployment/ocm-agent -- cat /configs/ocm-agent-config/services)
-OCM_BASE_URL=$(oc -n openshift-ocm-agent-operator exec -ti deployment/ocm-agent -- cat /configs/ocm-agent-config/ocmBaseURL)
+SERVICE=$(oc -n openshift-ocm-agent-operator exec -ti deployment/ocm-agent -- cat /configs/${OCM_AGENT_CONFIGMAP}/services)
+OCM_BASE_URL=$(oc -n openshift-ocm-agent-operator exec -ti deployment/ocm-agent -- cat /configs/${OCM_AGENT_CONFIGMAP}/ocmBaseURL)
 
 ${GIT_ROOT}/build/_output/ocm-agent serve --access-token "$ACCESS_TOKEN" --services "$SERVICE" --cluster-id "$EXT_CLUSTERID" --ocm-url ${OCM_BASE_URL}
