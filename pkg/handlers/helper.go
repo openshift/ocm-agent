@@ -7,11 +7,13 @@ import (
 
 	"github.com/openshift-online/ocm-cli/pkg/arguments"
 	sdk "github.com/openshift-online/ocm-sdk-go"
-	"github.com/openshift/ocm-agent/pkg/consts"
-	"github.com/openshift/ocm-agent/pkg/ocm"
+	"github.com/openshift/ocm-agent-operator/api/v1alpha1"
 	"github.com/prometheus/alertmanager/template"
 	log "github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/openshift/ocm-agent/pkg/consts"
+	"github.com/openshift/ocm-agent/pkg/ocm"
 
 	_ "github.com/golang/mock/mockgen/model"
 )
@@ -57,7 +59,7 @@ type AMReceiverAlert template.Alert
 //
 //go:generate mockgen -destination=mocks/helper.go -package=mocks github.com/openshift/ocm-agent/pkg/handlers OCMClient
 type OCMClient interface {
-	SendServiceLog(summary, firingDesc, resolveDesc, clusterID string, firing bool) error
+	SendServiceLog(summary, firingDesc, resolveDesc, clusterID string, severity v1alpha1.NotificationSeverity, firing bool) error
 }
 
 type ocmsdkclient struct {
@@ -138,7 +140,7 @@ func alertName(a template.Alert) (*string, error) {
 }
 
 // SendServiceLog sends a servicelog notification for the given alert
-func (o *ocmsdkclient) SendServiceLog(summary, firingDesc, resolveDesc, clusterID string, firing bool) error {
+func (o *ocmsdkclient) SendServiceLog(summary, firingDesc, resolveDesc, clusterID string, severity v1alpha1.NotificationSeverity, firing bool) error {
 	req := o.ocm.Post()
 	err := arguments.ApplyPathArg(req, "/api/service_logs/v1/cluster_logs")
 	if err != nil {
@@ -150,6 +152,7 @@ func (o *ocmsdkclient) SendServiceLog(summary, firingDesc, resolveDesc, clusterI
 		ClusterUUID:  clusterID,
 		Summary:      summary,
 		InternalOnly: false,
+		Severity:     severity,
 	}
 
 	// Use different Summary and Description for firing and resolved status for an alert

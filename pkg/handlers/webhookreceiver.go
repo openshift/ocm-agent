@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/spf13/viper"
 	"net/http"
 	"time"
+
+	"github.com/spf13/viper"
 
 	"github.com/openshift/ocm-agent/pkg/config"
 
@@ -146,7 +147,7 @@ func (h *WebhookReceiverHandler) processAlert(alert template.Alert, mnl *oav1alp
 	}
 	// Send the servicelog for the alert
 	log.WithFields(log.Fields{LogFieldNotificationName: notification.Name}).Info("will send servicelog for notification")
-	err = h.ocm.SendServiceLog(notification.Summary, notification.ActiveDesc, notification.ResolvedDesc, viper.GetString(config.ClusterID), firing)
+	err = h.ocm.SendServiceLog(notification.Summary, notification.ActiveDesc, notification.ResolvedDesc, viper.GetString(config.ClusterID), notification.Severity, firing)
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{LogFieldNotificationName: notification.Name, LogFieldIsFiring: true}).Error("unable to send a notification")
 		metrics.SetResponseMetricFailure("service_logs")

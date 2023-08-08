@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"net/http"
+
+	"k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/prometheus/alertmanager/template"
 	log "github.com/sirupsen/logrus"
@@ -180,7 +181,7 @@ func (h *WebhookRHOBSReceiverHandler) processAlert(alert template.Alert, mfn oav
 
 	// Send the servicelog for the alert
 	log.WithFields(log.Fields{LogFieldNotificationName: fn.Name}).Info("will send servicelog for notification")
-	err = h.ocm.SendServiceLog(fn.Summary, fn.NotificationMessage, "", hcID, true)
+	err = h.ocm.SendServiceLog(fn.Summary, fn.NotificationMessage, "", hcID, fn.Severity, true)
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{LogFieldNotificationName: fn.Name, LogFieldIsFiring: true}).Error("unable to send a notification")
 		metrics.SetResponseMetricFailure("service_logs")
