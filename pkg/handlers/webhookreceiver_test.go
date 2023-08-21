@@ -25,6 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	ocmagentv1alpha1 "github.com/openshift/ocm-agent-operator/api/v1alpha1"
+
 	testconst "github.com/openshift/ocm-agent/pkg/consts/test"
 	webhookreceivermock "github.com/openshift/ocm-agent/pkg/handlers/mocks"
 	clientmocks "github.com/openshift/ocm-agent/pkg/util/test/generated/mocks/client"
@@ -306,7 +307,7 @@ var _ = Describe("Webhook Handlers", func() {
 					mockOCMClient.EXPECT().SendServiceLog(testconst.TestNotification.Summary,
 						testconst.TestNotification.ActiveDesc,
 						testconst.TestNotification.ResolvedDesc,
-						gomock.Any(), true),
+						gomock.Any(), gomock.Any(), true),
 					mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testManagedNotificationList.Items[0]),
 					mockClient.EXPECT().Status().Return(mockStatusWriter),
 					mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
@@ -441,7 +442,7 @@ var _ = Describe("Webhook Handlers", func() {
 						testconst.TestNotification.Summary,
 						testconst.TestNotification.ActiveDesc,
 						testconst.TestNotification.ResolvedDesc,
-						gomock.Any(), true).Return(k8serrs.NewInternalError(fmt.Errorf("a fake error"))),
+						gomock.Any(), gomock.Any(), true).Return(k8serrs.NewInternalError(fmt.Errorf("a fake error"))),
 				)
 				err := webhookReceiverHandler.processAlert(testAlert, testManagedNotificationList, true)
 				Expect(err).Should(HaveOccurred())
@@ -488,7 +489,7 @@ var _ = Describe("Webhook Handlers", func() {
 						testconst.TestNotification.Summary,
 						testconst.TestNotification.ActiveDesc,
 						testconst.TestNotification.ResolvedDesc,
-						gomock.Any(), true).Return(nil),
+						gomock.Any(), gomock.Any(), true).Return(nil),
 					mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testManagedNotificationList.Items[0]),
 					mockClient.EXPECT().Status().Return(mockStatusWriter),
 					mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(k8serrs.NewInternalError(fmt.Errorf("a fake error"))),
