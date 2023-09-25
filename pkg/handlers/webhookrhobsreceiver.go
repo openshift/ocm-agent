@@ -181,7 +181,7 @@ func (h *WebhookRHOBSReceiverHandler) processAlert(alert template.Alert, mfn oav
 
 	// Send the servicelog for the alert
 	log.WithFields(log.Fields{LogFieldNotificationName: fn.Name}).Info("will send servicelog for notification")
-	err = h.ocm.SendServiceLog(fn.Summary, fn.NotificationMessage, "", hcID, fn.Severity, true)
+	err = h.ocm.SendServiceLog(fn.Summary, fn.NotificationMessage, "", hcID, fn.Severity, fn.LogType, fn.References, true)
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{LogFieldNotificationName: fn.Name, LogFieldIsFiring: true}).Error("unable to send a notification")
 		metrics.SetResponseMetricFailure("service_logs")

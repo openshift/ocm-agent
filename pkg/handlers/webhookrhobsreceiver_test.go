@@ -72,7 +72,7 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 							return nil
 						}),
 					// Send the SL
-					mockOCMClient.EXPECT().SendServiceLog(testFN.Summary, testFN.NotificationMessage, "", testconst.TestHostedClusterID, gomock.Any(), true),
+					mockOCMClient.EXPECT().SendServiceLog(testFN.Summary, testFN.NotificationMessage, "", testconst.TestHostedClusterID, gomock.Any(), gomock.Any(), gomock.Any(), true),
 					mockClient.EXPECT().Status().Return(mockStatusWriter),
 					mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
 				)
@@ -96,7 +96,7 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 						mockClient.EXPECT().Status().Return(mockStatusWriter),
 						mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
 						// Send the SL
-						mockOCMClient.EXPECT().SendServiceLog(testFN.Summary, testFN.NotificationMessage, "", testconst.TestHostedClusterID, gomock.Any(), true),
+						mockOCMClient.EXPECT().SendServiceLog(testFN.Summary, testFN.NotificationMessage, "", testconst.TestHostedClusterID, gomock.Any(), gomock.Any(), gomock.Any(), true),
 						mockClient.EXPECT().Status().Return(mockStatusWriter),
 						mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
 					)
@@ -110,7 +110,7 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 					// Fetch the MFNR
 					mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNR),
 					// Send the SL
-					mockOCMClient.EXPECT().SendServiceLog(testFN.Summary, testFN.NotificationMessage, "", testconst.TestHostedClusterID, gomock.Any(), true),
+					mockOCMClient.EXPECT().SendServiceLog(testFN.Summary, testFN.NotificationMessage, "", testconst.TestHostedClusterID, gomock.Any(), gomock.Any(), gomock.Any(), true),
 					mockClient.EXPECT().Status().Return(mockStatusWriter),
 					mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
 				)
@@ -133,7 +133,7 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 						// Fetch the MFNR
 						mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNR),
 						// Send the SL
-						mockOCMClient.EXPECT().SendServiceLog(testFN.Summary, testFN.NotificationMessage, "", testconst.TestHostedClusterID, gomock.Any(), true),
+						mockOCMClient.EXPECT().SendServiceLog(testFN.Summary, testFN.NotificationMessage, "", testconst.TestHostedClusterID, gomock.Any(), gomock.Any(), gomock.Any(), true),
 						mockClient.EXPECT().Status().Return(mockStatusWriter),
 						mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 							func(ctx context.Context, mfnr *oav1alpha1.ManagedFleetNotificationRecord, co ...client.UpdateOptions) error {
@@ -167,7 +167,7 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 						// Fetch the MFNR
 						mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNR),
 						// Send the SL
-						mockOCMClient.EXPECT().SendServiceLog(testFN.Summary, testFN.NotificationMessage, "", testconst.TestHostedClusterID, gomock.Any(), true),
+						mockOCMClient.EXPECT().SendServiceLog(testFN.Summary, testFN.NotificationMessage, "", testconst.TestHostedClusterID, gomock.Any(), gomock.Any(), gomock.Any(), true),
 						mockClient.EXPECT().Status().Return(mockStatusWriter),
 						mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 							func(ctx context.Context, mfnr *oav1alpha1.ManagedFleetNotificationRecord, co ...client.UpdateOptions) error {
@@ -194,7 +194,7 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 						// Fetch the MFNR
 						mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNR),
 						// Send the SL
-						mockOCMClient.EXPECT().SendServiceLog(testFN.Summary, testFN.NotificationMessage, "", testconst.TestHostedClusterID, gomock.Any(), true),
+						mockOCMClient.EXPECT().SendServiceLog(testFN.Summary, testFN.NotificationMessage, "", testconst.TestHostedClusterID, gomock.Any(), gomock.Any(), gomock.Any(), true),
 						mockClient.EXPECT().Status().Return(mockStatusWriter),
 						mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 							func(ctx context.Context, mfnr *oav1alpha1.ManagedFleetNotificationRecord, co ...client.UpdateOptions) error {

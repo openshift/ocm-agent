@@ -32,6 +32,11 @@ var (
 		ResolvedDesc: "test-resolved-desc",
 		Severity:     "test-severity",
 		ResendWait:   1,
+		LogType:      "test-type",
+		References: []ocmagentv1alpha1.NotificationReferenceType{
+			"http://some.awesome.com/reference",
+			"https://another.great.com/resource",
+		},
 	}
 	NotificationWithoutResolvedBody = ocmagentv1alpha1.Notification{
 		Name:       TestNotificationName,
