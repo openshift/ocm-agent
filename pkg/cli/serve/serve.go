@@ -265,6 +265,12 @@ func (o *serveOptions) Run() error {
 	r.Path(consts.LivezPath).Handler(livezHandler)
 	r.Path(consts.ReadyzPath).Handler(readyzHandler)
 
+	internalID, err := ocm.GetInternalIDByExternalID(o.externalClusterID, sdkclient)
+	if err != nil {
+		o.logger.WithError(err).Fatal("OCM Agent failed to fetch internal cluster ID")
+		os.Exit(1)
+	}
+
 	for _, service := range o.services {
 		switch service {
 		case config.ServiceLogService:
@@ -278,6 +284,13 @@ func (o *serveOptions) Run() error {
 				r.Path(consts.WebhookReceiverPath).Handler(webhookReceiverHandler)
 			}
 			r.Use(metrics.PrometheusMiddleware)
+		case config.ClustersService:
+			o.logger.Info("Initialising UpgradePolicy handlers")
+			upgradePolicyHandler := handlers.NewUpgradePoliciesHandler(sdkclient, internalID)
+			// See https://github.com/gorilla/mux#examples
+			r.HandleFunc("/upgrade_policies", upgradePolicyHandler.ServeUpgradePolicyList)
+			r.HandleFunc("/upgrade_policies/{upgrade_policy_id}", upgradePolicyHandler.ServeUpgradePolicyGet)
+			r.HandleFunc("/upgrade_policies/{upgrade_policy_id}/state", upgradePolicyHandler.ServeUpgradePolicyState)
 		}
 	}
 
