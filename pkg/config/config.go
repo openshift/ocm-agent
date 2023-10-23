@@ -17,4 +17,6 @@ const (
 	OCMClientID string = "ocm-client-id"
 	// OCMClientSecret represents the OCM Client ID that will be used for testing fleet-mode run
 	OCMClientSecret string = "ocm-client-secret" //#nosec G101 -- This is a false positive
+
+	ServiceLogService string = "service_logs" //#nosec G101 -- This is a false positive
 )

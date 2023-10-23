@@ -30,7 +30,7 @@ import (
 // serveOptions define the configuration options required by OCM agent to serve.
 type serveOptions struct {
 	accessToken     string
-	services        string
+	services        []string
 	ocmURL          string
 	clusterID       string
 	ocmClientID     string
@@ -54,6 +54,7 @@ var (
 	serviceExample = templates.Examples(`
 	# Start the OCM agent server in traditional OSD/ROSA mode
 	ocm-agent serve --access-token "$TOKEN" --services "$SERVICE" --ocm-url "https://sample.example.com" --cluster-id abcd-1234
+	ocm-agent serve --access-token "$TOKEN" --services "$SERVICEA,$SERVICEB" --ocm-url "https://sample.example.com" --cluster-id abcd-1234
 
 	# Start the OCM agent server in traditional OSD/ROSA mode by accepting token from a file (value starting with '@' is considered a file)
 	ocm-agent serve -t @tokenfile --services "$SERVICE" --ocm-url @urlfile --cluster-id @clusteridfile
@@ -108,8 +109,8 @@ func NewServeCmd() *cobra.Command {
 		},
 	}
 
+	cmd.Flags().StringArrayP(config.Services, "", o.services, "OCM service name (string)")
 	cmd.Flags().StringVarP(&o.ocmURL, config.OcmURL, "", "", "OCM URL (string)")
-	cmd.Flags().StringVarP(&o.services, config.Services, "", "", "OCM service name (string)")
 	cmd.Flags().StringVarP(&o.accessToken, config.AccessToken, "t", "", "Access token for OCM (string)")
 	cmd.Flags().StringVarP(&o.clusterID, config.ClusterID, "c", "", "Cluster ID (string)")
 	cmd.Flags().StringVarP(&o.ocmClientID, config.OCMClientID, "", "", "OCM Client ID for testing fleet mode (string)")
@@ -141,7 +142,9 @@ func NewServeCmd() *cobra.Command {
 func (o *serveOptions) Complete(cmd *cobra.Command, args []string) error {
 
 	// ReadFlagsFromFile would read the values of flags from files (if any)
-	err := ReadFlagsFromFile(cmd, config.AccessToken, config.Services, config.OcmURL, config.ClusterID)
+	// Don't include 'services' in flags from file defintion, as it is a string array.
+	err := ReadFlagsFromFile(cmd, config.AccessToken, config.OcmURL, config.ClusterID)
+
 	if err != nil {
 		return err
 	}
@@ -253,20 +256,26 @@ func (o *serveOptions) Run() error {
 
 	// create a new router
 	r := mux.NewRouter()
-	livezHandler := handlers.NewLivezHandler()
-	readyzHandler := handlers.NewReadyzHandler()
-	r.Path(consts.LivezPath).Handler(livezHandler)
-	r.Path(consts.ReadyzPath).Handler(readyzHandler)
-	if o.fleetMode {
-		o.logger.Info("Initialising alertmanager webhook handler in fleet mode")
-		webhookReceiverHandler := handlers.NewWebhookRHOBSReceiverHandler(client, ocmclient)
-		r.Path(consts.WebhookReceiverPath).Handler(webhookReceiverHandler)
-	} else {
-		o.logger.Info("Initialising alertmanager webhook handler in NON-fleet mode")
-		webhookReceiverHandler := handlers.NewWebhookReceiverHandler(client, ocmclient)
-		r.Path(consts.WebhookReceiverPath).Handler(webhookReceiverHandler)
+
+	for _, service := range o.services {
+		switch service {
+		case config.ServiceLogService:
+			livezHandler := handlers.NewLivezHandler()
+			readyzHandler := handlers.NewReadyzHandler()
+			r.Path(consts.LivezPath).Handler(livezHandler)
+			r.Path(consts.ReadyzPath).Handler(readyzHandler)
+			if o.fleetMode {
+				o.logger.Info("Initialising alertmanager webhook handler in fleet mode")
+				webhookReceiverHandler := handlers.NewWebhookRHOBSReceiverHandler(client, ocmclient)
+				r.Path(consts.WebhookReceiverPath).Handler(webhookReceiverHandler)
+			} else {
+				o.logger.Info("Initialising alertmanager webhook handler in NON-fleet mode")
+				webhookReceiverHandler := handlers.NewWebhookReceiverHandler(client, ocmclient)
+				r.Path(consts.WebhookReceiverPath).Handler(webhookReceiverHandler)
+			}
+			r.Use(metrics.PrometheusMiddleware)
+		}
 	}
-	r.Use(metrics.PrometheusMiddleware)
 
 	// serve
 	o.logger.WithField("Port", consts.OCMAgentServicePort).Info("Start listening on service port")
