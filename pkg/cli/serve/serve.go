@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/openshift/ocm-agent/pkg/consts"
@@ -29,15 +30,15 @@ import (
 
 // serveOptions define the configuration options required by OCM agent to serve.
 type serveOptions struct {
-	accessToken     string
-	services        string
-	ocmURL          string
-	clusterID       string
-	ocmClientID     string
-	ocmClientSecret string
-	debug           bool
-	fleetMode       bool
-	logger          logrus.Logger
+	accessToken       string
+	services          []string
+	ocmURL            string
+	externalClusterID string
+	ocmClientID       string
+	ocmClientSecret   string
+	debug             bool
+	fleetMode         bool
+	logger            logrus.Logger
 }
 
 var (
@@ -54,6 +55,7 @@ var (
 	serviceExample = templates.Examples(`
 	# Start the OCM agent server in traditional OSD/ROSA mode
 	ocm-agent serve --access-token "$TOKEN" --services "$SERVICE" --ocm-url "https://sample.example.com" --cluster-id abcd-1234
+	ocm-agent serve --access-token "$TOKEN" --services "$SERVICEA,$SERVICEB" --ocm-url "https://sample.example.com" --cluster-id abcd-1234
 
 	# Start the OCM agent server in traditional OSD/ROSA mode by accepting token from a file (value starting with '@' is considered a file)
 	ocm-agent serve -t @tokenfile --services "$SERVICE" --ocm-url @urlfile --cluster-id @clusteridfile
@@ -94,7 +96,7 @@ func NewServeCmd() *cobra.Command {
 			// Mark AccessToken and ClusterID as required only in default mode
 			if !mode && clientID == "" && clientSecret == "" {
 				_ = cmd.MarkFlagRequired(config.AccessToken)
-				_ = cmd.MarkFlagRequired(config.ClusterID)
+				_ = cmd.MarkFlagRequired(config.ExternalClusterID)
 			}
 
 			// If any of the OCM Client flags is set, it will require Fleet mode
@@ -109,11 +111,11 @@ func NewServeCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&o.ocmURL, config.OcmURL, "", "", "OCM URL (string)")
-	cmd.Flags().StringVarP(&o.services, config.Services, "", "", "OCM service name (string)")
 	cmd.Flags().StringVarP(&o.accessToken, config.AccessToken, "t", "", "Access token for OCM (string)")
-	cmd.Flags().StringVarP(&o.clusterID, config.ClusterID, "c", "", "Cluster ID (string)")
+	cmd.Flags().StringVarP(&o.externalClusterID, config.ExternalClusterID, "c", "", "Cluster ID (string)")
 	cmd.Flags().StringVarP(&o.ocmClientID, config.OCMClientID, "", "", "OCM Client ID for testing fleet mode (string)")
 	cmd.Flags().StringVarP(&o.ocmClientSecret, config.OCMClientSecret, "", "", "OCM Client Secret for testing fleet mode (string)")
+	cmd.Flags().StringSliceVarP(&o.services, config.Services, "", []string{}, "OCM service name (string)")
 	cmd.Flags().BoolVar(&o.fleetMode, config.FleetMode, false, "Fleet Mode (bool)")
 	cmd.PersistentFlags().BoolVarP(&o.debug, config.Debug, "d", false, "Debug mode enable")
 	kcmdutil.CheckErr(viper.BindPFlags(cmd.Flags()))
@@ -122,17 +124,17 @@ func NewServeCmd() *cobra.Command {
 	_ = cmd.MarkFlagRequired(config.OcmURL)
 	_ = cmd.MarkFlagRequired(config.Services)
 	// AccessToken and ClusterID required together in default mode
-	cmd.MarkFlagsRequiredTogether(config.AccessToken, config.ClusterID)
+	cmd.MarkFlagsRequiredTogether(config.AccessToken, config.ExternalClusterID)
 	// OCM Client ID and Secret required together in fleet mode
 	cmd.MarkFlagsRequiredTogether(config.OCMClientID, config.OCMClientSecret)
 	// Can't pass combination of fleet mode and default mode flags together
 	cmd.MarkFlagsMutuallyExclusive(config.FleetMode, config.AccessToken)
-	cmd.MarkFlagsMutuallyExclusive(config.FleetMode, config.ClusterID)
+	cmd.MarkFlagsMutuallyExclusive(config.FleetMode, config.ExternalClusterID)
 	// Can't pass OCM Client and default mode flags together
 	cmd.MarkFlagsMutuallyExclusive(config.AccessToken, config.OCMClientID)
 	cmd.MarkFlagsMutuallyExclusive(config.AccessToken, config.OCMClientSecret)
-	cmd.MarkFlagsMutuallyExclusive(config.ClusterID, config.OCMClientID)
-	cmd.MarkFlagsMutuallyExclusive(config.ClusterID, config.OCMClientSecret)
+	cmd.MarkFlagsMutuallyExclusive(config.ExternalClusterID, config.OCMClientID)
+	cmd.MarkFlagsMutuallyExclusive(config.ExternalClusterID, config.OCMClientSecret)
 
 	return cmd
 }
@@ -141,7 +143,12 @@ func NewServeCmd() *cobra.Command {
 func (o *serveOptions) Complete(cmd *cobra.Command, args []string) error {
 
 	// ReadFlagsFromFile would read the values of flags from files (if any)
-	err := ReadFlagsFromFile(cmd, config.AccessToken, config.Services, config.OcmURL, config.ClusterID)
+	err := ReadFlagsFromFile(cmd, config.AccessToken, config.OcmURL, config.Services, config.ExternalClusterID)
+	// Cobra keeps the filename argument as the first element of the services slice
+	// Example services slice from file: [@services_file service_logs]
+	// Remove that element if it starts with an '@' symbol.
+	o.services = deleteFirstElementIfFileName(o.services)
+
 	if err != nil {
 		return err
 	}
@@ -155,7 +162,6 @@ func (o *serveOptions) Complete(cmd *cobra.Command, args []string) error {
 }
 
 func (o *serveOptions) Run() error {
-
 	var ocmAgentClientID string
 	var ocmAgentClientSecret string
 	var ocmAgentURL string
@@ -202,7 +208,7 @@ func (o *serveOptions) Run() error {
 	// If fleet mode is not enabled, we will fetch the cluster ID and access token to initiate connection with OCM
 	if !o.fleetMode {
 		sdkclient, err = ocm.NewConnection().Build(viper.GetString(config.OcmURL),
-			viper.GetString(config.ClusterID),
+			viper.GetString(config.ExternalClusterID),
 			viper.GetString(config.AccessToken))
 		if err != nil {
 			o.logger.WithError(err).Fatal("Can't initialise OCM sdk.Connection client in non-fleet mode")
@@ -253,20 +259,27 @@ func (o *serveOptions) Run() error {
 
 	// create a new router
 	r := mux.NewRouter()
+
 	livezHandler := handlers.NewLivezHandler()
 	readyzHandler := handlers.NewReadyzHandler()
 	r.Path(consts.LivezPath).Handler(livezHandler)
 	r.Path(consts.ReadyzPath).Handler(readyzHandler)
-	if o.fleetMode {
-		o.logger.Info("Initialising alertmanager webhook handler in fleet mode")
-		webhookReceiverHandler := handlers.NewWebhookRHOBSReceiverHandler(client, ocmclient)
-		r.Path(consts.WebhookReceiverPath).Handler(webhookReceiverHandler)
-	} else {
-		o.logger.Info("Initialising alertmanager webhook handler in NON-fleet mode")
-		webhookReceiverHandler := handlers.NewWebhookReceiverHandler(client, ocmclient)
-		r.Path(consts.WebhookReceiverPath).Handler(webhookReceiverHandler)
+
+	for _, service := range o.services {
+		switch service {
+		case config.ServiceLogService:
+			if o.fleetMode {
+				o.logger.Info("Initialising alertmanager webhook handler in fleet mode")
+				webhookReceiverHandler := handlers.NewWebhookRHOBSReceiverHandler(client, ocmclient)
+				r.Path(consts.WebhookReceiverPath).Handler(webhookReceiverHandler)
+			} else {
+				o.logger.Info("Initialising alertmanager webhook handler in NON-fleet mode")
+				webhookReceiverHandler := handlers.NewWebhookReceiverHandler(client, ocmclient)
+				r.Path(consts.WebhookReceiverPath).Handler(webhookReceiverHandler)
+			}
+			r.Use(metrics.PrometheusMiddleware)
+		}
 	}
-	r.Use(metrics.PrometheusMiddleware)
 
 	// serve
 	o.logger.WithField("Port", consts.OCMAgentServicePort).Info("Start listening on service port")
@@ -285,4 +298,11 @@ func (o *serveOptions) Run() error {
 	}
 
 	return nil
+}
+
+func deleteFirstElementIfFileName(slice []string) []string {
+	if strings.HasPrefix(slice[0], "@") {
+		slice = slice[1:]
+	}
+	return slice
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	sdk "github.com/openshift-online/ocm-sdk-go"
+	log "github.com/sirupsen/logrus"
 )
 
 // ConnectionBuilder contains the information and logic needed to build a connection to OCM. Don't
@@ -52,4 +53,26 @@ func (b *ConnectionBuilder) Logger(logger *sdk.Logger) *ConnectionBuilder {
 func (b *ConnectionBuilder) TransportWrapper(wrapper sdk.TransportWrapper) *ConnectionBuilder {
 	b.transportWrapper = wrapper
 	return b
+}
+
+// Adapted from https://github.com/gdbranco/rosa/blob/9c5d9a00eef233a7989aca5ddca6762dc0f4d01d/pkg/ocm/clusters.go#L371
+func GetInternalIDByExternalID(externalID string, ocm *sdk.Connection) (string, error) {
+	log.Debugf("Getting internal ID from external ID %s", externalID)
+	query := fmt.Sprintf("external_cluster_id = '%s'", externalID)
+	response, err := ocm.AccountsMgmt().V1().Subscriptions().List().
+		Search(query).
+		Page(1).
+		Size(1).
+		Send()
+	if err != nil {
+		log.Error(err)
+		return "", err
+	}
+	if response.Total() < 1 {
+		log.Errorf("Cluster with external id %s not found in OCM database.", externalID)
+		return "", fmt.Errorf("Cluster with external id %s not found in OCM database.", externalID)
+	}
+	sub := response.Items().Slice()[0]
+
+	return sub.ClusterID(), nil
 }
