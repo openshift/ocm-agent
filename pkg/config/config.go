@@ -9,12 +9,14 @@ const (
 	OcmURL string = "ocm-url"
 	// Debug represents whether debug behaviours will be enabled
 	Debug string = "debug"
-	// ClusterID represents the ID of the cluster used for OCM notifications
-	ClusterID string = "cluster-id"
+	// ExternalClusterID represents the ID of the cluster used for OCM notifications
+	ExternalClusterID string = "cluster-id"
 	// FleetMode represents if ocm-agent is going to run in default OSD/ROSA mode or HyperShift mode
 	FleetMode string = "fleet-mode"
 	// OCMClientID represents the OCM Client ID that will be used for testing fleet-mode run
 	OCMClientID string = "ocm-client-id"
 	// OCMClientSecret represents the OCM Client ID that will be used for testing fleet-mode run
 	OCMClientSecret string = "ocm-client-secret" //#nosec G101 -- This is a false positive
+
+	ServiceLogService string = "service_logs"
 )
