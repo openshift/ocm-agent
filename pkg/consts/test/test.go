@@ -12,7 +12,6 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 
 	ocmagentv1alpha1 "github.com/openshift/ocm-agent-operator/api/v1alpha1"
-	"github.com/openshift/ocm-agent/pkg/ocm"
 )
 
 const (
@@ -152,16 +151,6 @@ func NewTestAlert(resolved, fleet bool) template.Alert {
 		alert.Labels["_id"] = TestHostedClusterID
 	}
 	return alert
-}
-
-func NewServiceLog(summary, desc string) ocm.ServiceLog {
-	return ocm.ServiceLog{
-		ServiceName:  "SREManualAction",
-		ClusterUUID:  "ddb5e04c-87ea-4fcd-b1f9-640981726cc5",
-		Summary:      summary,
-		InternalOnly: false,
-		Description:  desc,
-	}
 }
 
 func setScheme(scheme *runtime.Scheme) *runtime.Scheme {

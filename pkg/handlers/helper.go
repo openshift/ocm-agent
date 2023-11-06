@@ -5,15 +5,10 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/openshift-online/ocm-cli/pkg/arguments"
 	sdk "github.com/openshift-online/ocm-sdk-go"
-	"github.com/openshift/ocm-agent-operator/api/v1alpha1"
 	"github.com/prometheus/alertmanager/template"
 	log "github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/openshift/ocm-agent/pkg/consts"
-	"github.com/openshift/ocm-agent/pkg/ocm"
 
 	_ "github.com/golang/mock/mockgen/model"
 )
@@ -56,12 +51,6 @@ type AMReceiverData template.Data
 type AMReceiverAlert template.Alert
 
 // OCMClient enables implementation of OCM Client
-//
-//go:generate mockgen -destination=mocks/helper.go -package=mocks github.com/openshift/ocm-agent/pkg/handlers OCMClient
-type OCMClient interface {
-	SendServiceLog(summary, firingDesc, resolveDesc, clusterID string, severity v1alpha1.NotificationSeverity, logType string, references []v1alpha1.NotificationReferenceType, firing bool) error
-}
-
 type ocmsdkclient struct {
 	ocm *sdk.Connection
 }
@@ -137,53 +126,6 @@ func alertName(a template.Alert) (*string, error) {
 		return &name, nil
 	}
 	return nil, fmt.Errorf("no alertname defined in alert")
-}
-
-// SendServiceLog sends a servicelog notification for the given alert
-func (o *ocmsdkclient) SendServiceLog(summary, firingDesc, resolveDesc, clusterID string, severity v1alpha1.NotificationSeverity, logType string, references []v1alpha1.NotificationReferenceType, firing bool) error {
-	req := o.ocm.Post()
-	err := arguments.ApplyPathArg(req, "/api/service_logs/v1/cluster_logs")
-	if err != nil {
-		return err
-	}
-
-	sl := ocm.ServiceLog{
-		ServiceName:   consts.ServiceLogServiceName,
-		ClusterUUID:   clusterID,
-		Summary:       summary,
-		InternalOnly:  false,
-		Severity:      severity,
-		LogType:       logType,
-		DocReferences: references,
-	}
-
-	// Use different Summary and Description for firing and resolved status for an alert
-	if firing {
-		sl.Description = firingDesc
-		sl.Summary = ServiceLogActivePrefix + ": " + summary
-	} else {
-		sl.Description = resolveDesc
-		sl.Summary = ServiceLogResolvePrefix + ": " + summary
-	}
-	slAsBytes, err := json.Marshal(sl)
-	if err != nil {
-		return err
-	}
-
-	req.Bytes(slAsBytes)
-
-	res, err := req.Send()
-	if err != nil {
-		return err
-	}
-
-	operationId := res.Header(HeaderOperationId)
-	err = responseChecker(operationId, res.Status(), res.Bytes())
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // responseChecker checks the ocm response returns error or not
