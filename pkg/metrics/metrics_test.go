@@ -163,6 +163,7 @@ var _ = Describe("Webhook Handlers", func() {
 
 func resetMetrics() {
 	metricServiceLogSent.Reset()
+	metricFailedServiceLogsTotal.Reset()
 	MetricRequestFailure.Reset()
 	MetricResponseFailure.Reset()
 	metricRequestsTotal.Reset()

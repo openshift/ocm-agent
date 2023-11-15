@@ -4,35 +4,138 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 
 	sdk "github.com/openshift-online/ocm-sdk-go"
 	slv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	"github.com/openshift/ocm-agent-operator/api/v1alpha1"
 	"github.com/openshift/ocm-agent/pkg/consts"
-	log "github.com/sirupsen/logrus"
+	"github.com/prometheus/alertmanager/template"
 )
 
-type OCMClient interface {
-	SendServiceLog(summary, firingDesc, resolveDesc, clusterID string, severity v1alpha1.NotificationSeverity, logType string, references []v1alpha1.NotificationReferenceType, firing bool) error
+const (
+	ServiceLogActivePrefix  = "Issue Notification"
+	ServiceLogResolvePrefix = "Issue Resolution"
+)
+
+type ServiceLogBuilder struct {
+	wrappedBuilder *slv1.LogEntryBuilder
+	summary        string
+	firingDesc     string
+	resolveDesc    string
+	references     []v1alpha1.NotificationReferenceType
 }
 
-// ServiceLogsHandler manages service logs via the OCM API.
-type ServiceLogsHandler struct {
-	ocm *sdk.Connection
-}
+type ServiceLog = slv1.LogEntry
 
-// NewServiceLogsHandler creates a new handler for service logs.
-func NewServiceLogsHandler(o *sdk.Connection) *ServiceLogsHandler {
-	log.Debug("Creating new service logs handler")
-	return &ServiceLogsHandler{
-		ocm: o,
+func NewServiceLogBuilder(summary, firingDesc, resolveDesc, clusterUUID string, severity v1alpha1.NotificationSeverity, logType string, references []v1alpha1.NotificationReferenceType) *ServiceLogBuilder {
+	return &ServiceLogBuilder{
+		wrappedBuilder: slv1.NewLogEntry().
+			ServiceName(consts.ServiceLogServiceName).
+			ClusterUUID(clusterUUID).
+			InternalOnly(false).
+			Severity(slv1.Severity(severity)).
+			LogType(slv1.LogType(logType)),
+		summary:     summary,
+		firingDesc:  firingDesc,
+		resolveDesc: resolveDesc,
+		references:  references,
 	}
 }
 
-// PostServiceLog sends a service log for a specific cluster to the OCM API.
-func (h *ServiceLogsHandler) PostServiceLog(logEntry *slv1.LogEntry) error {
+var (
+	slVarRefRe = regexp.MustCompile(`\${[^{}]*}`)
+)
+
+// Replace place holders in the given string with the alert labels and annotations
+func replacePlaceHoldersInString(s string, alert *template.Alert) (string, error) {
+	var err error
+	resolvePlaceHolder := func(placeHolder string) string {
+		if err == nil {
+			key, value, isOk := placeHolder[2:len(placeHolder)-1], "", false
+
+			if value, isOk = alert.Labels[key]; !isOk {
+				if value, isOk = alert.Annotations[key]; !isOk {
+					err = fmt.Errorf("alert has no '%s' label or annotation which could be used to replace place holders in the template", key)
+
+					return placeHolder
+				}
+			}
+			return value
+		}
+
+		return placeHolder
+	}
+
+	return slVarRefRe.ReplaceAllStringFunc(s, resolvePlaceHolder), err
+}
+
+func (b *ServiceLogBuilder) Build(firing bool, alert *template.Alert) (*ServiceLog, error) {
+	var summary, description string
+
+	// Adjust the summary based on whether the alert is firing or resolved.
+	if firing {
+		summary = ServiceLogActivePrefix + ": " + b.summary
+		description = b.firingDesc
+
+		if b.references != nil && len(b.references) > 0 {
+			refs, err := json.Marshal(b.references)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal references: %v", err)
+			}
+			description = fmt.Sprintf("%s\nReferences: %s", description, string(refs))
+		}
+	} else {
+		summary = ServiceLogResolvePrefix + ": " + b.summary
+		description = b.resolveDesc
+	}
+
+	// Replace the place holders in the summary & the description with alert labels & annotations
+	if alert != nil {
+		var err error
+
+		if summary, err = replacePlaceHoldersInString(summary, alert); err != nil {
+			return nil, err
+		}
+		if description, err = replacePlaceHoldersInString(description, alert); err != nil {
+			return nil, err
+		}
+	}
+
+	return b.wrappedBuilder.Summary(summary).Description(description).Build()
+}
+
+func NewTestServiceLog(summary, desc, clusterUUID string, severity v1alpha1.NotificationSeverity, logType string) *ServiceLog {
+	sl, _ := slv1.NewLogEntry().
+		Summary(summary).
+		Description(desc).
+		ServiceName(consts.ServiceLogServiceName).
+		ClusterUUID(clusterUUID).
+		InternalOnly(false).
+		Severity(slv1.Severity(severity)).
+		LogType(slv1.LogType(logType)).Build()
+
+	return sl
+}
+
+type OCMClient interface {
+	SendServiceLog(serviceLog *ServiceLog) error
+}
+
+type ocmClientImpl struct {
+	ocmConnection *sdk.Connection
+}
+
+//go:generate mockgen -destination=mocks/service_logs.go -package=mocks github.com/openshift/ocm-agent/pkg/handlers OCMClient
+func NewOcmClient(ocmConnection *sdk.Connection) OCMClient {
+	return &ocmClientImpl{
+		ocmConnection: ocmConnection,
+	}
+}
+
+func (o *ocmClientImpl) SendServiceLog(serviceLog *ServiceLog) error {
 	// Use the OCM SDK to construct the request for posting a service log for a specific cluster.
-	request := h.ocm.ServiceLogs().V1().ClusterLogs().Add().Body(logEntry)
+	request := o.ocmConnection.ServiceLogs().V1().ClusterLogs().Add().Body(serviceLog)
 
 	// Send the request to the OCM API.
 	response, err := request.Send()
@@ -49,43 +152,10 @@ func (h *ServiceLogsHandler) PostServiceLog(logEntry *slv1.LogEntry) error {
 	return nil
 }
 
-func (o *ocmsdkclient) SendServiceLog(summary, firingDesc, resolveDesc, clusterUUID string, severity v1alpha1.NotificationSeverity, logType string, references []v1alpha1.NotificationReferenceType, firing bool) error {
-	// Construct the LogEntry using the builder pattern provided by the SDK.
-	logBuilder := slv1.NewLogEntry().
-		Summary(summary).
-		Description(firingDesc).
-		ServiceName(consts.ServiceLogServiceName).
-		ClusterUUID(clusterUUID).
-		InternalOnly(false).
-		Severity(slv1.Severity(severity)).
-		LogType(slv1.LogType(logType))
-
-	// Adjust the summary based on whether the alert is firing or resolved.
-	if firing {
-		refs, err := json.Marshal(references)
-		if err != nil {
-			return fmt.Errorf("failed to marshal references: %v", err)
-		}
-		refsDesc := fmt.Sprintf("References: %s", string(refs))
-		descriptionWithRefs := fmt.Sprintf("%s\n%s", firingDesc, refsDesc)
-		logBuilder = logBuilder.Summary(ServiceLogActivePrefix + ": " + summary).Description(descriptionWithRefs)
+func BuildAndSendServiceLog(slBuilder *ServiceLogBuilder, firing bool, alert *template.Alert, ocmClient OCMClient) error {
+	if sl, err := slBuilder.Build(firing, alert); err != nil {
+		return err
 	} else {
-		logBuilder = logBuilder.Summary(ServiceLogResolvePrefix + ": " + summary).Description(resolveDesc)
+		return ocmClient.SendServiceLog(sl)
 	}
-
-	// Build the log entry.
-	logEntry, err := logBuilder.Build()
-	if err != nil {
-		return fmt.Errorf("failed to build log entry: %v", err)
-	}
-
-	// Initialize the ServiceLogsHandler with the OCM client.
-	serviceLogsHandler := NewServiceLogsHandler(o.ocm)
-
-	// Use the servicelog handler to send the service log.
-	if err := serviceLogsHandler.PostServiceLog(logEntry); err != nil {
-		return fmt.Errorf("failed to post service log: %v", err)
-	}
-
-	return nil
 }

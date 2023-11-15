@@ -9,20 +9,20 @@ import (
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/ghttp"
 	sdk "github.com/openshift-online/ocm-sdk-go"
-	slv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	. "github.com/openshift-online/ocm-sdk-go/testing"
+	testconst "github.com/openshift/ocm-agent/pkg/consts/test"
 	"github.com/openshift/ocm-agent/pkg/handlers"
 )
 
-func TestServiceLogsHandler(t *testing.T) {
+func TestOCMClient(t *testing.T) {
 	RegisterFailHandler(Fail)
 }
 
 var _ = Describe("ServiceLogsHandler", func() {
 	var (
 		ocmConnection *sdk.Connection
-		handler       *handlers.ServiceLogsHandler
-		logEntry      *slv1.LogEntry
+		ocmClient     handlers.OCMClient
+		serviceLog    *handlers.ServiceLog
 		err           error
 		mockServer    *Server
 	)
@@ -38,11 +38,13 @@ var _ = Describe("ServiceLogsHandler", func() {
 			Build()
 		Expect(err).NotTo(HaveOccurred())
 
-		handler = handlers.NewServiceLogsHandler(ocmConnection)
-
-		logEntryBuilder := slv1.NewLogEntry().ClusterUUID("123")
-		logEntry, err = logEntryBuilder.Build()
-		Expect(err).NotTo(HaveOccurred())
+		ocmClient = handlers.NewOcmClient(ocmConnection)
+		serviceLog = handlers.NewTestServiceLog(
+			handlers.ServiceLogActivePrefix+": "+testconst.ServiceLogSummary,
+			testconst.ServiceLogActiveDesc,
+			testconst.TestHostedClusterID,
+			testconst.TestNotification.Severity,
+			testconst.TestNotification.LogType)
 
 		mockServer.AppendHandlers(
 			RespondWith(http.StatusCreated, `{}`, http.Header{"Content-Type": []string{"application/json"}}),
@@ -55,7 +57,7 @@ var _ = Describe("ServiceLogsHandler", func() {
 
 	Context("Posting a service log", func() {
 		It("should not return an error on successful post", func() {
-			err := handler.PostServiceLog(logEntry)
+			err := ocmClient.SendServiceLog(serviceLog)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -70,7 +72,7 @@ var _ = Describe("ServiceLogsHandler", func() {
 				),
 			))
 
-			err := handler.PostServiceLog(logEntry)
+			err := ocmClient.SendServiceLog(serviceLog)
 			Expect(err).To(HaveOccurred())
 
 			expectedErrorMessage := "can't post service log: status is 500, identifier is '400' and code is 'SERVICE-LOGS-400': An internal server error occurred"

@@ -45,6 +45,12 @@ var (
 			Help: "A count of service log sent based on managedNotification template for the current session",
 		}, []string{"ocm_service", "template", "state"})
 
+	metricFailedServiceLogsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "ocm_agent_failed_service_logs_total",
+			Help: "A count of service logs which failed to be sent. This includes service logs which failed to be formatted.",
+		}, []string{"ocm_service", "template"})
+
 	metricServiceLogSentTotal = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "ocm_agent_service_log_sent_total",
@@ -58,6 +64,7 @@ var (
 		MetricRequestFailure,
 		MetricResponseFailure,
 		metricServiceLogSent,
+		metricFailedServiceLogsTotal,
 		metricServiceLogSentTotal,
 	}
 )
@@ -135,6 +142,14 @@ func CountServiceLogSent(template, state string) {
 		"ocm_service": "service_logs",
 		"template":    template,
 		"state":       state,
+	}).Inc()
+}
+
+// CountFailedServiceLogs counts the total number of failed service logs (by notification template)
+func CountFailedServiceLogs(template string) {
+	metricFailedServiceLogsTotal.With(prometheus.Labels{
+		"ocm_service": "service_logs",
+		"template":    template,
 	}).Inc()
 }
 

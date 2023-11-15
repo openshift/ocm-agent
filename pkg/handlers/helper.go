@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 
-	sdk "github.com/openshift-online/ocm-sdk-go"
 	"github.com/prometheus/alertmanager/template"
 	log "github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,8 +30,6 @@ const (
 	LogFieldManagedNotification        = "managed_notification_cr"
 	LogFieldPostServiceLogOpId         = "post_servicelog_operation_id"
 	LogFieldPostServiceLogFailedReason = "post_servicelog_failed_reason"
-	ServiceLogActivePrefix             = "Issue Notification"
-	ServiceLogResolvePrefix            = "Issue Resolution"
 
 	// Header returned in OCM responses
 	HeaderOperationId = "X-Operation-Id"
@@ -50,11 +47,6 @@ type AMReceiverData template.Data
 
 type AMReceiverAlert template.Alert
 
-// OCMClient enables implementation of OCM Client
-type ocmsdkclient struct {
-	ocm *sdk.Connection
-}
-
 type WebhookReceiverHandler struct {
 	c   client.Client
 	ocm OCMClient
@@ -62,12 +54,6 @@ type WebhookReceiverHandler struct {
 
 type OCMResponseBody struct {
 	Reason string `json:"reason"`
-}
-
-func NewOcmClient(ocm *sdk.Connection) OCMClient {
-	return &ocmsdkclient{
-		ocm: ocm,
-	}
 }
 
 // isValidAlert indicates whether the supplied alert is one that warrants being processed for a notification.
