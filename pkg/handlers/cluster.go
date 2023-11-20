@@ -35,21 +35,9 @@ func (g *ClusterHandler) GetCluster(clusterID string) (*cmv1.Cluster, error) {
 	return resp.Body(), nil
 }
 
-// https://api.openshift.com/#/default/patch_api_clusters_mgmt_v1_clusters__cluster_id_
-func (g *ClusterHandler) UpdateCluster(clusterID string, cluster *cmv1.Cluster) (*cmv1.Cluster, error) {
-	log.Debugf("Sending update cluster object request to OCM API: %s %v", clusterID, *cluster)
-	request := g.ocm.ClustersMgmt().V1().Clusters().Cluster(clusterID).Update().Body(cluster)
-	resp, err := request.Send()
-	if err != nil {
-		return nil, err
-	}
-	return resp.Body(), nil
-}
-
 // Proxies to
 // https://api.openshift.com/#/default/get_api_clusters_mgmt_v1_clusters__cluster_id_
-// https://api.openshift.com/#/default/patch_api_clusters_mgmt_v1_clusters__cluster_id_
-func (g *ClusterHandler) ServeClusterGetUpdate(w http.ResponseWriter, r *http.Request) {
+func (g *ClusterHandler) ServeClusterGet(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
 		cluster, err := g.GetCluster(g.clusterId)
@@ -63,27 +51,6 @@ func (g *ClusterHandler) ServeClusterGetUpdate(w http.ResponseWriter, r *http.Re
 			errorMessageResponse(err, w)
 			return
 		}
-
-		w.Header().Set("Content-Type", "application/json")
-	case "PATCH":
-		updatedCluster, err := cmv1.UnmarshalCluster(r.Body)
-		if err != nil {
-			errorMessageResponse(err, w)
-			return
-		}
-
-		cluster, err := g.UpdateCluster(g.clusterId, updatedCluster)
-		if err != nil {
-			errorMessageResponse(err, w)
-			return
-		}
-
-		err = cmv1.MarshalCluster(cluster, w)
-		if err != nil {
-			errorMessageResponse(err, w)
-			return
-		}
-
 		w.Header().Set("Content-Type", "application/json")
 	default:
 		invalidRequestVerbResponse(r.Method, w)

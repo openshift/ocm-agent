@@ -265,6 +265,12 @@ func (o *serveOptions) Run() error {
 	r.Path(consts.LivezPath).Handler(livezHandler)
 	r.Path(consts.ReadyzPath).Handler(readyzHandler)
 
+	internalID, err := ocm.GetInternalIDByExternalID(o.externalClusterID, sdkclient)
+	if err != nil {
+		o.logger.WithError(err).Fatal("OCM Agent failed to fetch internal cluster ID")
+		os.Exit(1)
+	}
+
 	for _, service := range o.services {
 		switch service {
 		case config.ServiceLogService:
@@ -277,6 +283,11 @@ func (o *serveOptions) Run() error {
 				webhookReceiverHandler := handlers.NewWebhookReceiverHandler(client, ocmclient)
 				r.Path(consts.WebhookReceiverPath).Handler(webhookReceiverHandler)
 			}
+			r.Use(metrics.PrometheusMiddleware)
+		case config.ClusterService:
+			o.logger.Info("Initialising ClusterService handlers")
+			clusterHandler := handlers.NewClusterHandler(sdkclient, internalID)
+			r.HandleFunc("/cluster", clusterHandler.ServeClusterGet)
 			r.Use(metrics.PrometheusMiddleware)
 		}
 	}

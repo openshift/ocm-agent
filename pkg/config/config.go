@@ -19,4 +19,6 @@ const (
 	OCMClientSecret string = "ocm-client-secret" //#nosec G101 -- This is a false positive
 
 	ServiceLogService string = "service_logs"
+
+	ClusterService string = "cluster"
 )
