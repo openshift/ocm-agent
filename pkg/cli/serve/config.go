@@ -21,12 +21,11 @@ func ReadFlagsFromFile(cmd *cobra.Command, names ...string) error {
 				os.Exit(1)
 			}
 
-			if len(values) > 1 {
-				fmt.Fprintf(os.Stderr, "Must only specify one value when reading a string slice from file")
-				os.Exit(1)
-			}
-
 			if strings.HasPrefix(values[0], "@") {
+				if len(values) > 1 {
+					fmt.Fprintf(os.Stderr, "Must only specify one value when reading a string slice from file")
+					os.Exit(1)
+				}
 				// Remove @ from start of the first word in string slice
 				values[0] = values[0][1:]
 				data, err := os.ReadFile(values[0])

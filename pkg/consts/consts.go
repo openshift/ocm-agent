@@ -26,4 +26,13 @@ const (
 
 	// Service name for the sending service logs
 	ServiceLogServiceName = "SREManualAction"
+
+	// The URI parameter that represents the upgrade policy ID in OCM
+	UpgradePolicyIdParam = "upgrade_policy_id"
+
+	// The first page of a paginated 'list' request to OCM
+	OCMListRequestStartPage = 1
+
+	// The max amount of pages allowed for a single OCM request.
+	OCMListRequestMaxPerPage = 100
 )
