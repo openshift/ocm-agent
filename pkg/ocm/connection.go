@@ -39,7 +39,7 @@ func (b *ConnectionBuilder) Build(baseUrl string, clusterId string, accessToken 
 	// Create the connection:
 	result, err = builder.Build()
 	if err != nil {
-		return result, fmt.Errorf("Can't create connection: %v", err)
+		return result, fmt.Errorf("can't create connection: %v", err)
 	}
 
 	return result, nil
@@ -71,7 +71,7 @@ func GetInternalIDByExternalID(externalID string, ocm *sdk.Connection) (string, 
 	}
 	if response.Total() < 1 {
 		log.Errorf("Cluster with external id %s not found in OCM database.", externalID)
-		return "", fmt.Errorf("Cluster with external id %s not found in OCM database.", externalID)
+		return "", fmt.Errorf("cluster with external id %s not found in OCM database", externalID)
 	}
 	cluster := response.Items().Slice()[0]
 
