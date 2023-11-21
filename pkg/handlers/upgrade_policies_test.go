@@ -12,7 +12,6 @@ import (
 	"github.com/gorilla/mux"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/onsi/gomega/ghttp"
 	sdk "github.com/openshift-online/ocm-sdk-go"
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	. "github.com/openshift-online/ocm-sdk-go/testing"
@@ -69,9 +68,6 @@ var updateUpgradePolicyState = `{
 }`
 
 var upgradePoliciesHandler *handlers.UpgradePoliciesHandler
-var apiServer *ghttp.Server
-var responseRecorder *httptest.ResponseRecorder
-var internalId = "internal-id"
 var upgradePolicyId = "upgrade-policy-id"
 
 var _ = Describe("UpgradePolicies", func() {
@@ -303,19 +299,3 @@ var _ = Describe("UpgradePolicies", func() {
 		Expect(responseRecorder.Result().StatusCode).To(Equal(http.StatusBadRequest))
 	})
 })
-
-func makeOCMRequest(method string, status int, route string, ocmResponse string) {
-	handler := RespondWithJSON(status, ocmResponse)
-	if status == http.StatusNoContent {
-		handler = ghttp.RespondWith(
-			status,
-			nil,
-			http.Header{
-				"Content-Type": []string{
-					"application/json",
-				},
-			},
-		)
-	}
-	apiServer.RouteToHandler(method, route, handler)
-}
