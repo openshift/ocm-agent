@@ -24,9 +24,9 @@ func NewClusterHandler(o *sdk.Connection, clusterId string) *ClusterHandler {
 }
 
 // https://pkg.go.dev/github.com/openshift-online/ocm-sdk-go@v0.1.382/clustersmgmt/v1#Cluster
-func (g *ClusterHandler) GetCluster(clusterID string) (*cmv1.Cluster, error) {
-	log.Debugf("Sending get cluster object request to OCM API: %s", clusterID)
-	request := g.ocm.ClustersMgmt().V1().Clusters().Cluster(clusterID)
+func (g *ClusterHandler) GetCluster() (*cmv1.Cluster, error) {
+	log.Debugf("Sending get cluster object request to OCM API: %s", g.clusterId)
+	request := g.ocm.ClustersMgmt().V1().Clusters().Cluster(g.clusterId)
 	resp, err := request.Get().Send()
 	if err != nil {
 		return nil, err
@@ -39,7 +39,7 @@ func (g *ClusterHandler) GetCluster(clusterID string) (*cmv1.Cluster, error) {
 func (g *ClusterHandler) ServeClusterGet(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		cluster, err := g.GetCluster(g.clusterId)
+		cluster, err := g.GetCluster()
 		if err != nil {
 			errorMessageResponse(err, w)
 			return
