@@ -45,12 +45,12 @@ func (g *ClusterHandler) ServeClusterGet(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
+		w.Header().Set("Content-Type", "application/json")
 		err = cmv1.MarshalCluster(cluster, w)
 		if err != nil {
 			errorMessageResponse(err, w)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
 	default:
 		invalidRequestVerbResponse(r.Method, w)
 	}
