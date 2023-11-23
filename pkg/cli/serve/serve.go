@@ -293,7 +293,7 @@ func (o *serveOptions) Run() error {
 			r.HandleFunc("/upgrade_policies/{upgrade_policy_id}/state", upgradePolicyHandler.ServeUpgradePolicyState)
 			o.logger.Info("Initialising Cluster handlers")
 			clusterHandler := handlers.NewClusterHandler(sdkclient, internalID)
-			r.HandleFunc("/my_cluster", clusterHandler.ServeClusterGet)
+			r.HandleFunc("/", clusterHandler.ServeClusterGet)
 		}
 	}
 
