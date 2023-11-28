@@ -49,9 +49,19 @@ var _ = Describe("Webhook Handlers", func() {
 		testAlert                   template.Alert
 		testAlertResolved           template.Alert
 		testManagedNotificationList *ocmagentv1alpha1.ManagedNotificationList
+		activeServiceLog            *ServiceLog
+		resolvedServiceLog          *ServiceLog
 	)
 
 	BeforeEach(func() {
+		slRefs := ""
+		for k, ref := range testconst.TestNotification.References {
+			if k > 0 {
+				slRefs += "\",\""
+			}
+			slRefs += string(ref)
+		}
+
 		mockCtrl = gomock.NewController(GinkgoT())
 		mockClient = clientmocks.NewMockClient(mockCtrl)
 		mockStatusWriter = clientmocks.NewMockStatusWriter(mockCtrl)
@@ -63,6 +73,18 @@ var _ = Describe("Webhook Handlers", func() {
 		}
 		testAlert = testconst.NewTestAlert(false, false)
 		testAlertResolved = testconst.NewTestAlert(true, false)
+		activeServiceLog = NewTestServiceLog(
+			ServiceLogActivePrefix+": "+testconst.ServiceLogSummary,
+			testconst.ServiceLogActiveDesc+"\nReferences: [\""+slRefs+"\"]",
+			"",
+			testconst.TestNotification.Severity,
+			testconst.TestNotification.LogType)
+		resolvedServiceLog = NewTestServiceLog(
+			ServiceLogResolvePrefix+": "+testconst.ServiceLogSummary,
+			testconst.ServiceLogResolvedDesc,
+			"",
+			testconst.TestNotification.Severity,
+			testconst.TestNotification.LogType)
 	})
 	AfterEach(func() {
 		server.Close()
@@ -210,7 +232,7 @@ var _ = Describe("Webhook Handlers", func() {
 				testAlert = template.Alert{
 					Status: "firing",
 					Labels: map[string]string{
-						"managed_notification_template": "test-notification",
+						"managed_notification_template": testconst.TestNotificationName,
 						"send_managed_notification":     "true",
 						"alertname":                     "TestAlertName",
 					},
@@ -225,17 +247,6 @@ var _ = Describe("Webhook Handlers", func() {
 			})
 		})
 		Context("Check if servicelog can be sent for an alert or not", func() {
-			BeforeEach(func() {
-				testAlert = template.Alert{
-					Status: "firing",
-					Labels: map[string]string{
-						"managed_notification_template": "test-notification",
-						"send_managed_notification":     "true",
-						"alertname":                     "TestAlertName",
-						"alertstate":                    "firing",
-					},
-				}
-			})
 			It("Should not send service log for a firing alert if one is already sent within resend time", func() {
 				testManagedNotificationList = &ocmagentv1alpha1.ManagedNotificationList{
 					Items: []ocmagentv1alpha1.ManagedNotification{
@@ -248,7 +259,7 @@ var _ = Describe("Webhook Handlers", func() {
 							Status: ocmagentv1alpha1.ManagedNotificationStatus{
 								NotificationRecords: ocmagentv1alpha1.NotificationRecords{
 									ocmagentv1alpha1.NotificationRecord{
-										Name:                "test-notification",
+										Name:                testconst.TestNotificationName,
 										ServiceLogSentCount: 0,
 										Conditions: []ocmagentv1alpha1.NotificationCondition{
 											{
@@ -278,7 +289,7 @@ var _ = Describe("Webhook Handlers", func() {
 							Status: ocmagentv1alpha1.ManagedNotificationStatus{
 								NotificationRecords: ocmagentv1alpha1.NotificationRecords{
 									ocmagentv1alpha1.NotificationRecord{
-										Name:                "test-notification",
+										Name:                testconst.TestNotificationName,
 										ServiceLogSentCount: 0,
 										Conditions: []ocmagentv1alpha1.NotificationCondition{
 											{
@@ -304,22 +315,54 @@ var _ = Describe("Webhook Handlers", func() {
 					},
 				}
 				gomock.InOrder(
-					mockOCMClient.EXPECT().SendServiceLog(
-						testconst.TestNotification.Summary,
-						testconst.TestNotification.ActiveDesc,
-						testconst.TestNotification.ResolvedDesc,
-						gomock.Any(), // cluster id
-						testconst.TestNotification.Severity,
-						testconst.TestNotification.LogType,
-						testconst.TestNotification.References,
-						true, // firing
-					),
+					mockOCMClient.EXPECT().SendServiceLog(activeServiceLog).Return(nil),
 					mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testManagedNotificationList.Items[0]),
 					mockClient.EXPECT().Status().Return(mockStatusWriter),
 					mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
 				)
 				err := webhookReceiverHandler.processAlert(testAlert, testManagedNotificationList, true)
 				Expect(err).ShouldNot(HaveOccurred())
+			})
+			It("Should not send service log for a firing alert if some place holder cannot be resolved with an alert label or annotation", func() {
+				testAlert.Labels = nil
+				testManagedNotificationList = &ocmagentv1alpha1.ManagedNotificationList{
+					Items: []ocmagentv1alpha1.ManagedNotification{
+						{
+							Spec: ocmagentv1alpha1.ManagedNotificationSpec{
+								Notifications: []ocmagentv1alpha1.Notification{
+									testconst.TestNotification,
+								},
+							},
+							Status: ocmagentv1alpha1.ManagedNotificationStatus{
+								NotificationRecords: ocmagentv1alpha1.NotificationRecords{
+									ocmagentv1alpha1.NotificationRecord{
+										Name:                testconst.TestNotificationName,
+										ServiceLogSentCount: 0,
+										Conditions: []ocmagentv1alpha1.NotificationCondition{
+											{
+												Type:               ocmagentv1alpha1.ConditionAlertFiring,
+												Status:             corev1.ConditionTrue,
+												LastTransitionTime: &metav1.Time{Time: time.Now()},
+											},
+											{
+												Type:               ocmagentv1alpha1.ConditionAlertResolved,
+												Status:             corev1.ConditionFalse,
+												LastTransitionTime: &metav1.Time{Time: time.Now()},
+											},
+											{
+												Type:               ocmagentv1alpha1.ConditionServiceLogSent,
+												Status:             corev1.ConditionTrue,
+												LastTransitionTime: &metav1.Time{Time: time.Now().Add(time.Duration(-90) * time.Minute)},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}
+				err := webhookReceiverHandler.processAlert(testAlert, testManagedNotificationList, true)
+				Expect(err).Should(HaveOccurred())
 			})
 			It("Should not send servicelog if the alert was not in firing state and is resolved", func() {
 				testManagedNotificationList = &ocmagentv1alpha1.ManagedNotificationList{
@@ -333,7 +376,7 @@ var _ = Describe("Webhook Handlers", func() {
 							Status: ocmagentv1alpha1.ManagedNotificationStatus{
 								NotificationRecords: ocmagentv1alpha1.NotificationRecords{
 									ocmagentv1alpha1.NotificationRecord{
-										Name:                "test-notification",
+										Name:                testconst.TestNotificationName,
 										ServiceLogSentCount: 0,
 										Conditions: []ocmagentv1alpha1.NotificationCondition{
 											{
@@ -361,6 +404,52 @@ var _ = Describe("Webhook Handlers", func() {
 				err := webhookReceiverHandler.processAlert(testAlert, testManagedNotificationList, false)
 				Expect(err).ShouldNot(HaveOccurred())
 			})
+			It("Should send servicelog if the alert was in firing state and is resolved", func() {
+				testManagedNotificationList = &ocmagentv1alpha1.ManagedNotificationList{
+					Items: []ocmagentv1alpha1.ManagedNotification{
+						{
+							Spec: ocmagentv1alpha1.ManagedNotificationSpec{
+								Notifications: []ocmagentv1alpha1.Notification{
+									testconst.TestNotification,
+								},
+							},
+							Status: ocmagentv1alpha1.ManagedNotificationStatus{
+								NotificationRecords: ocmagentv1alpha1.NotificationRecords{
+									ocmagentv1alpha1.NotificationRecord{
+										Name:                testconst.TestNotificationName,
+										ServiceLogSentCount: 0,
+										Conditions: []ocmagentv1alpha1.NotificationCondition{
+											{
+												Type:               ocmagentv1alpha1.ConditionAlertFiring,
+												Status:             corev1.ConditionTrue,
+												LastTransitionTime: &metav1.Time{Time: time.Now()},
+											},
+											{
+												Type:               ocmagentv1alpha1.ConditionAlertResolved,
+												Status:             corev1.ConditionFalse,
+												LastTransitionTime: &metav1.Time{Time: time.Now()},
+											},
+											{
+												Type:               ocmagentv1alpha1.ConditionServiceLogSent,
+												Status:             corev1.ConditionTrue,
+												LastTransitionTime: &metav1.Time{Time: time.Now().Add(time.Duration(-90) * time.Minute)},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}
+				gomock.InOrder(
+					mockOCMClient.EXPECT().SendServiceLog(resolvedServiceLog).Return(nil),
+					mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testManagedNotificationList.Items[0]),
+					mockClient.EXPECT().Status().Return(mockStatusWriter),
+					mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
+				)
+				err := webhookReceiverHandler.processAlert(testAlertResolved, testManagedNotificationList, false)
+				Expect(err).ShouldNot(HaveOccurred())
+			})
 			It("Should not send resolved servicelog if the resolved body is empty", func() {
 				testManagedNotificationList = &ocmagentv1alpha1.ManagedNotificationList{
 					Items: []ocmagentv1alpha1.ManagedNotification{
@@ -373,7 +462,7 @@ var _ = Describe("Webhook Handlers", func() {
 							Status: ocmagentv1alpha1.ManagedNotificationStatus{
 								NotificationRecords: ocmagentv1alpha1.NotificationRecords{
 									ocmagentv1alpha1.NotificationRecord{
-										Name:                "test-notification",
+										Name:                testconst.TestNotificationName,
 										ServiceLogSentCount: 1,
 										Conditions: []ocmagentv1alpha1.NotificationCondition{
 											{
@@ -418,7 +507,7 @@ var _ = Describe("Webhook Handlers", func() {
 							Status: ocmagentv1alpha1.ManagedNotificationStatus{
 								NotificationRecords: ocmagentv1alpha1.NotificationRecords{
 									ocmagentv1alpha1.NotificationRecord{
-										Name:                "test-notification",
+										Name:                testconst.TestNotificationName,
 										ServiceLogSentCount: 0,
 										Conditions: []ocmagentv1alpha1.NotificationCondition{
 											{
@@ -444,11 +533,7 @@ var _ = Describe("Webhook Handlers", func() {
 					},
 				}
 				gomock.InOrder(
-					mockOCMClient.EXPECT().SendServiceLog(
-						testconst.TestNotification.Summary,
-						testconst.TestNotification.ActiveDesc,
-						testconst.TestNotification.ResolvedDesc,
-						gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), true).Return(k8serrs.NewInternalError(fmt.Errorf("a fake error"))),
+					mockOCMClient.EXPECT().SendServiceLog(activeServiceLog).Return(k8serrs.NewInternalError(fmt.Errorf("a fake error"))),
 				)
 				err := webhookReceiverHandler.processAlert(testAlert, testManagedNotificationList, true)
 				Expect(err).Should(HaveOccurred())
@@ -465,7 +550,7 @@ var _ = Describe("Webhook Handlers", func() {
 							Status: ocmagentv1alpha1.ManagedNotificationStatus{
 								NotificationRecords: ocmagentv1alpha1.NotificationRecords{
 									ocmagentv1alpha1.NotificationRecord{
-										Name:                "test-notification",
+										Name:                testconst.TestNotificationName,
 										ServiceLogSentCount: 0,
 										Conditions: []ocmagentv1alpha1.NotificationCondition{
 											{
@@ -491,11 +576,7 @@ var _ = Describe("Webhook Handlers", func() {
 					},
 				}
 				gomock.InOrder(
-					mockOCMClient.EXPECT().SendServiceLog(
-						testconst.TestNotification.Summary,
-						testconst.TestNotification.ActiveDesc,
-						testconst.TestNotification.ResolvedDesc,
-						gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), true).Return(nil),
+					mockOCMClient.EXPECT().SendServiceLog(activeServiceLog).Return(nil),
 					mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testManagedNotificationList.Items[0]),
 					mockClient.EXPECT().Status().Return(mockStatusWriter),
 					mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(k8serrs.NewInternalError(fmt.Errorf("a fake error"))),

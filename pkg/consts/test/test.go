@@ -26,9 +26,9 @@ var (
 	TestHostedClusterID  = "test-hosted-cluster-id"
 	TestNotification     = ocmagentv1alpha1.Notification{
 		Name:         TestNotificationName,
-		Summary:      "test-summary",
-		ActiveDesc:   "test-active-desc",
-		ResolvedDesc: "test-resolved-desc",
+		Summary:      "test-summary [namespace: '${namespace}']",
+		ActiveDesc:   "test-active-desc [description: '${description}', overriden-key: '${overriden-key}', recursive-key: '${recursive-key}']",
+		ResolvedDesc: "test-resolved-desc [description: '${description}', overriden-key: '${overriden-key}']",
 		Severity:     "test-severity",
 		ResendWait:   1,
 		LogType:      "test-type",
@@ -37,6 +37,10 @@ var (
 			"https://another.great.com/resource",
 		},
 	}
+	ServiceLogSummary               = "test-summary [namespace: 'openshift-monitoring']"
+	ServiceLogActiveDesc            = "test-active-desc [description: 'alert-desc', overriden-key: 'label-value', recursive-key: '_${recursive-key}_']"
+	ServiceLogResolvedDesc          = "test-resolved-desc [description: 'alert-desc', overriden-key: 'label-value']"
+	ServiceLogFleetDesc             = "test-notification [description: 'alert-desc', overriden-key: 'label-value']"
 	NotificationWithoutResolvedBody = ocmagentv1alpha1.Notification{
 		Name:       TestNotificationName,
 		Summary:    "test-summary",
@@ -95,8 +99,8 @@ var (
 func NewFleetNotification() ocmagentv1alpha1.FleetNotification {
 	return ocmagentv1alpha1.FleetNotification{
 		Name:                TestNotificationName,
-		Summary:             "test-summary",
-		NotificationMessage: "test-notification",
+		Summary:             "test-summary [namespace: '${namespace}']",
+		NotificationMessage: "test-notification [description: '${description}', overriden-key: '${overriden-key}']",
 		Severity:            "test-severity",
 		ResendWait:          1,
 	}
@@ -133,10 +137,17 @@ func NewTestAlert(resolved, fleet bool) template.Alert {
 			"managed_notification_template": TestNotificationName,
 			"send_managed_notification":     "true",
 			"alertname":                     "TestAlertName",
+			"alertstate":                    "firing",
 			"namespace":                     "openshift-monitoring",
 			"openshift_io_alert_source":     "platform",
 			"prometheus":                    "openshift-monitoring/k8s",
 			"severity":                      "info",
+			"overriden-key":                 "label-value",
+		},
+		Annotations: map[string]string{
+			"description":   "alert-desc",
+			"overriden-key": "annotation-value",
+			"recursive-key": "_${recursive-key}_",
 		},
 		StartsAt: time.Now(),
 		EndsAt:   time.Time{},

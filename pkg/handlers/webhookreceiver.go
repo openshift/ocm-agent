@@ -147,10 +147,13 @@ func (h *WebhookReceiverHandler) processAlert(alert template.Alert, mnl *oav1alp
 	}
 	// Send the servicelog for the alert
 	log.WithFields(log.Fields{LogFieldNotificationName: notification.Name}).Info("will send servicelog for notification")
-	err = h.ocm.SendServiceLog(notification.Summary, notification.ActiveDesc, notification.ResolvedDesc, viper.GetString(config.ExternalClusterID), notification.Severity, notification.LogType, notification.References, firing)
+	err = BuildAndSendServiceLog(
+		NewServiceLogBuilder(notification.Summary, notification.ActiveDesc, notification.ResolvedDesc, viper.GetString(config.ExternalClusterID), notification.Severity, notification.LogType, notification.References),
+		firing, &alert, h.ocm)
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{LogFieldNotificationName: notification.Name, LogFieldIsFiring: true}).Error("unable to send a notification")
 		metrics.SetResponseMetricFailure("service_logs")
+		metrics.CountFailedServiceLogs(notification.Name)
 		return err
 	}
 	// Reset the metric if we got correct Response from OCM
