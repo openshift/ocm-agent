@@ -29,6 +29,7 @@ objects:
           ocmBaseUrl: ${OCM_BASE_URL}
           services:
           - service_logs
+          - clusters_mgmt
         ocmAgentImage: ${REGISTRY_IMG}@${IMAGE_DIGEST}
         replicas: 1
         tokenSecret: ocm-access-token
