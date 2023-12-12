@@ -7,7 +7,7 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/onsi/ginkgo/v2 v2.9.5
 	github.com/onsi/gomega v1.27.7
-	github.com/openshift-online/ocm-sdk-go v0.1.331
+	github.com/openshift-online/ocm-sdk-go v0.1.386
 	github.com/openshift/ocm-agent-operator v0.0.0-20230918023348-0f78780ccb89
 	github.com/prometheus/alertmanager v0.25.0
 	github.com/prometheus/client_golang v1.15.1

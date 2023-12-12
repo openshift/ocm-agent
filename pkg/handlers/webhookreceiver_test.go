@@ -73,18 +73,20 @@ var _ = Describe("Webhook Handlers", func() {
 		}
 		testAlert = testconst.NewTestAlert(false, false)
 		testAlertResolved = testconst.NewTestAlert(true, false)
-		activeServiceLog = NewTestServiceLog(
+		activeServiceLog = testconst.NewTestServiceLog(
 			ServiceLogActivePrefix+": "+testconst.ServiceLogSummary,
-			testconst.ServiceLogActiveDesc+"\nReferences: [\""+slRefs+"\"]",
+			testconst.ServiceLogActiveDesc,
 			"",
 			testconst.TestNotification.Severity,
-			testconst.TestNotification.LogType)
-		resolvedServiceLog = NewTestServiceLog(
+			testconst.TestNotification.LogType,
+			testconst.TestNotification.References)
+		resolvedServiceLog = testconst.NewTestServiceLog(
 			ServiceLogResolvePrefix+": "+testconst.ServiceLogSummary,
 			testconst.ServiceLogResolvedDesc,
 			"",
 			testconst.TestNotification.Severity,
-			testconst.TestNotification.LogType)
+			testconst.TestNotification.LogType,
+			testconst.TestNotification.References)
 	})
 	AfterEach(func() {
 		server.Close()
