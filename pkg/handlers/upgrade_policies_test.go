@@ -111,6 +111,7 @@ var _ = Describe("UpgradePolicies", func() {
 		_ = json.Unmarshal([]byte(getUpgradePolicies), &ocmResp)
 		items := ocmResp["items"]
 
+		Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
 		Expect(reflect.DeepEqual(policies, items)).To(BeTrue())
 	})
 	It("should get an upgrade policy", func() {
@@ -141,6 +142,7 @@ var _ = Describe("UpgradePolicies", func() {
 		// nolint
 		_ = json.Unmarshal([]byte(getUpgradePolicies), &ocmResp)
 
+		Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
 		Expect(reflect.DeepEqual(policy, ocmResp)).To(BeTrue())
 	})
 	It("should get an upgrade policy state", func() {
@@ -169,8 +171,10 @@ var _ = Describe("UpgradePolicies", func() {
 		// nolint
 		_ = json.Unmarshal([]byte(getUpgradePolicies), &ocmResp)
 
+		Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
 		Expect(reflect.DeepEqual(policyState, ocmResp)).To(BeTrue())
 	})
+
 	It("should update an upgrade policy state", func() {
 		makeOCMRequest(
 			"PATCH",
@@ -205,6 +209,7 @@ var _ = Describe("UpgradePolicies", func() {
 		// nolint
 		_ = json.Unmarshal([]byte(getUpgradePolicies), &ocmResp)
 
+		Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
 		Expect(reflect.DeepEqual(policyState, ocmResp)).To(BeTrue())
 	})
 
@@ -239,6 +244,7 @@ var _ = Describe("UpgradePolicies", func() {
 
 		upgradePoliciesHandler.ServeUpgradePolicyList(responseRecorder, req)
 
+		Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
 		Expect(responseRecorder.Result().StatusCode).To(Equal(http.StatusBadRequest))
 
 		req = httptest.NewRequest("GET", fmt.Sprintf("/upgrade_policies/%s", upgradePolicyId), nil)
@@ -250,6 +256,7 @@ var _ = Describe("UpgradePolicies", func() {
 		)
 
 		upgradePoliciesHandler.ServeUpgradePolicyGet(responseRecorder, req)
+		Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
 		Expect(responseRecorder.Result().StatusCode).To(Equal(http.StatusBadRequest))
 
 		req = httptest.NewRequest("PATCH", fmt.Sprintf("/upgrade_policies/%s", upgradePolicyId), nil)
@@ -261,6 +268,7 @@ var _ = Describe("UpgradePolicies", func() {
 		)
 
 		upgradePoliciesHandler.ServeUpgradePolicyGet(responseRecorder, req)
+		Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
 		Expect(responseRecorder.Result().StatusCode).To(Equal(http.StatusBadRequest))
 
 		req = httptest.NewRequest("DELETE", fmt.Sprintf("/upgrade_policies/%s", upgradePolicyId), nil)
@@ -273,6 +281,7 @@ var _ = Describe("UpgradePolicies", func() {
 		)
 
 		upgradePoliciesHandler.ServeUpgradePolicyGet(responseRecorder, req)
+		Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
 		Expect(responseRecorder.Result().StatusCode).To(Equal(http.StatusBadRequest))
 
 		req = httptest.NewRequest("GET", fmt.Sprintf("/upgrade_policies/%s/state", upgradePolicyId), nil)
@@ -285,6 +294,7 @@ var _ = Describe("UpgradePolicies", func() {
 		)
 
 		upgradePoliciesHandler.ServeUpgradePolicyState(responseRecorder, req)
+		Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
 		Expect(responseRecorder.Result().StatusCode).To(Equal(http.StatusBadRequest))
 
 		req = httptest.NewRequest("PATCH", fmt.Sprintf("/upgrade_policies/%s/state", upgradePolicyId), nil)
@@ -296,6 +306,7 @@ var _ = Describe("UpgradePolicies", func() {
 		)
 
 		upgradePoliciesHandler.ServeUpgradePolicyState(responseRecorder, req)
+		Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
 		Expect(responseRecorder.Result().StatusCode).To(Equal(http.StatusBadRequest))
 	})
 })
