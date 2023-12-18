@@ -246,6 +246,7 @@ var _ = Describe("ClusterHandler", func() {
 		// nolint
 		_ = json.Unmarshal([]byte(getCluster), &ocmResp)
 
+		Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
 		Expect(reflect.DeepEqual(cluster, ocmResp)).To(BeTrue())
 	})
 
@@ -262,7 +263,7 @@ var _ = Describe("ClusterHandler", func() {
 
 		clusterHandler.ServeClusterGet(responseRecorder, req)
 
+		Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
 		Expect(responseRecorder.Result().StatusCode).To(Equal(http.StatusBadRequest))
 	})
-
 })

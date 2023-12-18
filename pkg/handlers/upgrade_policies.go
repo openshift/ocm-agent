@@ -30,8 +30,9 @@ func NewUpgradePoliciesHandler(o *sdk.Connection, clusterId string) *UpgradePoli
 // GetUpgradePolicies gets all of the upgrade policies belonging to a cluster from OCM.
 // It does not paginate, and sends the whole list as a single list.
 // Proxies to https://api.openshift.com/#/default/get_api_clusters_mgmt_v1_clusters__cluster_id__upgrade_policies
-func (g *UpgradePoliciesHandler) GetUpgradePolicies() ([]*cmv1.UpgradePolicy, error) {
+func (g *UpgradePoliciesHandler) GetUpgradePolicies() ([]*cmv1.UpgradePolicy, string, error) {
 	var upgradePolicies []*cmv1.UpgradePolicy
+	var operationIdHeader string
 
 	log.Debugf("Sending get all upgrade polices request to OCM API: %s", g.clusterID)
 	collection := g.ocm.ClustersMgmt().V1().Clusters().Cluster(g.clusterID).UpgradePolicies()
@@ -40,60 +41,64 @@ func (g *UpgradePoliciesHandler) GetUpgradePolicies() ([]*cmv1.UpgradePolicy, er
 
 	for {
 		resp, err := collection.List().Send()
+
 		if err != nil {
-			return nil, err
+			return nil, resp.Header().Get(OCM_OPERATION_ID_HEADER), err
 		}
 		upgradePolicies = append(upgradePolicies, resp.Items().Slice()...)
+		operationIdHeader = resp.Header().Get(OCM_OPERATION_ID_HEADER)
 		if resp.Size() < size {
 			break
 		}
 		page++
 	}
 
-	return upgradePolicies, nil
+	return upgradePolicies, operationIdHeader, nil
 }
 
 // GetUpgradePolicy gets a single upgrade policy from a cluster.
 // Proxies to https://api.openshift.com/#/default/get_api_clusters_mgmt_v1_clusters__cluster_id__upgrade_policies__upgrade_policy_id_
-func (g *UpgradePoliciesHandler) GetUpgradePolicy() (*cmv1.UpgradePolicy, error) {
+func (g *UpgradePoliciesHandler) GetUpgradePolicy() (*cmv1.UpgradePolicy, string, error) {
 	log.Debugf("Sending get upgrade policy request to OCM API: %s %s", g.clusterID, g.upgradePolicyID)
 	request := g.ocm.ClustersMgmt().V1().Clusters().Cluster(g.clusterID).UpgradePolicies().UpgradePolicy(g.upgradePolicyID)
 	resp, err := request.Get().Send()
 	if err != nil {
-		return nil, err
+		return nil, resp.Header().Get(OCM_OPERATION_ID_HEADER), err
 	}
-	return resp.Body(), nil
+	return resp.Body(), resp.Header().Get(OCM_OPERATION_ID_HEADER), nil
 }
 
 // GetUpgradePolicy gets a single upgrade policy's state from a cluster.
 // Proxies to https://api.openshift.com#/default/get_api_clusters_mgmt_v1_clusters__cluster_id__upgrade_policies__upgrade_policy_id__state
-func (g *UpgradePoliciesHandler) GetUpgradePolicyState() (*cmv1.UpgradePolicyState, error) {
+func (g *UpgradePoliciesHandler) GetUpgradePolicyState() (*cmv1.UpgradePolicyState, string, error) {
 	log.Debugf("Sending get upgrade policy state request to OCM API: %s", g.clusterID)
 	request := g.ocm.ClustersMgmt().V1().Clusters().Cluster(g.clusterID).UpgradePolicies().UpgradePolicy(g.upgradePolicyID).State()
 	resp, err := request.Get().Send()
 	if err != nil {
-		return nil, err
+		return nil, resp.Header().Get(OCM_OPERATION_ID_HEADER), err
 	}
-	return resp.Body(), nil
+	return resp.Body(), resp.Header().Get(OCM_OPERATION_ID_HEADER), nil
 }
 
 // UpdateUpgradePolicyState updates a single upgrade policy's state for a given cluster.
 // Proxies to https://api.openshift.com/#/default/patch_api_clusters_mgmt_v1_clusters__cluster_id__upgrade_policies__upgrade_policy_id__state
-func (g *UpgradePoliciesHandler) UpdateUpgradePolicyState(policyState *cmv1.UpgradePolicyState) (*cmv1.UpgradePolicyState, error) {
+func (g *UpgradePoliciesHandler) UpdateUpgradePolicyState(policyState *cmv1.UpgradePolicyState) (*cmv1.UpgradePolicyState, string, error) {
 	log.Debugf("Sending update upgrade policy state request to OCM API: %s %s", g.clusterID, g.upgradePolicyID)
 	request := g.ocm.ClustersMgmt().V1().Clusters().Cluster(g.clusterID).UpgradePolicies().UpgradePolicy(g.upgradePolicyID).State().Update().Body(policyState)
 	resp, err := request.Send()
 	if err != nil {
-		return nil, err
+		return nil, resp.Header().Get(OCM_OPERATION_ID_HEADER), err
 	}
-	return resp.Body(), nil
+	return resp.Body(), resp.Header().Get(OCM_OPERATION_ID_HEADER), nil
 }
 
 // ServeUpgradePolicyList reads and writes raw HTTP requests and proxies them to the 'list' endpoints for upgrade policies
 func (g *UpgradePoliciesHandler) ServeUpgradePolicyList(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		policies, err := g.GetUpgradePolicies()
+		policies, operationIdHeader, err := g.GetUpgradePolicies()
+		w.Header().Set(OCM_OPERATION_ID_HEADER, operationIdHeader)
+
 		if err != nil {
 			errorMessageResponse(err, w)
 			return
@@ -117,7 +122,9 @@ func (g *UpgradePoliciesHandler) ServeUpgradePolicyGet(w http.ResponseWriter, r 
 
 	switch r.Method {
 	case "GET":
-		policy, err := g.GetUpgradePolicy()
+		policy, operationIdHeader, err := g.GetUpgradePolicy()
+		w.Header().Set(OCM_OPERATION_ID_HEADER, operationIdHeader)
+
 		if err != nil {
 			errorMessageResponse(err, w)
 			return
@@ -141,7 +148,9 @@ func (g *UpgradePoliciesHandler) ServeUpgradePolicyState(w http.ResponseWriter, 
 
 	switch r.Method {
 	case "GET":
-		policyState, err := g.GetUpgradePolicyState()
+		policyState, operationIdHeader, err := g.GetUpgradePolicyState()
+
+		w.Header().Set(OCM_OPERATION_ID_HEADER, operationIdHeader)
 		if err != nil {
 			errorMessageResponse(err, w)
 			return
@@ -161,7 +170,8 @@ func (g *UpgradePoliciesHandler) ServeUpgradePolicyState(w http.ResponseWriter, 
 			return
 		}
 
-		policy, err := g.UpdateUpgradePolicyState(updatedPolicyState)
+		policy, operationIdHeader, err := g.UpdateUpgradePolicyState(updatedPolicyState)
+		w.Header().Set(OCM_OPERATION_ID_HEADER, operationIdHeader)
 		if err != nil {
 			errorMessageResponse(err, w)
 			return
