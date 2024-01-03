@@ -212,11 +212,20 @@ func (o *serveOptions) Run() error {
 			viper.GetString(config.AccessToken))
 		if err != nil {
 			o.logger.WithError(err).Fatal("Can't initialise OCM sdk.Connection client in non-fleet mode")
-			metrics.SetPullSecretInvalidMetricFailure()
 			return err
 		}
 		o.logger.Info("Connection with OCM initialised successfully in non-fleet mode")
-		metrics.ResetMetric(metrics.MetricPullSecretInvalid)
+		// Continuously check OCM connection
+		go func() {
+			for {
+				response, _ := sdkclient.AccountsMgmt().V1().CurrentAccount().Get().Send()
+				if response.Status() == http.StatusUnauthorized {
+					metrics.SetPullSecretInvalidMetricFailure()
+				} else {
+					metrics.ResetMetric(metrics.MetricPullSecretInvalid)
+				}
+			}
+		}()
 	} else {
 		// If fleet mode is enabled, the connection to OCM needs to initiate using client ID and client secret
 		// On the managed cluster, the client ID and secret will be fetched from the secret volume however for
