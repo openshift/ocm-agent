@@ -159,6 +159,24 @@ var _ = Describe("Webhook Handlers", func() {
 		})
 
 	})
+
+	Context("Pull Secret Invalid metric", func() {
+		var (
+			metricHelpHeader = `
+# HELP ocm_agent_pull_secret_invalid Pull Secret auth token is not valid
+# TYPE ocm_agent_pull_secret_invalid gauge
+`
+			metricValueHeader = "ocm_agent_pull_secret_invalid{} "
+		)
+		When("the metric is set", func() {
+			It("does so correctly", func() {
+				SetPullSecretInvalidMetricFailure()
+				expectedMetric := fmt.Sprintf("%s%s%d\n", metricHelpHeader, metricValueHeader, 1)
+				err := testutil.CollectAndCompare(MetricPullSecretInvalid, strings.NewReader(expectedMetric))
+				Expect(err).To(BeNil())
+			})
+		})
+	})
 })
 
 func resetMetrics() {
@@ -169,4 +187,5 @@ func resetMetrics() {
 	metricRequestsTotal.Reset()
 	metricFailedRequestsTotal.Reset()
 	metricRequestsByService.Reset()
+	MetricPullSecretInvalid.Reset()
 }
