@@ -224,6 +224,7 @@ func (o *serveOptions) Run() error {
 				} else {
 					metrics.ResetMetric(metrics.MetricPullSecretInvalid)
 				}
+				time.Sleep(5 * time.Minute)
 			}
 		}()
 	} else {
