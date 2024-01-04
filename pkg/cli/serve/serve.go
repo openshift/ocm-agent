@@ -218,13 +218,17 @@ func (o *serveOptions) Run() error {
 		// Continuously check OCM connection
 		go func() {
 			for {
+				o.logger.Info("OCM connection check starting")
 				response, _ := sdkclient.AccountsMgmt().V1().CurrentAccount().Get().Send()
 				if response.Status() == http.StatusUnauthorized {
+					o.logger.Info("OCM connection check failure")
 					metrics.SetPullSecretInvalidMetricFailure()
+					time.Sleep(1 * time.Minute)
 				} else {
+					o.logger.Info("OCM connection check success")
 					metrics.ResetMetric(metrics.MetricPullSecretInvalid)
+					time.Sleep(5 * time.Minute)
 				}
-				time.Sleep(5 * time.Minute)
 			}
 		}()
 	} else {
