@@ -172,7 +172,7 @@ var _ = Describe("Webhook Handlers", func() {
 			It("does so correctly", func() {
 				SetPullSecretInvalidMetricFailure()
 				expectedMetric := fmt.Sprintf("%s%s%d\n", metricHelpHeader, metricValueHeader, 1)
-				err := testutil.CollectAndCompare(MetricPullSecretInvalid, strings.NewReader(expectedMetric))
+				err := testutil.CollectAndCompare(metricPullSecretInvalid, strings.NewReader(expectedMetric))
 				Expect(err).To(BeNil())
 			})
 		})
@@ -187,5 +187,5 @@ func resetMetrics() {
 	metricRequestsTotal.Reset()
 	metricFailedRequestsTotal.Reset()
 	metricRequestsByService.Reset()
-	MetricPullSecretInvalid.Reset()
+	metricPullSecretInvalid.Reset()
 }
