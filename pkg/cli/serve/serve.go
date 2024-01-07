@@ -226,7 +226,7 @@ func (o *serveOptions) Run() error {
 					time.Sleep(1 * time.Minute)
 				} else {
 					o.logger.Info("OCM connection check success")
-					metrics.ResetMetric(metrics.MetricPullSecretInvalid)
+					metrics.SetPullSecretInvalidMetricSuccess()
 					time.Sleep(5 * time.Minute)
 				}
 			}
