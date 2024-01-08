@@ -1,0 +1,12 @@
+version: 2
+updates:
+  - package-ecosystem: "docker"
+    directory: "/build"
+    labels:
+      - "area/dependency"
+      - "ok-to-test"
+    schedule:
+      interval: "weekly"
+    ignore:
+      - dependency-name: "openshift/release"
+        # don't automatically upgrade golang version here
