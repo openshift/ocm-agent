@@ -46,7 +46,7 @@ The easiest and the cleanest way to update the go.mod dependencies is to do the 
 
 ### Updating the base image version
 
-In order to align to latest base image, can refer to [ubi8/ubi-micro:latest](https://catalog.redhat.com/software/containers/ubi8/ubi-micro/5ff3f50a831939b08d1b832a?tag=latest) image from the software catalog and update the [Dockerfile](https://github.com/openshift/ocm-agent/blob/master/build/Dockerfile) file in [openshift/ocm-agent](https://github.com/openshift/ocm-agent) repository.
+The base image [ubi8/ubi-micro:latest](https://catalog.redhat.com/software/containers/ubi8/ubi-micro/5ff3f50a831939b08d1b832a?tag=latest) will be automatically checked and maintained by the dependabot.The dependabot configuration file is located in [openshift/ocm-agent/.github](https://github.com/openshift/ocm-agent/tree/master/.github) folder. The dependabot will check the base image version weekly and create the PR to update the [Dockerfile](https://github.com/openshift/ocm-agent/blob/master/build/Dockerfile) file if there is a base image version update.
 
 ### Rebuilding the controller-runtime mocks for tests
 
