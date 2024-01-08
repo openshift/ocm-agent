@@ -9,4 +9,4 @@ updates:
       interval: "weekly"
     ignore:
       - dependency-name: "openshift/release"
-        # don't automatically upgrade golang in openshift/release as it's a fundamental change
+        # don't automatically upgrade golang version here
