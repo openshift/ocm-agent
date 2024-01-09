@@ -215,6 +215,22 @@ func (o *serveOptions) Run() error {
 			return err
 		}
 		o.logger.Info("Connection with OCM initialised successfully in non-fleet mode")
+		// Continuously check OCM connection
+		go func() {
+			for {
+				o.logger.Info("OCM connection check starting")
+				response, _ := sdkclient.AccountsMgmt().V1().CurrentAccount().Get().Send()
+				if response.Status() == http.StatusUnauthorized {
+					o.logger.Info("OCM connection check failure")
+					metrics.SetPullSecretInvalidMetricFailure()
+					time.Sleep(1 * time.Minute)
+				} else {
+					o.logger.Info("OCM connection check success")
+					metrics.SetPullSecretInvalidMetricSuccess()
+					time.Sleep(5 * time.Minute)
+				}
+			}
+		}()
 	} else {
 		// If fleet mode is enabled, the connection to OCM needs to initiate using client ID and client secret
 		// On the managed cluster, the client ID and secret will be fetched from the secret volume however for

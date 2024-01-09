@@ -57,6 +57,12 @@ var (
 			Help: "A total number of service log being sent based on managedNotification template",
 		}, []string{"ocm_service", "template"})
 
+	metricPullSecretInvalid = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "ocm_agent_pull_secret_invalid",
+			Help: "Pull Secret auth token is not valid",
+		}, []string{})
+
 	metricsList = []prometheus.Collector{
 		metricRequestsTotal,
 		metricFailedRequestsTotal,
@@ -66,6 +72,7 @@ var (
 		metricServiceLogSent,
 		metricFailedServiceLogsTotal,
 		metricServiceLogSentTotal,
+		metricPullSecretInvalid,
 	}
 )
 
@@ -159,6 +166,16 @@ func SetTotalServiceLogCount(template string, count int32) {
 		"ocm_service": "service_logs",
 		"template":    template,
 	}).Set(float64(count))
+}
+
+// SetPullSecretInvalidMetricSuccess sets the metric when ocm connection is successful
+func SetPullSecretInvalidMetricSuccess() {
+	metricPullSecretInvalid.WithLabelValues().Set(float64(0))
+}
+
+// SetPullSecretInvalidMetricFailure sets the metric when ocm connection can not be initiated
+func SetPullSecretInvalidMetricFailure() {
+	metricPullSecretInvalid.WithLabelValues().Set(float64(1))
 }
 
 // ResetMetric reset the metric with Gauge values
