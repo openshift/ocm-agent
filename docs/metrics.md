@@ -25,6 +25,10 @@ OCM Agent are managed by [OCM Agent operator](https://github.com/openshift/ocm-a
 |ocm_agent_failed_service_logs_total|Counter|A count of service logs which failed to be sent. This includes service logs which failed to be formatted.|
 |ocm_agent_service_log_sent_total|Gauge|A total number of service log being sent based on managedNotification template|
 |ocm_agent_pull_secret_invalid|Gauge|Pull Secret auth token is not valid|
+|ocm_agent_limited_support_sent_total|Counter| Total number of limited support being sent based on fleetNotification template|
+|ocm_agent_limited_support_removed_total|Counter|Total number of limited support removed based on fleetNotification template|
+|ocm_agent_limited_support_send_failure_total|Counter|Total number of failures for limited support posts based on fleetNotification template|
+|ocm_agent_limited_support_removal_failure_total|Counter|Total number of failures for limited support removals based on fleetNotification template|
 
 ## Metrics reset
 

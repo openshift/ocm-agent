@@ -57,6 +57,30 @@ var (
 			Help: "A total number of service log being sent based on managedNotification template",
 		}, []string{"ocm_service", "template"})
 
+	metricLimitedSupportSentTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "ocm_agent_limited_support_sent_total",
+			Help: "A total number of limited support being sent based on fleetNotification template",
+		}, []string{"ocm_service", "template"})
+
+	metricLimitedSupportRemovedTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "ocm_agent_limited_support_removed_total",
+			Help: "A total number of limited support removed based on fleetNotification template",
+		}, []string{"ocm_service", "template"})
+
+	metricFailedLimitedSupportSendsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "ocm_agent_limited_support_send_failure_total",
+			Help: "A total number of failures for limited support posts based on fleetNotification template",
+		}, []string{"ocm_service", "template"})
+
+	metricFailedLimitedSupportRemovalsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "ocm_agent_limited_support_removal_failure_total",
+			Help: "A total number of failures for limited support removals based on fleetNotification template",
+		}, []string{"ocm_service", "template"})
+
 	metricPullSecretInvalid = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "ocm_agent_pull_secret_invalid",
@@ -73,6 +97,10 @@ var (
 		metricFailedServiceLogsTotal,
 		metricServiceLogSentTotal,
 		metricPullSecretInvalid,
+		metricLimitedSupportSentTotal,
+		metricLimitedSupportRemovedTotal,
+		metricFailedLimitedSupportSendsTotal,
+		metricFailedLimitedSupportRemovalsTotal,
 	}
 )
 
@@ -166,6 +194,38 @@ func SetTotalServiceLogCount(template string, count int32) {
 		"ocm_service": "service_logs",
 		"template":    template,
 	}).Set(float64(count))
+}
+
+// IncrementLimitedSupportSentCount increments the total sent limited support number
+func IncrementLimitedSupportSentCount(template string) {
+	metricLimitedSupportSentTotal.With(prometheus.Labels{
+		"ocm_service": "clusters_mgmt",
+		"template":    template,
+	}).Inc()
+}
+
+// IncrementLimitedSupportRemovedCount increments the total removed limited support reasons number
+func IncrementLimitedSupportRemovedCount(template string) {
+	metricLimitedSupportRemovedTotal.With(prometheus.Labels{
+		"ocm_service": "clusters_mgmt",
+		"template":    template,
+	}).Inc()
+}
+
+// IncrementFailedLimitedSupportSend increments the total number of failed limited support posts
+func IncrementFailedLimitedSupportSend(template string) {
+	metricFailedLimitedSupportSendsTotal.With(prometheus.Labels{
+		"ocm_service": "clusters_mgmt",
+		"template":    template,
+	}).Inc()
+}
+
+// IncrementFailedLimitedSupportSet increments the total number of failed limited support removals
+func IncrementFailedLimitedSupportRemoved(template string) {
+	metricFailedLimitedSupportRemovalsTotal.With(prometheus.Labels{
+		"ocm_service": "clusters_mgmt",
+		"template":    template,
+	}).Inc()
 }
 
 // SetPullSecretInvalidMetricSuccess sets the metric when ocm connection is successful

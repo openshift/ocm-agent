@@ -136,7 +136,7 @@ func NewManagedFleetNotificationRecord() ocmagentv1alpha1.ManagedFleetNotificati
 	}
 }
 
-func NewTestAlert(resolved, fleet bool) template.Alert {
+func NewTestAlert(resolved bool, fleet bool, limited_support bool) template.Alert {
 	alert := template.Alert{
 		Labels: map[string]string{
 			"managed_notification_template": TestNotificationName,
@@ -165,6 +165,9 @@ func NewTestAlert(resolved, fleet bool) template.Alert {
 		alert.Labels["source"] = "HCP"
 		alert.Labels["_mc_id"] = TestManagedClusterID
 		alert.Labels["_id"] = TestHostedClusterID
+	}
+	if limited_support {
+		alert.Labels["limited_support"] = "true"
 	}
 	return alert
 }

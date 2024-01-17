@@ -8,6 +8,8 @@
     - [Bootstrapping the tests](#bootstrapping-the-tests)
     - [How to run the tests](#how-to-run-the-tests)
   - [Functional Tests](#functional-tests)
+    - [Classic](#classic)
+    - [Fleet mode](#fleet-mode)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -64,7 +66,9 @@ ginkgo -v pkg/...
 
 ## Functional Tests
 
-For functional testing, can refer to [README.md](../test/README.md) file. In short, following commands need to be run on the staging cluster:
+For functional testing, can refer to [README.md](../test/README.md) file. In short, following commands need to be run on the staging cluster
+
+### Classic
 
 ```bash
 export CLUSTERNAME="my-staging-cluster"
@@ -80,3 +84,20 @@ cd test
 ```
 
 The above will validate if the basic functionality of `ocm-agent` to startup, authenticate with OCM and send servicelog is successful or not.
+
+### Fleet mode
+
+
+```
+# NOTE: this will be the cluster ocm-agent is deployed to as well as the target cluster for managedfleetnotifications
+export CLUSTERNAME="my-staging-cluster" 
+
+# Change directory to the test directory
+cd test
+
+# Build and run the ocm-agent binary locally in one terminal session
+./build-and-run.sh ${CLUSTERNAME}
+
+./test-fleet-mode-alerts.sh ${CLUSTERNAME}
+```
+

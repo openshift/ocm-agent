@@ -13,14 +13,15 @@ import (
 )
 
 const (
-	AMLabelAlertName           = "alertname"
-	AMLabelTemplateName        = "managed_notification_template"
-	AMLabelManagedNotification = "send_managed_notification"
-	AMLabelAlertSourceName     = "source"
-	AMLabelAlertSourceHCP      = "HCP"
-	AMLabelAlertSourceDP       = "DP"
-	AMLabelAlertMCID           = "_mc_id"
-	AMLabelAlertHCID           = "_id"
+	AMLabelAlertName                  = "alertname"
+	AMLabelTemplateName               = "managed_notification_template"
+	AMLabelManagedNotification        = "send_managed_notification"
+	AMLabelAlertSourceName            = "source"
+	AMLabelAlertSourceHCP             = "HCP"
+	AMLabelAlertSourceDP              = "DP"
+	AMLabelAlertMCID                  = "_mc_id"
+	AMLabelAlertHCID                  = "_id"
+	AMLabelLimitedSupportNotification = "limited_support"
 
 	LogFieldNotificationName           = "notification"
 	LogFieldResendInterval             = "resend_interval"
