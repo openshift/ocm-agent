@@ -23,7 +23,7 @@ fi
 
 export CLUSTER=$1
 export OCM_CLUSTERID=$(ocm list clusters --managed | grep -w ${CLUSTER} | awk '{ print $1 }')
-export EXT_CLUSTERID=$(ocm describe cluster $CLUSTER --json | jq -r '.external_id')
+export EXT_CLUSTERID=$(ocm describe cluster $OCM_CLUSTERID --json | jq -r '.external_id')
 TEMPKUBECONFIG=/tmp/${CLUSTER}-kubeconfig-temp
 export GIT_ROOT=$(git rev-parse --show-toplevel)
 TEST_DIR=${GIT_ROOT}/test

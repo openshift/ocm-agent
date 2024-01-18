@@ -22,14 +22,14 @@ function ctrl_c() {
 }
 
 if [[ -z $1 ]]; then
-    echo "Please provide the staging cluster internal id to be used for OCM Agent testing.."
-    echo "Usage: $0 CLUSTER_INTERNAL_ID [--fleet-mode]"
+    echo "Please provide the staging cluster name to be used for OCM Agent testing.."
+    echo "Usage: $0 CLUSTER_NAME [--fleet-mode]"
     exit 1
 fi
 
-export CLUSTER=$1
+export CLUSTER_NAME=$1
 export GIT_ROOT=$(git rev-parse --show-toplevel)
-TEMPKUBECONFIG=/tmp/${CLUSTER}-kubeconfig-temp
+TEMPKUBECONFIG=/tmp/${CLUSTER_NAME}-kubeconfig-temp
 
 # Check for the --fleet-mode parameter
 if [[ $2 == "--fleet-mode" ]]; then
@@ -50,8 +50,10 @@ fi
 
 echo
 echo "--- Fetching Cluster ID and creating temporary KUBECONFIG..."
-export EXT_CLUSTERID=$(ocm describe cluster $CLUSTER --json | jq -r '.external_id')
-ocm get /api/clusters_mgmt/v1/clusters/$CLUSTER/credentials | jq -r .kubeconfig > $TEMPKUBECONFIG
+export OCM_CLUSTERID=$(ocm list clusters --managed | grep -w ${CLUSTER_NAME} | awk '{ print $1 }')
+export EXT_CLUSTERID=$(ocm describe cluster $OCM_CLUSTERID --json | jq -r '.external_id')
+ocm get /api/clusters_mgmt/v1/clusters/$OCM_CLUSTERID/credentials | jq -r .kubeconfig > $TEMPKUBECONFIG
+echo $TEMPKUBECONFIG
 export KUBECONFIG=${TEMPKUBECONFIG}
 export OCM_AGENT_CONFIGMAP="ocm-agent-cm"
 

@@ -19,7 +19,7 @@ function check-servicelog-count() {
         ID=${1}
         PRE_COUNT=${2}
 	EXPECT_NEW_SL=${3}
-	EXPECTED_COUNT=$((${PRE_COUNT} + ${EXPECT_NEW_SL}))
+	EXPECTED_COUNT=$((${PRE_COUNT}+${EXPECT_NEW_SL}))
 	get-servicelog-count ${ID}
         ACTUAL_COUNT=$?
 

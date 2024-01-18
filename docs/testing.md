@@ -96,7 +96,7 @@ export CLUSTERNAME="my-staging-cluster"
 cd test
 
 # Build and run the ocm-agent binary locally in one terminal session
-./build-and-run.sh ${CLUSTERNAME}
+./build-and-run.sh ${CLUSTERNAME} --fleet-mode
 
 ./test-fleet-mode-alerts.sh ${CLUSTERNAME}
 ```
