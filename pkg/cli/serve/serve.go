@@ -281,35 +281,43 @@ func (o *serveOptions) Run() error {
 	r.Path(consts.LivezPath).Handler(livezHandler)
 	r.Path(consts.ReadyzPath).Handler(readyzHandler)
 
-	internalID, err := ocm.GetInternalIDByExternalID(o.externalClusterID, sdkclient)
-	if err != nil {
-		o.logger.WithError(err).Fatal("OCM Agent failed to fetch internal cluster ID")
-		os.Exit(1)
-	}
-
-	for _, service := range o.services {
-		switch service {
-		case config.ServiceLogService:
-			if o.fleetMode {
+	if o.fleetMode {
+		for _, service := range o.services {
+			switch service {
+			case config.ServiceLogService:
 				o.logger.Info("Initialising alertmanager webhook handler in fleet mode")
 				webhookReceiverHandler := handlers.NewWebhookRHOBSReceiverHandler(client, ocmclient)
 				r.Path(consts.WebhookReceiverPath).Handler(webhookReceiverHandler)
-			} else {
+				r.Use(metrics.PrometheusMiddleware)
+			case config.ClustersService:
+				// No implementation yet
+			}
+		}
+	} else {
+		internalID, err := ocm.GetInternalIDByExternalID(o.externalClusterID, sdkclient)
+		if err != nil {
+			o.logger.WithError(err).Fatal("OCM Agent failed to fetch internal cluster ID")
+			os.Exit(1)
+		}
+
+		for _, service := range o.services {
+			switch service {
+			case config.ServiceLogService:
 				o.logger.Info("Initialising alertmanager webhook handler in NON-fleet mode")
 				webhookReceiverHandler := handlers.NewWebhookReceiverHandler(client, ocmclient)
 				r.Path(consts.WebhookReceiverPath).Handler(webhookReceiverHandler)
+				r.Use(metrics.PrometheusMiddleware)
+			case config.ClustersService:
+				o.logger.Info("Initialising UpgradePolicy handlers")
+				upgradePolicyHandler := handlers.NewUpgradePoliciesHandler(sdkclient, internalID)
+				// See https://github.com/gorilla/mux#examples
+				r.HandleFunc("/upgrade_policies", upgradePolicyHandler.ServeUpgradePolicyList)
+				r.HandleFunc("/upgrade_policies/{upgrade_policy_id}", upgradePolicyHandler.ServeUpgradePolicyGet)
+				r.HandleFunc("/upgrade_policies/{upgrade_policy_id}/state", upgradePolicyHandler.ServeUpgradePolicyState)
+				o.logger.Info("Initialising Cluster handlers")
+				clusterHandler := handlers.NewClusterHandler(sdkclient, internalID)
+				r.HandleFunc("/", clusterHandler.ServeClusterGet)
 			}
-			r.Use(metrics.PrometheusMiddleware)
-		case config.ClustersService:
-			o.logger.Info("Initialising UpgradePolicy handlers")
-			upgradePolicyHandler := handlers.NewUpgradePoliciesHandler(sdkclient, internalID)
-			// See https://github.com/gorilla/mux#examples
-			r.HandleFunc("/upgrade_policies", upgradePolicyHandler.ServeUpgradePolicyList)
-			r.HandleFunc("/upgrade_policies/{upgrade_policy_id}", upgradePolicyHandler.ServeUpgradePolicyGet)
-			r.HandleFunc("/upgrade_policies/{upgrade_policy_id}/state", upgradePolicyHandler.ServeUpgradePolicyState)
-			o.logger.Info("Initialising Cluster handlers")
-			clusterHandler := handlers.NewClusterHandler(sdkclient, internalID)
-			r.HandleFunc("/", clusterHandler.ServeClusterGet)
 		}
 	}
 
