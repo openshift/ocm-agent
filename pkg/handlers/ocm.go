@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -11,6 +10,7 @@ import (
 	slv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	"github.com/openshift/ocm-agent-operator/api/v1alpha1"
 	"github.com/openshift/ocm-agent/pkg/consts"
+	"github.com/openshift/ocm-agent/pkg/ocm"
 	"github.com/prometheus/alertmanager/template"
 )
 
@@ -159,7 +159,7 @@ func BuildAndSendServiceLog(slBuilder *ServiceLogBuilder, firing bool, alert *te
 }
 
 func (o *ocmClientImpl) SendLimitedSupport(clusterUUID string, lsReason *cmv1.LimitedSupportReason) error {
-	internalID, err := o.getInternalID(clusterUUID)
+	internalID, err := ocm.GetInternalIDByExternalID(clusterUUID, o.ocmConnection)
 	if err != nil {
 		return fmt.Errorf("can't get internal id: %w", err)
 	}
@@ -179,7 +179,7 @@ func (o *ocmClientImpl) SendLimitedSupport(clusterUUID string, lsReason *cmv1.Li
 }
 
 func (o *ocmClientImpl) RemoveLimitedSupport(clusterUUID string, lsReasonID string) error {
-	internalID, err := o.getInternalID(clusterUUID)
+	internalID, err := ocm.GetInternalIDByExternalID(clusterUUID, o.ocmConnection)
 	if err != nil {
 		return fmt.Errorf("can't get internal id: %w", err)
 	}
@@ -200,7 +200,7 @@ func (o *ocmClientImpl) RemoveLimitedSupport(clusterUUID string, lsReasonID stri
 
 func (o *ocmClientImpl) GetLimitedSupportReasons(clusterUUID string) ([]*cmv1.LimitedSupportReason, error) {
 
-	internalID, err := o.getInternalID(clusterUUID)
+	internalID, err := ocm.GetInternalIDByExternalID(clusterUUID, o.ocmConnection)
 	if err != nil {
 		return nil, fmt.Errorf("can't get internal id: %w", err)
 	}
@@ -217,26 +217,4 @@ func (o *ocmClientImpl) GetLimitedSupportReasons(clusterUUID string) ([]*cmv1.Li
 	}
 
 	return response.Items().Slice(), nil
-}
-
-func (o *ocmClientImpl) getInternalID(clusterUUID string) (string, error) {
-	response, err := o.ocmConnection.ClustersMgmt().V1().Clusters().List().Search(fmt.Sprintf("external_id='%s'", clusterUUID)).Send()
-	if err != nil {
-		return "", fmt.Errorf("can't get cluster internal id: %w", err)
-	}
-
-	// Check the response status code
-	if response.Status() < 200 && response.Status() >= 300 {
-		// Extract error details from the response and return an appropriate error.
-		return "", fmt.Errorf("unexpected status: %d", response.Status())
-	}
-
-	// We should find exactly 1 cluster mapped to the uuid
-	items, ok := response.GetItems()
-	if !ok || items.Len() != 1 {
-		return "", errors.New("invalid response.Items() while getting internal id")
-	}
-
-	// Safe to do, as we checked that it contains 1 element
-	return items.Get(0).ID(), nil
 }
