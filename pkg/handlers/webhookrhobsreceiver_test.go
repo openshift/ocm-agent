@@ -20,7 +20,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	testconst "github.com/openshift/ocm-agent/pkg/consts/test"
-	webhookreceivermock "github.com/openshift/ocm-agent/pkg/handlers/mocks"
+	"github.com/openshift/ocm-agent/pkg/ocm"
+	webhookreceivermock "github.com/openshift/ocm-agent/pkg/ocm/mocks"
 	clientmocks "github.com/openshift/ocm-agent/pkg/util/test/generated/mocks/client"
 )
 
@@ -38,7 +39,7 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 		testMFN                         oav1alpha1.ManagedFleetNotification
 		testMFNR                        oav1alpha1.ManagedFleetNotificationRecord
 		mockStatusWriter                *clientmocks.MockStatusWriter
-		serviceLog                      *ServiceLog
+		serviceLog                      *ocm.ServiceLog
 		limitedSupportReason            *cmv1.LimitedSupportReason
 	)
 
@@ -58,7 +59,7 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 		testMFN = testconst.NewManagedFleetNotification()
 		testMFNR = testconst.NewManagedFleetNotificationRecord()
 		serviceLog = testconst.NewTestServiceLog(
-			ServiceLogActivePrefix+": "+testconst.ServiceLogSummary,
+			ocm.ServiceLogActivePrefix+": "+testconst.ServiceLogSummary,
 			testconst.ServiceLogFleetDesc,
 			testconst.TestHostedClusterID,
 			testconst.TestNotification.Severity,

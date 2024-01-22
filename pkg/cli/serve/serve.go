@@ -271,7 +271,7 @@ func (o *serveOptions) Run() error {
 	}
 
 	// Initialize OCMClient
-	ocmclient := handlers.NewOcmClient(sdkclient)
+	ocmclient := ocm.NewOcmClient(sdkclient)
 
 	// create a new router
 	r := mux.NewRouter()
@@ -282,17 +282,12 @@ func (o *serveOptions) Run() error {
 	r.Path(consts.ReadyzPath).Handler(readyzHandler)
 
 	if o.fleetMode {
-		for _, service := range o.services {
-			switch service {
-			case config.ServiceLogService:
-				o.logger.Info("Initialising alertmanager webhook handler in fleet mode")
-				webhookReceiverHandler := handlers.NewWebhookRHOBSReceiverHandler(client, ocmclient)
-				r.Path(consts.WebhookReceiverPath).Handler(webhookReceiverHandler)
-				r.Use(metrics.PrometheusMiddleware)
-			case config.ClustersService:
-				// No implementation yet
-			}
-		}
+		// The webhook receiver is independent of the enabled services in the configmap
+		// as it's not a direct reverse proxy and doesn't directly reflect a single service
+		o.logger.Info("Initialising alertmanager webhook handler in fleet mode")
+		webhookReceiverHandler := handlers.NewWebhookRHOBSReceiverHandler(client, ocmclient)
+		r.Path(consts.WebhookReceiverPath).Handler(webhookReceiverHandler)
+		r.Use(metrics.PrometheusMiddleware)
 	} else {
 		internalID, err := ocm.GetInternalIDByExternalID(o.externalClusterID, sdkclient)
 		if err != nil {
@@ -303,6 +298,8 @@ func (o *serveOptions) Run() error {
 		for _, service := range o.services {
 			switch service {
 			case config.ServiceLogService:
+				// TODO: we might want to split this out of the service switch,
+				// see comment for fleet mode.
 				o.logger.Info("Initialising alertmanager webhook handler in NON-fleet mode")
 				webhookReceiverHandler := handlers.NewWebhookReceiverHandler(client, ocmclient)
 				r.Path(consts.WebhookReceiverPath).Handler(webhookReceiverHandler)

@@ -1,4 +1,4 @@
-package handlers
+package ocm
 
 import (
 	"fmt"
@@ -10,7 +10,6 @@ import (
 	slv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	"github.com/openshift/ocm-agent-operator/api/v1alpha1"
 	"github.com/openshift/ocm-agent/pkg/consts"
-	"github.com/openshift/ocm-agent/pkg/ocm"
 	"github.com/prometheus/alertmanager/template"
 )
 
@@ -124,7 +123,7 @@ type ocmClientImpl struct {
 	ocmConnection *sdk.Connection
 }
 
-//go:generate mockgen -destination=mocks/ocm.go -package=mocks github.com/openshift/ocm-agent/pkg/handlers OCMClient
+//go:generate mockgen -destination=mocks/ocm.go -package=mocks github.com/openshift/ocm-agent/pkg/ocm OCMClient
 func NewOcmClient(ocmConnection *sdk.Connection) OCMClient {
 	return &ocmClientImpl{
 		ocmConnection: ocmConnection,
@@ -159,7 +158,7 @@ func BuildAndSendServiceLog(slBuilder *ServiceLogBuilder, firing bool, alert *te
 }
 
 func (o *ocmClientImpl) SendLimitedSupport(clusterUUID string, lsReason *cmv1.LimitedSupportReason) error {
-	internalID, err := ocm.GetInternalIDByExternalID(clusterUUID, o.ocmConnection)
+	internalID, err := GetInternalIDByExternalID(clusterUUID, o.ocmConnection)
 	if err != nil {
 		return fmt.Errorf("can't get internal id: %w", err)
 	}
@@ -179,7 +178,7 @@ func (o *ocmClientImpl) SendLimitedSupport(clusterUUID string, lsReason *cmv1.Li
 }
 
 func (o *ocmClientImpl) RemoveLimitedSupport(clusterUUID string, lsReasonID string) error {
-	internalID, err := ocm.GetInternalIDByExternalID(clusterUUID, o.ocmConnection)
+	internalID, err := GetInternalIDByExternalID(clusterUUID, o.ocmConnection)
 	if err != nil {
 		return fmt.Errorf("can't get internal id: %w", err)
 	}
@@ -200,7 +199,7 @@ func (o *ocmClientImpl) RemoveLimitedSupport(clusterUUID string, lsReasonID stri
 
 func (o *ocmClientImpl) GetLimitedSupportReasons(clusterUUID string) ([]*cmv1.LimitedSupportReason, error) {
 
-	internalID, err := ocm.GetInternalIDByExternalID(clusterUUID, o.ocmConnection)
+	internalID, err := GetInternalIDByExternalID(clusterUUID, o.ocmConnection)
 	if err != nil {
 		return nil, fmt.Errorf("can't get internal id: %w", err)
 	}

@@ -27,7 +27,8 @@ import (
 	ocmagentv1alpha1 "github.com/openshift/ocm-agent-operator/api/v1alpha1"
 
 	testconst "github.com/openshift/ocm-agent/pkg/consts/test"
-	webhookreceivermock "github.com/openshift/ocm-agent/pkg/handlers/mocks"
+	"github.com/openshift/ocm-agent/pkg/ocm"
+	webhookreceivermock "github.com/openshift/ocm-agent/pkg/ocm/mocks"
 	clientmocks "github.com/openshift/ocm-agent/pkg/util/test/generated/mocks/client"
 )
 
@@ -49,8 +50,8 @@ var _ = Describe("Webhook Handlers", func() {
 		testAlert                   template.Alert
 		testAlertResolved           template.Alert
 		testManagedNotificationList *ocmagentv1alpha1.ManagedNotificationList
-		activeServiceLog            *ServiceLog
-		resolvedServiceLog          *ServiceLog
+		activeServiceLog            *ocm.ServiceLog
+		resolvedServiceLog          *ocm.ServiceLog
 	)
 
 	BeforeEach(func() {
@@ -74,14 +75,14 @@ var _ = Describe("Webhook Handlers", func() {
 		testAlert = testconst.NewTestAlert(false, false, false)
 		testAlertResolved = testconst.NewTestAlert(true, false, false)
 		activeServiceLog = testconst.NewTestServiceLog(
-			ServiceLogActivePrefix+": "+testconst.ServiceLogSummary,
+			ocm.ServiceLogActivePrefix+": "+testconst.ServiceLogSummary,
 			testconst.ServiceLogActiveDesc,
 			"",
 			testconst.TestNotification.Severity,
 			testconst.TestNotification.LogType,
 			testconst.TestNotification.References)
 		resolvedServiceLog = testconst.NewTestServiceLog(
-			ServiceLogResolvePrefix+": "+testconst.ServiceLogSummary,
+			ocm.ServiceLogResolvePrefix+": "+testconst.ServiceLogSummary,
 			testconst.ServiceLogResolvedDesc,
 			"",
 			testconst.TestNotification.Severity,

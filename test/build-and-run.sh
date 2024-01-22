@@ -53,7 +53,6 @@ echo "--- Fetching Cluster ID and creating temporary KUBECONFIG..."
 export OCM_CLUSTERID=$(ocm list clusters --managed | grep -w ${CLUSTER_NAME} | awk '{ print $1 }')
 export EXT_CLUSTERID=$(ocm describe cluster $OCM_CLUSTERID --json | jq -r '.external_id')
 ocm get /api/clusters_mgmt/v1/clusters/$OCM_CLUSTERID/credentials | jq -r .kubeconfig > $TEMPKUBECONFIG
-echo $TEMPKUBECONFIG
 export KUBECONFIG=${TEMPKUBECONFIG}
 export OCM_AGENT_CONFIGMAP="ocm-agent-cm"
 

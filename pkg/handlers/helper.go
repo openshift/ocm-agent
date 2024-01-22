@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/openshift/ocm-agent/pkg/ocm"
 	"github.com/prometheus/alertmanager/template"
 	log "github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -50,7 +51,7 @@ type AMReceiverAlert template.Alert
 
 type WebhookReceiverHandler struct {
 	c   client.Client
-	ocm OCMClient
+	ocm ocm.OCMClient
 }
 
 type OCMResponseBody struct {

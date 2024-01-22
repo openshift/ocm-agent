@@ -19,6 +19,7 @@ import (
 
 	"github.com/openshift/ocm-agent/pkg/consts"
 	"github.com/openshift/ocm-agent/pkg/metrics"
+	"github.com/openshift/ocm-agent/pkg/ocm"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -29,10 +30,10 @@ const (
 
 type WebhookRHOBSReceiverHandler struct {
 	c   client.Client
-	ocm OCMClient
+	ocm ocm.OCMClient
 }
 
-func NewWebhookRHOBSReceiverHandler(c client.Client, o OCMClient) *WebhookRHOBSReceiverHandler {
+func NewWebhookRHOBSReceiverHandler(c client.Client, o ocm.OCMClient) *WebhookRHOBSReceiverHandler {
 	return &WebhookRHOBSReceiverHandler{
 		c:   c,
 		ocm: o,
@@ -239,8 +240,8 @@ func (h *WebhookRHOBSReceiverHandler) processFiringAlert(alert template.Alert, m
 	if !ok || isLSNotification == "false" { // Notification is for a service log
 		// Send the servicelog for the alert
 		log.WithFields(log.Fields{LogFieldNotificationName: fn.Name}).Info("will send servicelog for notification")
-		err = BuildAndSendServiceLog(
-			NewServiceLogBuilder(fn.Summary, fn.NotificationMessage, "", hcID, fn.Severity, fn.LogType, fn.References),
+		err = ocm.BuildAndSendServiceLog(
+			ocm.NewServiceLogBuilder(fn.Summary, fn.NotificationMessage, "", hcID, fn.Severity, fn.LogType, fn.References),
 			true, &alert, h.ocm)
 		if err != nil {
 			log.WithError(err).WithFields(log.Fields{LogFieldNotificationName: fn.Name, LogFieldIsFiring: true}).Error("unable to send service log for notification")
