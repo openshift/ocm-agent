@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/openshift/ocm-agent/pkg/config"
+	"github.com/openshift/ocm-agent/pkg/ocm"
 
 	"github.com/prometheus/alertmanager/template"
 	log "github.com/sirupsen/logrus"
@@ -25,7 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func NewWebhookReceiverHandler(c client.Client, o OCMClient) *WebhookReceiverHandler {
+func NewWebhookReceiverHandler(c client.Client, o ocm.OCMClient) *WebhookReceiverHandler {
 	return &WebhookReceiverHandler{
 		c:   c,
 		ocm: o,
@@ -147,8 +148,8 @@ func (h *WebhookReceiverHandler) processAlert(alert template.Alert, mnl *oav1alp
 	}
 	// Send the servicelog for the alert
 	log.WithFields(log.Fields{LogFieldNotificationName: notification.Name}).Info("will send servicelog for notification")
-	err = BuildAndSendServiceLog(
-		NewServiceLogBuilder(notification.Summary, notification.ActiveDesc, notification.ResolvedDesc, viper.GetString(config.ExternalClusterID), notification.Severity, notification.LogType, notification.References),
+	err = ocm.BuildAndSendServiceLog(
+		ocm.NewServiceLogBuilder(notification.Summary, notification.ActiveDesc, notification.ResolvedDesc, viper.GetString(config.ExternalClusterID), notification.Severity, notification.LogType, notification.References),
 		firing, &alert, h.ocm)
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{LogFieldNotificationName: notification.Name, LogFieldIsFiring: true}).Error("unable to send a notification")

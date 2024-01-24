@@ -23,13 +23,13 @@ fi
 
 export CLUSTER=$1
 export OCM_CLUSTERID=$(ocm list clusters --managed | grep -w ${CLUSTER} | awk '{ print $1 }')
-export EXT_CLUSTERID=$(ocm describe cluster $CLUSTER --json | jq -r '.external_id')
+export EXT_CLUSTERID=$(ocm describe cluster $OCM_CLUSTERID --json | jq -r '.external_id')
 TEMPKUBECONFIG=/tmp/${CLUSTER}-kubeconfig-temp
 export GIT_ROOT=$(git rev-parse --show-toplevel)
 TEST_DIR=${GIT_ROOT}/test
 alias create-alert=${TEST_DIR}/util/create-alert.sh
 alias post-alert=${TEST_DIR}/util/post-alert.sh
-source ${TEST_DIR}/util/servicelog.sh
+source ${TEST_DIR}/util/ocm.sh
 
 # Can be used for --start-date and/or --end-date tests if required
 TODAY_DATE=$(date -u +%Y-%m-%d)

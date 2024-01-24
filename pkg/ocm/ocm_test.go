@@ -1,4 +1,4 @@
-package handlers_test
+package ocm
 
 import (
 	"net/http"
@@ -11,7 +11,6 @@ import (
 	sdk "github.com/openshift-online/ocm-sdk-go"
 	. "github.com/openshift-online/ocm-sdk-go/testing"
 	testconst "github.com/openshift/ocm-agent/pkg/consts/test"
-	"github.com/openshift/ocm-agent/pkg/handlers"
 )
 
 func TestOCMClient(t *testing.T) {
@@ -21,8 +20,8 @@ func TestOCMClient(t *testing.T) {
 var _ = Describe("ServiceLogsHandler", func() {
 	var (
 		ocmConnection *sdk.Connection
-		ocmClient     handlers.OCMClient
-		serviceLog    *handlers.ServiceLog
+		ocmClient     OCMClient
+		serviceLog    *ServiceLog
 		err           error
 		mockServer    *Server
 	)
@@ -38,9 +37,9 @@ var _ = Describe("ServiceLogsHandler", func() {
 			Build()
 		Expect(err).NotTo(HaveOccurred())
 
-		ocmClient = handlers.NewOcmClient(ocmConnection)
+		ocmClient = NewOcmClient(ocmConnection)
 		serviceLog = testconst.NewTestServiceLog(
-			handlers.ServiceLogActivePrefix+": "+testconst.ServiceLogSummary,
+			ServiceLogActivePrefix+": "+testconst.ServiceLogSummary,
 			testconst.ServiceLogActiveDesc,
 			testconst.TestHostedClusterID,
 			testconst.TestNotification.Severity,

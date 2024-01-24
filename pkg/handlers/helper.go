@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/openshift/ocm-agent/pkg/ocm"
 	"github.com/prometheus/alertmanager/template"
 	log "github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -13,14 +14,15 @@ import (
 )
 
 const (
-	AMLabelAlertName           = "alertname"
-	AMLabelTemplateName        = "managed_notification_template"
-	AMLabelManagedNotification = "send_managed_notification"
-	AMLabelAlertSourceName     = "source"
-	AMLabelAlertSourceHCP      = "HCP"
-	AMLabelAlertSourceDP       = "DP"
-	AMLabelAlertMCID           = "_mc_id"
-	AMLabelAlertHCID           = "_id"
+	AMLabelAlertName                  = "alertname"
+	AMLabelTemplateName               = "managed_notification_template"
+	AMLabelManagedNotification        = "send_managed_notification"
+	AMLabelAlertSourceName            = "source"
+	AMLabelAlertSourceHCP             = "HCP"
+	AMLabelAlertSourceDP              = "DP"
+	AMLabelAlertMCID                  = "_mc_id"
+	AMLabelAlertHCID                  = "_id"
+	AMLabelLimitedSupportNotification = "limited_support"
 
 	LogFieldNotificationName           = "notification"
 	LogFieldResendInterval             = "resend_interval"
@@ -49,7 +51,7 @@ type AMReceiverAlert template.Alert
 
 type WebhookReceiverHandler struct {
 	c   client.Client
-	ocm OCMClient
+	ocm ocm.OCMClient
 }
 
 type OCMResponseBody struct {

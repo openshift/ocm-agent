@@ -1,0 +1,34 @@
+{
+    "receiver": "ocmagent",
+    "status": "${ALERT_STATUS}",
+    "alerts": [
+      {
+        "status": "${ALERT_STATUS}",
+        "labels": {
+          "alertname": "${ALERT_NAME}",
+          "alertstate": "${ALERT_STATUS}",
+          "namespace": "openshift-monitoring",
+          "openshift_io_alert_source": "platform",
+          "prometheus": "openshift-monitoring/k8s",
+          "send_managed_notification": "${SEND_MANAGED_NOTIFICATION_BOOL}",
+          "managed_notification_template": "${MANAGED_NOTIFICATION_TEMPLATE}",
+          "severity": "info",
+          "limited_support": "${LIMITED_SUPPORT}",
+          "_mc_id": "${MANAGEMENT_CLUSTER_ID}",
+          "_id": "${HC_ID}",
+          "source": "HCP"
+        },
+        "annotations": {
+          "description": ""
+        },
+        "startsAt": "${START_DATE}T00:00:00Z",
+        "endsAt": "${END_DATE}T00:00:00Z",
+        "generatorURL": ""
+      }
+    ],
+    "groupLabels": {},
+    "commonLabels": {},
+    "commonAnnotations": {},
+    "externalURL": ""
+  }
+  

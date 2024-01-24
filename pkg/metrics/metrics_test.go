@@ -160,6 +160,82 @@ var _ = Describe("Webhook Handlers", func() {
 
 	})
 
+	Context("Limited Support Sent metrics are updated correctly", func() {
+		var (
+			metricHelpHeader = `
+# HELP ocm_agent_limited_support_sent_total A total number of limited support being sent based on fleetNotification template
+# TYPE ocm_agent_limited_support_sent_total counter
+`
+			metricValueHeader = fmt.Sprintf(`ocm_agent_limited_support_sent_total{ocm_service="clusters_mgmt",template="%s"} `, testTemplate)
+		)
+
+		When("the metric is incremented", func() {
+			It("increments the total sent limited support number correctly", func() {
+				IncrementLimitedSupportSentCount(testTemplate)
+				expectedMetric := fmt.Sprintf("%s%s%d\n", metricHelpHeader, metricValueHeader, 1)
+				err := testutil.CollectAndCompare(metricLimitedSupportSentTotal, strings.NewReader(expectedMetric))
+				Expect(err).To(BeNil())
+			})
+		})
+	})
+
+	Context("Limited Support Removed metrics are updated correctly", func() {
+		var (
+			metricHelpHeader = `
+# HELP ocm_agent_limited_support_removed_total A total number of limited support removed based on fleetNotification template
+# TYPE ocm_agent_limited_support_removed_total counter
+`
+			metricValueHeader = fmt.Sprintf(`ocm_agent_limited_support_removed_total{ocm_service="clusters_mgmt",template="%s"} `, testTemplate)
+		)
+
+		When("the metric is incremented", func() {
+			It("increments the total removed limited support reasons number correctly", func() {
+				IncrementLimitedSupportRemovedCount(testTemplate)
+				expectedMetric := fmt.Sprintf("%s%s%d\n", metricHelpHeader, metricValueHeader, 1)
+				err := testutil.CollectAndCompare(metricLimitedSupportRemovedTotal, strings.NewReader(expectedMetric))
+				Expect(err).To(BeNil())
+			})
+		})
+	})
+
+	Context("Failed Limited Support Send metrics are updated correctly", func() {
+		var (
+			metricHelpHeader = `
+# HELP ocm_agent_limited_support_send_failure_total A total number of failures for limited support posts based on fleetNotification template
+# TYPE ocm_agent_limited_support_send_failure_total counter
+`
+			metricValueHeader = fmt.Sprintf(`ocm_agent_limited_support_send_failure_total{ocm_service="clusters_mgmt",template="%s"} `, testTemplate)
+		)
+
+		When("the metric is incremented", func() {
+			It("increments the total number of failed limited support posts correctly", func() {
+				IncrementFailedLimitedSupportSend(testTemplate)
+				expectedMetric := fmt.Sprintf("%s%s%d\n", metricHelpHeader, metricValueHeader, 1)
+				err := testutil.CollectAndCompare(metricFailedLimitedSupportSendsTotal, strings.NewReader(expectedMetric))
+				Expect(err).To(BeNil())
+			})
+		})
+	})
+
+	Context("Failed Limited Support Removal metrics are updated correctly", func() {
+		var (
+			metricHelpHeader = `
+# HELP ocm_agent_limited_support_removal_failure_total A total number of failures for limited support removals based on fleetNotification template
+# TYPE ocm_agent_limited_support_removal_failure_total counter
+`
+			metricValueHeader = fmt.Sprintf(`ocm_agent_limited_support_removal_failure_total{ocm_service="clusters_mgmt",template="%s"} `, testTemplate)
+		)
+
+		When("the metric is incremented", func() {
+			It("increments the total number of failed limited support removals correctly", func() {
+				IncrementFailedLimitedSupportRemoved(testTemplate)
+				expectedMetric := fmt.Sprintf("%s%s%d\n", metricHelpHeader, metricValueHeader, 1)
+				err := testutil.CollectAndCompare(metricFailedLimitedSupportRemovalsTotal, strings.NewReader(expectedMetric))
+				Expect(err).To(BeNil())
+			})
+		})
+	})
+
 	Context("Pull Secret Invalid metric", func() {
 		var (
 			metricHelpHeader = `
@@ -188,4 +264,8 @@ func resetMetrics() {
 	metricFailedRequestsTotal.Reset()
 	metricRequestsByService.Reset()
 	metricPullSecretInvalid.Reset()
+	metricFailedLimitedSupportRemovalsTotal.Reset()
+	metricFailedLimitedSupportSendsTotal.Reset()
+	metricLimitedSupportRemovedTotal.Reset()
+	metricLimitedSupportSentTotal.Reset()
 }

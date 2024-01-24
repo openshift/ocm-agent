@@ -1,4 +1,4 @@
-package handlers
+package ocm
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 	"regexp"
 
 	sdk "github.com/openshift-online/ocm-sdk-go"
+	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	slv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	"github.com/openshift/ocm-agent-operator/api/v1alpha1"
 	"github.com/openshift/ocm-agent/pkg/consts"
@@ -113,13 +114,16 @@ func (b *ServiceLogBuilder) Build(firing bool, alert *template.Alert) (*ServiceL
 
 type OCMClient interface {
 	SendServiceLog(logEntry *slv1.LogEntry) error
+	SendLimitedSupport(clusterUUID string, lsReason *cmv1.LimitedSupportReason) error
+	RemoveLimitedSupport(clusterUUID string, lsReasonID string) error
+	GetLimitedSupportReasons(clusterUUID string) ([]*cmv1.LimitedSupportReason, error)
 }
 
 type ocmClientImpl struct {
 	ocmConnection *sdk.Connection
 }
 
-//go:generate mockgen -destination=mocks/service_logs.go -package=mocks github.com/openshift/ocm-agent/pkg/handlers OCMClient
+//go:generate mockgen -destination=mocks/ocm.go -package=mocks github.com/openshift/ocm-agent/pkg/ocm OCMClient
 func NewOcmClient(ocmConnection *sdk.Connection) OCMClient {
 	return &ocmClientImpl{
 		ocmConnection: ocmConnection,
@@ -151,4 +155,65 @@ func BuildAndSendServiceLog(slBuilder *ServiceLogBuilder, firing bool, alert *te
 		return err
 	}
 	return ocmClient.SendServiceLog(logEntry)
+}
+
+func (o *ocmClientImpl) SendLimitedSupport(clusterUUID string, lsReason *cmv1.LimitedSupportReason) error {
+	internalID, err := GetInternalIDByExternalID(clusterUUID, o.ocmConnection)
+	if err != nil {
+		return fmt.Errorf("can't get internal id: %w", err)
+	}
+
+	response, err := o.ocmConnection.ClustersMgmt().V1().Clusters().Cluster(internalID).LimitedSupportReasons().Add().Body(lsReason).Send()
+	if err != nil {
+		return fmt.Errorf("can't post limited support: %w", err)
+	}
+
+	// Check the response status code
+	if response.Status() < 200 && response.Status() >= 300 {
+		// Extract error details from the response and return an appropriate error.
+		return fmt.Errorf("unexpected status: %d", response.Status())
+	}
+
+	return nil
+}
+
+func (o *ocmClientImpl) RemoveLimitedSupport(clusterUUID string, lsReasonID string) error {
+	internalID, err := GetInternalIDByExternalID(clusterUUID, o.ocmConnection)
+	if err != nil {
+		return fmt.Errorf("can't get internal id: %w", err)
+	}
+
+	response, err := o.ocmConnection.ClustersMgmt().V1().Clusters().Cluster(internalID).LimitedSupportReasons().LimitedSupportReason(lsReasonID).Delete().Send()
+	if err != nil {
+		return fmt.Errorf("can't delete limited support reason %s from cluster %s: %w", lsReasonID, clusterUUID, err)
+	}
+
+	// Check the response status code
+	if response.Status() < 200 && response.Status() >= 300 {
+		// Extract error details from the response and return an appropriate error.
+		return fmt.Errorf("unexpected status: %d", response.Status())
+	}
+
+	return nil
+}
+
+func (o *ocmClientImpl) GetLimitedSupportReasons(clusterUUID string) ([]*cmv1.LimitedSupportReason, error) {
+
+	internalID, err := GetInternalIDByExternalID(clusterUUID, o.ocmConnection)
+	if err != nil {
+		return nil, fmt.Errorf("can't get internal id: %w", err)
+	}
+
+	response, err := o.ocmConnection.ClustersMgmt().V1().Clusters().Cluster(internalID).LimitedSupportReasons().List().Send()
+	if err != nil {
+		return nil, fmt.Errorf("can't get limited support reasons: %w", err)
+	}
+
+	// Check the response status code
+	if response.Status() < 200 && response.Status() >= 300 {
+		// Extract error details from the response and return an appropriate error.
+		return nil, fmt.Errorf("unexpected status: %d", response.Status())
+	}
+
+	return response.Items().Slice(), nil
 }
