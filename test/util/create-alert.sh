@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 ## create-alert.sh script creates the json format for the alert payload that's passed to the OCM agent.
 
@@ -12,7 +13,6 @@ usage() {
     -t|--notification-template     Name of managed notification template (Default: LoggingVolumeFillingUp)
     --hc-id                        [For fleet-mode only] ID of the cluster  (Default: None)
     --mc-id                        [For fleet-mode only] ID of the management cluster  (Default: None)
-    --limited-support              Send limited support for managedfleetnotification (Default value: "false")
     --start-date                   The date when the alert state started being in effect (Default: Today ($(date -u +%Y-%m-%d))
     --end-date                     The date when the alert state stopped being in effect (Default: 0001-01-01)
     --template                     The template alert json file (Default: ${GIT_ROOT}/test/template-alert.json)
@@ -31,7 +31,6 @@ fi
 export ALERT_STATUS="firing"
 export ALERT_NAME="LoggingVolumeFillingUpNotificationSRE"
 export SEND_MANAGED_NOTIFICATION_BOOL="true"
-export LIMITED_SUPPORT="false"
 export MANAGED_NOTIFICATION_TEMPLATE="LoggingVolumeFillingUp"
 export START_DATE=$(date -u +%Y-%m-%d)
 export END_DATE="0001-01-01"
@@ -44,10 +43,6 @@ TEMPLATE_ALERT_JSON_FILE="${TEST_DIR}/template-alert.json"
 eval set -- "$VALID_ARGS"
 while true ; do
   case "$1" in
-    --limited-support)
-        export LIMITED_SUPPORT=${2}
-        shift 2
-        ;;
     --hc-id)
         export HC_ID=${2}
         shift 2

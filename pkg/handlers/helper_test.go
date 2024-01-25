@@ -16,8 +16,8 @@ var _ = Describe("Webhook Handler Helpers", func() {
 	)
 
 	BeforeEach(func() {
-		testAlert = testconst.NewTestAlert(false, false, false)
-		testFleetAlert = testconst.NewTestAlert(false, true, false)
+		testAlert = testconst.NewTestAlert(false, false)
+		testFleetAlert = testconst.NewTestAlert(false, true)
 	})
 
 	Context("When checking if an alert is valid", func() {

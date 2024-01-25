@@ -8,7 +8,7 @@
 # - This script uses scripts under 'util/' directory to add any new test.
 # - Each run of the script should give idempotent result i.e, one or more runs of the script should give same result.
 ######################################################################################################
-
+set -e
 shopt -s expand_aliases
 
 # Defaults
@@ -37,17 +37,20 @@ TODAY_DATE=$(date -u +%Y-%m-%d)
 TOMORROW_DATE=$(date -u +%Y-%m-%d -d "$DATE +1 day")
 
 # Test default managedfleetnotification which will exist on call clusters
-DEFAULT_TEST_MFN_NAME="sre-managed-fleet-notifications"
+SERVICE_LOG_TEST_MFN_NAME="sre-managed-fleet-notification-sl"
+LIMITED_SUPPORT_TEST_MFN_NAME="sre-managed-fleet-notification-ls"
 
 function PreCheck() {
 	echo
 	echo "- Running Pre Test Check to recreate the default ManagedFleetNotification for successful tests..."
 	export KUBECONFIG=${TEMPKUBECONFIG}
-	oc -n openshift-ocm-agent-operator delete managedfleetnotification ${DEFAULT_TEST_MFN_NAME}
-	oc -n openshift-ocm-agent-operator apply -f ${TEST_DIR}/manifests/${DEFAULT_TEST_MFN_NAME}.yaml
+	oc -n openshift-ocm-agent-operator delete managedfleetnotification ${SERVICE_LOG_TEST_MFN_NAME} || echo "Found no existing MFN with name ${SERVICE_LOG_TEST_MFN_NAME} to delete"
+	oc -n openshift-ocm-agent-operator delete managedfleetnotification ${LIMITED_SUPPORT_TEST_MFN_NAME} || echo "Found no existing MFN with name ${LIMITED_SUPPORT_TEST_MFN_NAME} to delete"
+	oc -n openshift-ocm-agent-operator apply -f ${TEST_DIR}/manifests/${SERVICE_LOG_TEST_MFN_NAME}.yaml
+	oc -n openshift-ocm-agent-operator apply -f ${TEST_DIR}/manifests/${LIMITED_SUPPORT_TEST_MFN_NAME}.yaml
 
 	# Clean up records to allow re-send
-	oc -n openshift-ocm-agent-operator delete managedfleetnotificationrecord test
+	oc -n openshift-ocm-agent-operator delete --all managedfleetnotificationrecord || echo "Found no existing MFN records to delete"
 }
 
 PreCheck
@@ -57,14 +60,14 @@ echo
 echo "### TEST 1 - Send Service log for a firing alert"
 echo
 ALERT_FILE=/tmp/firing-alert.json
-get-servicelog-count ${EXTERNAL_ID}
-PRE_LS_COUNT=$?
+PRE_SL_COUNT=$(get-servicelog-count ${EXTERNAL_ID})
+echo "Pre-service-log count: $PRE_LS_COUNT"
 # We are using a random MC id to make sure we get a new managedfleetnotificationrecord object
 random_mc_id=$(tr -dc 'a-z' < /dev/urandom | head -c 5)
 create-alert --hc-id ${EXTERNAL_ID} --mc-id $random_mc_id -t "audit-webhook-error-putting-minimized-cloudwatch-log" --template "$TEMPLATE_ALERT_JSON_FILE" > ${ALERT_FILE}
 post-alert ${ALERT_FILE}
 sleep 3
-check-servicelog-count ${EXTERNAL_ID} ${PRE_LS_COUNT} 1
+check-servicelog-count ${EXTERNAL_ID} ${PRE_SL_COUNT} 1
 
 
 # We are using a random MC id to make sure we get a new managedfleetnotificationrecord object
@@ -76,9 +79,8 @@ echo
 echo "### TEST 2 - Send Limited Support for a firing alert"
 echo
 ALERT_FILE=/tmp/firing-alert.json
-get-limited-support-count ${EXTERNAL_ID}
-PRE_LS_COUNT=$?
-create-alert --limited-support "true" --hc-id ${EXTERNAL_ID} --mc-id $random_mc_id -t "audit-webhook-error-putting-minimized-cloudwatch-log" --template "$TEMPLATE_ALERT_JSON_FILE" > ${ALERT_FILE}
+PRE_LS_COUNT=$(get-limited-support-count ${EXTERNAL_ID})
+create-alert --hc-id ${EXTERNAL_ID} --mc-id $random_mc_id -t "oidc-deleted-notification" --template "$TEMPLATE_ALERT_JSON_FILE" > ${ALERT_FILE}
 post-alert ${ALERT_FILE}
 sleep 3
 EXPECTED_COUNT=$((${PRE_LS_COUNT} + 1))
@@ -89,12 +91,9 @@ echo
 echo "### TEST 3 - Remove Limited Support for resolved alert"
 echo
 ALERT_FILE=/tmp/resolved-alert.json
-get-limited-support-count ${EXTERNAL_ID}
-PRE_LS_COUNT=$?
-create-alert --limited-support "true" --hc-id ${EXTERNAL_ID} --mc-id $random_mc_id --template "$TEMPLATE_ALERT_JSON_FILE" -t "audit-webhook-error-putting-minimized-cloudwatch-log" --alert-status resolved > ${ALERT_FILE}
+PRE_LS_COUNT=$(get-limited-support-count ${EXTERNAL_ID})
+create-alert --hc-id ${EXTERNAL_ID} --mc-id $random_mc_id --template "$TEMPLATE_ALERT_JSON_FILE" -t "oidc-deleted-notification" --alert-status resolved > ${ALERT_FILE}
 post-alert ${ALERT_FILE}
 sleep 3
 EXPECTED_COUNT=$((${PRE_LS_COUNT} - 1))
 check-limited-support-count ${EXTERNAL_ID} ${EXPECTED_COUNT}
-
-echo

@@ -111,8 +111,8 @@ func NewFleetNotification() ocmagentv1alpha1.FleetNotification {
 	}
 }
 
-func NewManagedFleetNotification() ocmagentv1alpha1.ManagedFleetNotification {
-	return ocmagentv1alpha1.ManagedFleetNotification{
+func NewManagedFleetNotification(limited_support bool) ocmagentv1alpha1.ManagedFleetNotification {
+	mfn := ocmagentv1alpha1.ManagedFleetNotification{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-mfn",
 			Namespace: "openshift-ocm-agent-operator",
@@ -121,6 +121,12 @@ func NewManagedFleetNotification() ocmagentv1alpha1.ManagedFleetNotification {
 			FleetNotification: NewFleetNotification(),
 		},
 	}
+
+	if limited_support {
+		mfn.Spec.FleetNotification.LimitedSupport = true
+	}
+
+	return mfn
 }
 
 func NewManagedFleetNotificationRecord() ocmagentv1alpha1.ManagedFleetNotificationRecord {
@@ -136,7 +142,7 @@ func NewManagedFleetNotificationRecord() ocmagentv1alpha1.ManagedFleetNotificati
 	}
 }
 
-func NewTestAlert(resolved bool, fleet bool, limited_support bool) template.Alert {
+func NewTestAlert(resolved bool, fleet bool) template.Alert {
 	alert := template.Alert{
 		Labels: map[string]string{
 			"managed_notification_template": TestNotificationName,
@@ -160,14 +166,15 @@ func NewTestAlert(resolved bool, fleet bool, limited_support bool) template.Aler
 	if resolved {
 		alert.Status = "resolved"
 		alert.Labels["alertstate"] = "resolved"
+	} else {
+		alert.Status = "firing"
+		alert.Labels["alertstate"] = "firing"
 	}
+
 	if fleet {
 		alert.Labels["source"] = "HCP"
 		alert.Labels["_mc_id"] = TestManagedClusterID
 		alert.Labels["_id"] = TestHostedClusterID
-	}
-	if limited_support {
-		alert.Labels["limited_support"] = "true"
 	}
 	return alert
 }

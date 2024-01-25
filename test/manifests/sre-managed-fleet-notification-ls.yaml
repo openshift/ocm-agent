@@ -1,0 +1,16 @@
+apiVersion: ocmagent.managed.openshift.io/v1alpha1
+kind: ManagedFleetNotification
+metadata:
+  labels:
+    hive.openshift.io/managed: "true"
+  name: oidc-deleted-notification
+  namespace: openshift-ocm-agent-operator
+spec:
+  fleetNotification:
+    name: oidc-deleted-notification
+    summary: Cluster is in Limited Support due to unsupported cloud provider configuration
+    notificationMessage: |-
+      Your cluster is degraded due to the deletion of the associated OpenIDConnectProvider. To restore full support, please recreate the OpenID Connect provider by executing the command: rosa create oidc-provider --mode manual --cluster $CLUSTER_ID
+    resendWait: 0
+    severity: Info
+    limitedSupport: true

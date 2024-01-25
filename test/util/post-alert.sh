@@ -1,5 +1,5 @@
 #!/bin/bash
-
+set -e
 ## post-alert-sh - Script to POST alert json payload to OCM Agent
 
 if [[ -z $1 ]]

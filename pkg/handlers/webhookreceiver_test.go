@@ -72,8 +72,8 @@ var _ = Describe("Webhook Handlers", func() {
 			c:   mockClient,
 			ocm: mockOCMClient,
 		}
-		testAlert = testconst.NewTestAlert(false, false, false)
-		testAlertResolved = testconst.NewTestAlert(true, false, false)
+		testAlert = testconst.NewTestAlert(false, false)
+		testAlertResolved = testconst.NewTestAlert(true, false)
 		activeServiceLog = testconst.NewTestServiceLog(
 			ocm.ServiceLogActivePrefix+": "+testconst.ServiceLogSummary,
 			testconst.ServiceLogActiveDesc,

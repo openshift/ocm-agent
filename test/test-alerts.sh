@@ -9,7 +9,7 @@
 # - Each run of the script should give idempotent result i.e, one or more runs of the script should give same result.
 # - Right now, Service Log count is referred before and after the test but more criteria can be added.
 ######################################################################################################
-
+set -e
 shopt -s expand_aliases
 
 # Defaults
@@ -42,7 +42,7 @@ function PreCheck() {
 	echo
 	echo "- Running Pre Test Check to recreate the default ManagedNotification for successful tests..."
 	export KUBECONFIG=${TEMPKUBECONFIG}
-	oc -n openshift-ocm-agent-operator delete managednotification ${DEFAULT_TEST_MN_NAME}
+	oc -n openshift-ocm-agent-operator delete managednotification ${DEFAULT_TEST_MN_NAME} ||  echo "Found no existing fleet notification with name ${DEFAULT_TEST_MN_NAME} to delete"
 	oc -n openshift-ocm-agent-operator apply -f ${TEST_DIR}/manifests/${DEFAULT_TEST_MN_NAME}.yaml
 }
 
@@ -53,8 +53,7 @@ echo
 echo "### TEST 1 - Send Service Log for a firing alert"
 echo
 ALERT_FILE=/tmp/firing-alert.json
-get-servicelog-count ${EXT_CLUSTERID}
-PRE_SL_COUNT=$?
+PRE_SL_COUNT=$(get-servicelog-count ${EXT_CLUSTERID})
 create-alert > ${ALERT_FILE}
 post-alert ${ALERT_FILE}
 sleep 3
@@ -65,8 +64,7 @@ echo
 echo "### TEST 2 - Do not send Service Log again for the same firing alert for same day"
 echo
 ALERT_FILE=/tmp/firing-alert.json
-get-servicelog-count ${EXT_CLUSTERID}
-PRE_SL_COUNT=$?
+PRE_SL_COUNT=$(get-servicelog-count ${EXT_CLUSTERID})
 create-alert > ${ALERT_FILE}
 post-alert ${ALERT_FILE}
 sleep 3
@@ -77,8 +75,7 @@ echo
 echo "### TEST 3 - Send Servicelog for resolved alert"
 echo
 ALERT_FILE=/tmp/resolved-alert.json
-get-servicelog-count ${EXT_CLUSTERID}
-PRE_SL_COUNT=$?
+PRE_SL_COUNT=$(get-servicelog-count ${EXT_CLUSTERID})
 create-alert --alert-status resolved > ${ALERT_FILE}
 post-alert ${ALERT_FILE}
 sleep 3
