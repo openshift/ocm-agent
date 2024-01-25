@@ -53,8 +53,7 @@ echo
 echo "### TEST 1 - Send Service Log for a firing alert"
 echo
 ALERT_FILE=/tmp/firing-alert.json
-get-servicelog-count ${EXT_CLUSTERID}
-PRE_SL_COUNT=$?
+PRE_SL_COUNT=$(get-servicelog-count ${EXT_CLUSTERID})
 create-alert > ${ALERT_FILE}
 post-alert ${ALERT_FILE}
 sleep 3
@@ -65,8 +64,7 @@ echo
 echo "### TEST 2 - Do not send Service Log again for the same firing alert for same day"
 echo
 ALERT_FILE=/tmp/firing-alert.json
-get-servicelog-count ${EXT_CLUSTERID}
-PRE_SL_COUNT=$?
+PRE_SL_COUNT=$(get-servicelog-count ${EXT_CLUSTERID})
 create-alert > ${ALERT_FILE}
 post-alert ${ALERT_FILE}
 sleep 3
@@ -77,8 +75,7 @@ echo
 echo "### TEST 3 - Send Servicelog for resolved alert"
 echo
 ALERT_FILE=/tmp/resolved-alert.json
-get-servicelog-count ${EXT_CLUSTERID}
-PRE_SL_COUNT=$?
+PRE_SL_COUNT=$(get-servicelog-count ${EXT_CLUSTERID})
 create-alert --alert-status resolved > ${ALERT_FILE}
 post-alert ${ALERT_FILE}
 sleep 3

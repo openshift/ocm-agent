@@ -7,14 +7,13 @@ import (
 	"net/http"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/api/errors"
-
 	"github.com/prometheus/alertmanager/template"
 	"github.com/prometheus/common/model"
 	log "github.com/sirupsen/logrus"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	oav1alpha1 "github.com/openshift/ocm-agent-operator/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/openshift/ocm-agent/pkg/consts"
@@ -97,71 +96,16 @@ func (h *WebhookRHOBSReceiverHandler) processAMReceiver(d AMReceiverData, ctx co
 			continue
 		}
 
-		// Handle firing alerts
-		if alert.Status == string(model.AlertFiring) {
-			err = h.processFiringAlert(alert, mfn)
-			if err != nil {
-				log.WithError(err).Error("a firing alert could not be successfully processed")
-			}
-			continue
-		}
-
-		// Handle resolving alerts
-		if alert.Status == string(model.AlertResolved) {
-			err = h.processResolvedAlert(alert, mfn)
-			if err != nil {
-				log.WithError(err).Error("a resolving alert could not be successfully processed")
-			}
-			continue
+		err = h.processAlert(alert, mfn)
+		if err != nil {
+			log.WithError(err).Error("failed processing alert")
 		}
 	}
 
 	return &AMReceiverResponse{Error: nil, Status: "ok", Code: http.StatusOK}
 }
 
-// processResolvedAlert handles resolve notifications for a particular alert
-// currently only handles removing limited support
-func (h *WebhookRHOBSReceiverHandler) processResolvedAlert(alert template.Alert, mfn oav1alpha1.ManagedFleetNotification) error {
-	// Alert did not include a limited support request - NOOP.
-	if val, ok := alert.Labels[AMLabelLimitedSupportNotification]; !ok || val == "false" {
-		return nil
-	}
-
-	hcID := alert.Labels[AMLabelAlertHCID]
-	fn := mfn.Spec.FleetNotification
-	fnLimitedSupportReason := fn.NotificationMessage
-
-	activeLSReasons, err := h.ocm.GetLimitedSupportReasons(hcID)
-	if err != nil {
-		return fmt.Errorf("unable to get limited support reasons for cluster %s:, %w", hcID, err)
-	}
-
-	for _, reason := range activeLSReasons {
-		// If the reason matches the fleet notification LS reason, remove it
-		// TODO(Claudio): Find a way to make sure the removed LS was also posted by OA
-		if strings.Contains(reason.Details(), fnLimitedSupportReason) {
-			err := h.ocm.RemoveLimitedSupport(hcID, reason.ID())
-			if err != nil {
-				metrics.IncrementFailedLimitedSupportRemoved(fn.Name)
-				metrics.SetResponseMetricFailure("clusters_mgmt")
-				return fmt.Errorf("limited support reason with ID '%s' couldn't be removed for cluster %s, err: %w", reason.ID(), hcID, err)
-			}
-			metrics.IncrementLimitedSupportRemovedCount(fn.Name)
-		}
-	}
-	// Reset the metric if we got correct Response from OCM
-	metrics.ResetMetric(metrics.MetricResponseFailure)
-
-	// TODO(Claudio): should we add some kind of LimitedSupportRemoved state on the FleetNotificationRecordItem?
-	// Currently, we keep no trace of this other than logs.
-	// We could add a counter for sent limited supports.
-
-	return nil
-}
-
-// processFiringAlert handles the pre-check verification and sending of a notification for a particular alert
-// and returns an error if that process completed successfully or false otherwise
-func (h *WebhookRHOBSReceiverHandler) processFiringAlert(alert template.Alert, mfn oav1alpha1.ManagedFleetNotification) error {
+func (h *WebhookRHOBSReceiverHandler) processAlert(alert template.Alert, mfn oav1alpha1.ManagedFleetNotification) error {
 	fn := mfn.Spec.FleetNotification
 	mcID := alert.Labels[AMLabelAlertMCID]
 	hcID := alert.Labels[AMLabelAlertHCID]
@@ -221,8 +165,85 @@ func (h *WebhookRHOBSReceiverHandler) processFiringAlert(alert template.Alert, m
 		}
 	}
 
-	// Check if a service log can be sent
-	canBeSent, err := mfnr.CanBeSent(mcID, fn.Name, hcID)
+	// Handle firing alerts
+	if alert.Status == string(model.AlertFiring) {
+		err := h.processFiringAlert(alert, mfn, mfnr)
+		if err != nil {
+			return fmt.Errorf("a firing alert could not be successfully processed %w", err)
+		}
+		return nil
+	}
+
+	// Handle resolving alerts
+	if alert.Status == string(model.AlertResolved) {
+		err := h.processResolvedAlert(alert, mfn, mfnr)
+		if err != nil {
+			return fmt.Errorf("a resolving alert could not be successfully processed %w", err)
+		}
+		return nil
+	}
+
+	return fmt.Errorf("unable to process alert: unexpected status %s", alert.Status)
+}
+
+// processResolvedAlert handles resolve notifications for a particular alert
+// currently only handles removing limited support
+func (h *WebhookRHOBSReceiverHandler) processResolvedAlert(alert template.Alert, mfn oav1alpha1.ManagedFleetNotification, mfnr *oav1alpha1.ManagedFleetNotificationRecord) error {
+	// MFN is not for limited support, thus we don't have an implementation for the alert resolving state yet
+	if !mfn.Spec.FleetNotification.LimitedSupport {
+		return nil
+	}
+
+	hcID := alert.Labels[AMLabelAlertHCID]
+	fn := mfn.Spec.FleetNotification
+	fnLimitedSupportReason := fn.NotificationMessage
+
+	activeLSReasons, err := h.ocm.GetLimitedSupportReasons(hcID)
+	if err != nil {
+		return fmt.Errorf("unable to get limited support reasons for cluster %s:, %w", hcID, err)
+	}
+
+	for _, reason := range activeLSReasons {
+		// If the reason matches the fleet notification LS reason, remove it
+		// TODO(Claudio): Find a way to make sure the removed LS was also posted by OA
+		if strings.Contains(reason.Details(), fnLimitedSupportReason) {
+			err := h.ocm.RemoveLimitedSupport(hcID, reason.ID())
+			if err != nil {
+				metrics.IncrementFailedLimitedSupportRemoved(fn.Name)
+				metrics.SetResponseMetricFailure("clusters_mgmt")
+				return fmt.Errorf("limited support reason with ID '%s' couldn't be removed for cluster %s, err: %w", reason.ID(), hcID, err)
+			}
+			metrics.IncrementLimitedSupportRemovedCount(fn.Name)
+		}
+	}
+	// Reset the metric if we got correct Response from OCM
+	metrics.ResetMetric(metrics.MetricResponseFailure)
+
+	// Update MNFR Item for resolved notifications sent
+	ri, err := mfnr.UpdateNotificationRecordItem(fn.Name, hcID, false)
+	if err != nil || ri == nil {
+		log.WithFields(log.Fields{LogFieldNotificationName: fn.Name, LogFieldManagedNotification: mfn.Name}).WithError(err).Error("unable to update notification status in CR")
+		return err
+	}
+
+	err = h.c.Status().Update(context.TODO(), mfnr)
+	if err != nil {
+		log.WithFields(log.Fields{LogFieldNotificationName: fn.Name, LogFieldManagedNotification: mfn.Name}).WithError(err).Error("unable to update notification status on cluster")
+		return err
+	}
+
+	return nil
+}
+
+// processFiringAlert handles the pre-check verification and sending of a notification for a particular alert
+// and returns an error if that process completed successfully or false otherwise
+func (h *WebhookRHOBSReceiverHandler) processFiringAlert(alert template.Alert, mfn oav1alpha1.ManagedFleetNotification, mfnr *oav1alpha1.ManagedFleetNotificationRecord) error {
+	fn := mfn.Spec.FleetNotification
+	mcID := alert.Labels[AMLabelAlertMCID]
+	hcID := alert.Labels[AMLabelAlertHCID]
+
+	// Check if a firing notification can be sent
+	canBeSent, err := mfnr.FiringCanBeSent(mcID, fn.Name, hcID)
 	if err != nil {
 		log.WithError(err).WithField(LogFieldNotificationName, fn.Name).Error("unable to fetch NotificationrecordByName or NotificationRecordItem")
 		return err
@@ -235,24 +256,7 @@ func (h *WebhookRHOBSReceiverHandler) processFiringAlert(alert template.Alert, m
 		return nil
 	}
 
-	isLSNotification, ok := alert.Labels[AMLabelLimitedSupportNotification]
-
-	if !ok || isLSNotification == "false" { // Notification is for a service log
-		// Send the servicelog for the alert
-		log.WithFields(log.Fields{LogFieldNotificationName: fn.Name}).Info("will send servicelog for notification")
-		err = ocm.BuildAndSendServiceLog(
-			ocm.NewServiceLogBuilder(fn.Summary, fn.NotificationMessage, "", hcID, fn.Severity, fn.LogType, fn.References),
-			true, &alert, h.ocm)
-		if err != nil {
-			log.WithError(err).WithFields(log.Fields{LogFieldNotificationName: fn.Name, LogFieldIsFiring: true}).Error("unable to send service log for notification")
-			metrics.SetResponseMetricFailure("service_logs")
-			metrics.CountFailedServiceLogs(fn.Name)
-			return err
-		}
-		// Count the service log sent by the template name
-		metrics.CountServiceLogSent(fn.Name, "firing")
-
-	} else { // Notification is for limited support
+	if mfn.Spec.FleetNotification.LimitedSupport {
 		// Send the limited support for the alert
 		log.WithFields(log.Fields{LogFieldNotificationName: fn.Name}).Info("will send limited support for notification")
 		builder := &cmv1.LimitedSupportReasonBuilder{}
@@ -270,12 +274,25 @@ func (h *WebhookRHOBSReceiverHandler) processFiringAlert(alert template.Alert, m
 			return fmt.Errorf("limited support reason for fleetnotification '%s' could not be set for cluster %s, err: %w", fn.Name, hcID, err)
 		}
 		metrics.IncrementLimitedSupportSentCount(fn.Name)
+	} else { // Notification is for a service log
+		log.WithFields(log.Fields{LogFieldNotificationName: fn.Name}).Info("will send servicelog for notification")
+		err = ocm.BuildAndSendServiceLog(
+			ocm.NewServiceLogBuilder(fn.Summary, fn.NotificationMessage, "", hcID, fn.Severity, fn.LogType, fn.References),
+			true, &alert, h.ocm)
+		if err != nil {
+			log.WithError(err).WithFields(log.Fields{LogFieldNotificationName: fn.Name, LogFieldIsFiring: true}).Error("unable to send service log for notification")
+			metrics.SetResponseMetricFailure("service_logs")
+			metrics.CountFailedServiceLogs(fn.Name)
+			return err
+		}
+		// Count the service log sent by the template name
+		metrics.CountServiceLogSent(fn.Name, "firing")
 	}
 
 	// Reset the metric if we got correct Response from OCM
 	metrics.ResetMetric(metrics.MetricResponseFailure)
 
-	ri, err := mfnr.UpdateNotificationRecordItem(fn.Name, hcID)
+	ri, err := mfnr.UpdateNotificationRecordItem(fn.Name, hcID, true)
 	if err != nil || ri == nil {
 		log.WithFields(log.Fields{LogFieldNotificationName: fn.Name, LogFieldManagedNotification: mfn.Name}).WithError(err).Error("unable to update notification status in CR")
 		return err
