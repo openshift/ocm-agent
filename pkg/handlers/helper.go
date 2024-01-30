@@ -81,13 +81,8 @@ func isValidAlert(alert template.Alert, fleetMode bool) bool {
 	}
 
 	if fleetMode {
-		// An alert in fleet mode should come from a source of HCP/DP
-		if name, ok := alert.Labels[AMLabelAlertSourceName]; ok {
-			if name != AMLabelAlertSourceHCP && name != AMLabelAlertSourceDP {
-				log.WithField(LogFieldAlertname, alertname).Error("fleet mode alert has no valid source")
-				return false
-			}
-		} else {
+		// An alert in fleet mode must have a source label
+		if _, ok := alert.Labels[AMLabelAlertSourceName]; !ok {
 			log.WithField(LogFieldAlertname, alertname).Error("fleet mode alert has no source")
 			return false
 		}

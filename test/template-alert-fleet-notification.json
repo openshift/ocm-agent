@@ -15,7 +15,7 @@
           "severity": "info",
           "_mc_id": "${MANAGEMENT_CLUSTER_ID}",
           "_id": "${HC_ID}",
-          "source": "HCP"
+          "source": "MC"
         },
         "annotations": {
           "description": ""
