@@ -12,7 +12,7 @@ updates:
         # don't automatically upgrade golang version here
   - package-ecosystem: "gomod"
     directory: "/"
-    allow:
-      - dependency-name: "github.com/openshift/ocm-agent-operator"
+    #allow:
+    #  - dependency-name: "github.com/openshift/ocm-agent-operator"
     schedule:
       interval: 'daily'
