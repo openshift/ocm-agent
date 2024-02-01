@@ -86,6 +86,7 @@ sleep 3
 EXPECTED_COUNT=$((${PRE_LS_COUNT} + 1))
 check-limited-support-count ${EXTERNAL_ID} ${EXPECTED_COUNT}
 
+
 # Test Limited support for resolved alert using defaults. 
 echo
 echo "### TEST 3 - Remove Limited Support for resolved alert"
@@ -96,4 +97,19 @@ create-alert --hc-id ${EXTERNAL_ID} --mc-id $random_mc_id --template "$TEMPLATE_
 post-alert ${ALERT_FILE}
 sleep 3
 EXPECTED_COUNT=$((${PRE_LS_COUNT} - 1))
+check-limited-support-count ${EXTERNAL_ID} ${EXPECTED_COUNT}
+
+# Test parallel execution 
+echo
+echo "### TEST 4 - Parallel execution"
+echo
+ALERT_FILE_FIRING=/tmp/firing-alert.json
+create-alert --hc-id ${EXTERNAL_ID} --mc-id $random_mc_id --template "$TEMPLATE_ALERT_JSON_FILE" -t "oidc-deleted-notification" > ${ALERT_FILE_FIRING}
+PRE_LS_COUNT=$(get-limited-support-count ${EXTERNAL_ID})
+
+for ((i=1; i<=10; i++)); do
+  post-alert ${ALERT_FILE_FIRING} &
+done
+sleep 15 # Wait for everything to be handled
+EXPECTED_COUNT=$((${PRE_LS_COUNT} + 10))
 check-limited-support-count ${EXTERNAL_ID} ${EXPECTED_COUNT}

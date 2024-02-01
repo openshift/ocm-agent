@@ -114,7 +114,7 @@ func NewFleetNotification() ocmagentv1alpha1.FleetNotification {
 func NewManagedFleetNotification(limited_support bool) ocmagentv1alpha1.ManagedFleetNotification {
 	mfn := ocmagentv1alpha1.ManagedFleetNotification{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-mfn",
+			Name:      TestNotificationName,
 			Namespace: "openshift-ocm-agent-operator",
 		},
 		Spec: ocmagentv1alpha1.ManagedFleetNotificationSpec{
@@ -138,6 +138,27 @@ func NewManagedFleetNotificationRecord() ocmagentv1alpha1.ManagedFleetNotificati
 		Status: ocmagentv1alpha1.ManagedFleetNotificationRecordStatus{
 			ManagementCluster:        TestManagedClusterID,
 			NotificationRecordByName: nil,
+		},
+	}
+}
+
+func NewManagedFleetNotificationRecordWithStatus() ocmagentv1alpha1.ManagedFleetNotificationRecord {
+	return ocmagentv1alpha1.ManagedFleetNotificationRecord{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TestManagedClusterID,
+			Namespace: "openshift-ocm-agent-operator",
+		},
+		Status: ocmagentv1alpha1.ManagedFleetNotificationRecordStatus{
+			ManagementCluster: TestManagedClusterID,
+			NotificationRecordByName: []ocmagentv1alpha1.NotificationRecordByName{
+				{
+					NotificationName: TestNotificationName,
+					ResendWait:       0,
+					NotificationRecordItems: []ocmagentv1alpha1.NotificationRecordItem{
+						{HostedClusterID: TestHostedClusterID},
+					},
+				},
+			},
 		},
 	}
 }
@@ -172,7 +193,7 @@ func NewTestAlert(resolved bool, fleet bool) template.Alert {
 	}
 
 	if fleet {
-		alert.Labels["source"] = "HCP"
+		alert.Labels["source"] = "MC"
 		alert.Labels["_mc_id"] = TestManagedClusterID
 		alert.Labels["_id"] = TestHostedClusterID
 	}

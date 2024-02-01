@@ -38,6 +38,7 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 		testMFN               oav1alpha1.ManagedFleetNotification
 		testLimitedSupportMFN oav1alpha1.ManagedFleetNotification
 		testMFNR              oav1alpha1.ManagedFleetNotificationRecord
+		testMFNRWithStatus    oav1alpha1.ManagedFleetNotificationRecord
 		mockStatusWriter      *clientmocks.MockStatusWriter
 		serviceLog            *ocm.ServiceLog
 		limitedSupportReason  *cmv1.LimitedSupportReason
@@ -58,6 +59,7 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 		testMFN = testconst.NewManagedFleetNotification(false)
 		testLimitedSupportMFN = testconst.NewManagedFleetNotification(true)
 		testMFNR = testconst.NewManagedFleetNotificationRecord()
+		testMFNRWithStatus = testconst.NewManagedFleetNotificationRecordWithStatus()
 		serviceLog = testconst.NewTestServiceLog(
 			ocm.ServiceLogActivePrefix+": "+testconst.ServiceLogSummary,
 			testconst.ServiceLogFleetDesc,
@@ -72,9 +74,9 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 		server.Close()
 	})
 
-	Context("When processing an alert", func() {
-		Context("When a fleet notification record doesn't exist", func() {
-			It("Creates one", func() {
+	Context("When calling updateManagedFleetNotificationRecord", func() {
+		Context("When the fleet record and record and status don't exist yet", func() {
+			It("Creates it and sets the status", func() {
 				gomock.InOrder(
 					// Fetch the MFNR
 					mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.NewNotFound(schema.GroupResource{
@@ -86,37 +88,55 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 							Expect(mfnr.Name).To(Equal(testconst.TestManagedClusterID))
 							return nil
 						}),
-					// Send the SL
-					mockOCMClient.EXPECT().SendServiceLog(serviceLog).Return(nil),
+					// Initially add the MC name to the status as it isn't set yet
+					mockClient.EXPECT().Status().Return(mockStatusWriter),
+					mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
+
+					// Update status for the handled alert
 					mockClient.EXPECT().Status().Return(mockStatusWriter),
 					mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
 				)
 
-				err := testHandler.processAlert(testAlertFiring, testMFN)
+				err := testHandler.updateManagedFleetNotificationRecord(testAlertFiring, &testMFN)
 				Expect(err).ShouldNot(HaveOccurred())
 			})
 		})
+		Context("When the record and status already exists", func() {
+			It("Updates the existing record and updates the status for the notification type", func() {
+				gomock.InOrder(
+					// Fetch the MFNR
+					mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNRWithStatus),
 
+					// Update status for the handled alert
+					mockClient.EXPECT().Status().Return(mockStatusWriter),
+					mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
+				)
+
+				err := testHandler.updateManagedFleetNotificationRecord(testAlertFiring, &testMFN)
+				Expect(err).ShouldNot(HaveOccurred())
+			})
+		})
+	})
+
+	Context("When processing a firing alert", func() {
 		Context("When the MFN of type limited support for a firing alert", func() {
 			It("Sends limited support", func() {
 				gomock.InOrder(
 					// Fetch the MFNR
-					mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.NewNotFound(schema.GroupResource{
-						Group: oav1alpha1.GroupVersion.Group, Resource: "ManagedFleetNotificationRecord"}, testconst.TestManagedClusterID),
-					),
-					// Create the MFNR
-					mockClient.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
-						func(ctx context.Context, mfnr *oav1alpha1.ManagedFleetNotificationRecord, co ...client.CreateOption) error {
-							Expect(mfnr.Name).To(Equal(testconst.TestManagedClusterID))
-							return nil
-						}),
+					mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNRWithStatus),
+
 					// Send limited support
 					mockOCMClient.EXPECT().SendLimitedSupport(testconst.TestHostedClusterID, limitedSupportReason).Return(nil),
+
+					// Fetch the MFNR and update it's status
+					mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNRWithStatus),
+
+					// Update status for the handled alert
 					mockClient.EXPECT().Status().Return(mockStatusWriter),
 					mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
 				)
 
-				err := testHandler.processAlert(testAlertFiring, testLimitedSupportMFN)
+				err := testHandler.processFiringAlert(testAlertFiring, &testLimitedSupportMFN)
 				Expect(err).ShouldNot(HaveOccurred())
 			})
 		})
@@ -124,25 +144,18 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 		Context("When the MFN of type limited support for a firing alert", func() {
 			It("Removes no limited support if none exist", func() {
 				gomock.InOrder(
-					// Fetch the MFNR
-					mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.NewNotFound(schema.GroupResource{
-						Group: oav1alpha1.GroupVersion.Group, Resource: "ManagedFleetNotificationRecord"}, testconst.TestManagedClusterID),
-					),
-					// Create the MFNR
-					mockClient.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
-						func(ctx context.Context, mfnr *oav1alpha1.ManagedFleetNotificationRecord, co ...client.CreateOption) error {
-							Expect(mfnr.Name).To(Equal(testconst.TestManagedClusterID))
-							return nil
-						}),
-
 					// Get limited support reasons, returns empty so no limited supports will be removed
 					mockOCMClient.EXPECT().GetLimitedSupportReasons(testconst.TestHostedClusterID).Return([]*cmv1.LimitedSupportReason{}, nil),
-					// MFNR status is updated
+
+					// Fetch the MFNR
+					mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNRWithStatus),
+
+					// Update status for the handled alert
 					mockClient.EXPECT().Status().Return(mockStatusWriter),
 					mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
 				)
 
-				err := testHandler.processAlert(testAlertResolved, testLimitedSupportMFN)
+				err := testHandler.processAlert(testAlertResolved, &testLimitedSupportMFN)
 				Expect(err).ShouldNot(HaveOccurred())
 			})
 			It("Removes limited support if it was previously set", func() {
@@ -150,27 +163,20 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 				limitedSupportReason, _ = cmv1.NewLimitedSupportReason().Summary(testMFN.Spec.FleetNotification.Summary).Details(testMFN.Spec.FleetNotification.NotificationMessage).ID("1234").DetectionType(cmv1.DetectionTypeManual).Build()
 
 				gomock.InOrder(
-					// Fetch the MFNR
-					mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.NewNotFound(schema.GroupResource{
-						Group: oav1alpha1.GroupVersion.Group, Resource: "ManagedFleetNotificationRecord"}, testconst.TestManagedClusterID),
-					),
-					// Create the MFNR
-					mockClient.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
-						func(ctx context.Context, mfnr *oav1alpha1.ManagedFleetNotificationRecord, co ...client.CreateOption) error {
-							Expect(mfnr.Name).To(Equal(testconst.TestManagedClusterID))
-							return nil
-						}),
-
 					// LS reasons are fetched
 					mockOCMClient.EXPECT().GetLimitedSupportReasons(testconst.TestHostedClusterID).Return([]*cmv1.LimitedSupportReason{limitedSupportReason}, nil),
 					// LS reason matching for the MFN is removed
 					mockOCMClient.EXPECT().RemoveLimitedSupport(testconst.TestHostedClusterID, limitedSupportReason.ID()).Return(nil),
-					// MFNR status is updated
+
+					// Fetch the MFNR
+					mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNRWithStatus),
+
+					// Update status for the handled alert
 					mockClient.EXPECT().Status().Return(mockStatusWriter),
 					mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
 				)
 
-				err := testHandler.processAlert(testAlertResolved, testLimitedSupportMFN)
+				err := testHandler.processAlert(testAlertResolved, &testLimitedSupportMFN)
 				Expect(err).ShouldNot(HaveOccurred())
 			})
 		})
@@ -190,26 +196,16 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 						mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
 						// Send the SL
 						mockOCMClient.EXPECT().SendServiceLog(serviceLog).Return(nil),
+
+						// Update SL sent status
+						mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNRWithStatus),
 						mockClient.EXPECT().Status().Return(mockStatusWriter),
 						mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
 					)
 
-					err := testHandler.processAlert(testAlertFiring, testMFN)
+					err := testHandler.processAlert(testAlertFiring, &testMFN)
 					Expect(err).ShouldNot(HaveOccurred())
 				})
-			})
-			It("Uses the existing one", func() {
-				gomock.InOrder(
-					// Fetch the MFNR
-					mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNR),
-					// Send the SL
-					mockOCMClient.EXPECT().SendServiceLog(serviceLog).Return(nil),
-					mockClient.EXPECT().Status().Return(mockStatusWriter),
-					mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
-				)
-
-				err := testHandler.processAlert(testAlertFiring, testMFN)
-				Expect(err).ShouldNot(HaveOccurred())
 			})
 			Context("When a notification record doesn't exist", func() {
 				It("Creates one", func() {
@@ -222,11 +218,22 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 							NotificationRecordItems: []oav1alpha1.NotificationRecordItem{},
 						},
 					}
+					testMFNR.Status.ManagementCluster = testconst.TestManagedClusterID
+
 					gomock.InOrder(
 						// Fetch the MFNR
 						mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNR),
+						mockClient.EXPECT().Status().Return(mockStatusWriter),
+						mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
+
 						// Send the SL
 						mockOCMClient.EXPECT().SendServiceLog(serviceLog).Return(nil),
+
+						// Update status (create the record item)
+						mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNR),
+						mockClient.EXPECT().Status().Return(mockStatusWriter),
+						mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
+
 						mockClient.EXPECT().Status().Return(mockStatusWriter),
 						mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 							func(ctx context.Context, mfnr *oav1alpha1.ManagedFleetNotificationRecord, co ...client.UpdateOptions) error {
@@ -236,7 +243,7 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 								return nil
 							}),
 					)
-					err := testHandler.processAlert(testAlertFiring, testMFN)
+					err := testHandler.processAlert(testAlertFiring, &testMFN)
 					Expect(err).ShouldNot(HaveOccurred())
 				})
 			})
@@ -261,6 +268,8 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 						mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNR),
 						// Send the SL
 						mockOCMClient.EXPECT().SendServiceLog(serviceLog).Return(nil),
+						// Update existing MFNR item
+						mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNR),
 						mockClient.EXPECT().Status().Return(mockStatusWriter),
 						mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 							func(ctx context.Context, mfnr *oav1alpha1.ManagedFleetNotificationRecord, co ...client.UpdateOptions) error {
@@ -270,7 +279,7 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 								return nil
 							}),
 					)
-					err := testHandler.processAlert(testAlertFiring, testMFN)
+					err := testHandler.processAlert(testAlertFiring, &testMFN)
 					Expect(err).ShouldNot(HaveOccurred())
 				})
 			})
@@ -283,11 +292,19 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 							NotificationRecordItems: []oav1alpha1.NotificationRecordItem{},
 						},
 					}
+					testMFNR.Status.ManagementCluster = testconst.TestManagedClusterID
+
 					gomock.InOrder(
 						// Fetch the MFNR
 						mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNR),
+						// Update the status
+						mockClient.EXPECT().Status().Return(mockStatusWriter),
+						mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
 						// Send the SL
 						mockOCMClient.EXPECT().SendServiceLog(serviceLog).Return(nil),
+
+						// Re-fetch the MFNR for the status update
+						mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNR),
 						mockClient.EXPECT().Status().Return(mockStatusWriter),
 						mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 							func(ctx context.Context, mfnr *oav1alpha1.ManagedFleetNotificationRecord, co ...client.UpdateOptions) error {
@@ -296,7 +313,7 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 								return nil
 							}),
 					)
-					err := testHandler.processAlert(testAlertFiring, testMFN)
+					err := testHandler.processAlert(testAlertFiring, &testMFN)
 					Expect(err).ShouldNot(HaveOccurred())
 				})
 			})
@@ -321,7 +338,7 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 						mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNR),
 					)
 
-					err := testHandler.processAlert(testAlertFiring, testMFN)
+					err := testHandler.processAlert(testAlertFiring, &testMFN)
 					Expect(err).ShouldNot(HaveOccurred())
 				})
 			})
