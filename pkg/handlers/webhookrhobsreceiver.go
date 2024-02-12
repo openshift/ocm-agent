@@ -193,12 +193,12 @@ func (h *WebhookRHOBSReceiverHandler) processFiringAlert(alert template.Alert, m
 	}
 
 	// Check if a firing notification can be sent
-	canBeSent, err := mfnr.FiringCanBeSent(mcID, fn.Name, hcID)
+	canBeSent, err := firingCanBeSent(alert, mfn, mfnr)
 	if err != nil {
-		log.WithError(err).WithField(LogFieldNotificationName, fn.Name).Error("unable to fetch NotificationrecordByName or NotificationRecordItem")
+		log.WithError(err).WithField(LogFieldNotificationName, fn.Name).Error("unable to verify if firing can be sent")
 		return err
 	}
-	// There's no need to send a service log, so just return
+	// There's no need to send a notification so just return
 	if !canBeSent {
 		log.WithFields(log.Fields{"notification": fn.Name,
 			LogFieldResendInterval: fn.ResendWait,
@@ -352,4 +352,40 @@ func (h *WebhookRHOBSReceiverHandler) updateManagedFleetNotificationRecord(alert
 	})
 
 	return err
+}
+
+// firingCanBeSent wraps the api's `mfnr.FiringCanBeSent`
+func firingCanBeSent(alert template.Alert, mfn *oav1alpha1.ManagedFleetNotification, mfnr *oav1alpha1.ManagedFleetNotificationRecord) (bool, error) {
+	fn := mfn.Spec.FleetNotification
+	mcID := alert.Labels[AMLabelAlertMCID]
+	hcID := alert.Labels[AMLabelAlertHCID]
+
+	// Check if a firing notification can be sent based on its last sent timestamp
+	canBeSent, err := mfnr.FiringCanBeSent(mcID, fn.Name, hcID)
+	if err != nil {
+		log.WithError(err).WithField(LogFieldNotificationName, fn.Name).Error("unable to fetch NotificationrecordByName or NotificationRecordItem")
+		return false, err
+	}
+	if !canBeSent {
+		return false, nil
+	}
+
+	// Check if a limited support notification can be sent:
+	// if it was already sent but never resolved, we don't want to resent it.
+	// This happens when e.g. alertmanager restarts and loses its state.
+	if mfn.Spec.FleetNotification.LimitedSupport {
+		// At this point we know we have a record item, otherwise the above would have failed.
+		ri, err := mfnr.GetNotificationRecordItem(mcID, fn.Name, hcID)
+		if err != nil {
+			return false, fmt.Errorf("unable to get record item: %w", err)
+		}
+
+		// Make sure we didn't already send limited support - this happens in cases
+		// where alertmanager restarts.
+		if ri.FiringNotificationSentCount > ri.ResolvedNotificationSentCount {
+			log.WithFields(log.Fields{"notification": fn.Name}).Info("not sending a limited support notification as the previous one didn't resolve yet")
+			return false, nil
+		}
+	}
+	return true, nil
 }

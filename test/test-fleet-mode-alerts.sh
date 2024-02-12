@@ -85,6 +85,10 @@ post-alert ${ALERT_FILE}
 sleep 3
 EXPECTED_COUNT=$((${PRE_LS_COUNT} + 1))
 check-limited-support-count ${EXTERNAL_ID} ${EXPECTED_COUNT}
+# Resend alert - we should not resend limited support as it never resolved
+post-alert ${ALERT_FILE}
+sleep 3
+check-limited-support-count ${EXTERNAL_ID} ${EXPECTED_COUNT}
 
 
 # Test Limited support for resolved alert using defaults. 
