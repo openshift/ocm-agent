@@ -139,6 +139,20 @@ var _ = Describe("RHOBS Webhook Handlers", func() {
 				err := testHandler.processFiringAlert(testAlertFiring, &testLimitedSupportMFN)
 				Expect(err).ShouldNot(HaveOccurred())
 			})
+			Context("When the MFN of type limited support for a firing alert and a previous firing notification hasn't resolved yet", func() {
+				It("Doesn't re-send limited support", func() {
+					// Increment firing status (firing = 1 and resolved = 0)
+					_, err := testMFNRWithStatus.UpdateNotificationRecordItem(testconst.TestNotificationName, testconst.TestHostedClusterID, true)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					// Fetch the MFNR
+					mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testMFNRWithStatus)
+					// Return right after as there was already a LS sent that didn't resolve yet
+
+					err = testHandler.processFiringAlert(testAlertFiring, &testLimitedSupportMFN)
+					Expect(err).ShouldNot(HaveOccurred())
+				})
+			})
 		})
 
 		Context("When the MFN of type limited support for a firing alert", func() {
