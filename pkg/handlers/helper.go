@@ -24,6 +24,7 @@ const (
 	AMLabelAlertHCID           = "_id"
 
 	LogFieldNotificationName           = "notification"
+	LogFieldNotificationRecordName     = "notification_record"
 	LogFieldResendInterval             = "resend_interval"
 	LogFieldAlertname                  = "alertname"
 	LogFieldAlert                      = "alert"

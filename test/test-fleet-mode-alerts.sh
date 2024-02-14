@@ -103,6 +103,7 @@ sleep 3
 EXPECTED_COUNT=$((${PRE_LS_COUNT} - 1))
 check-limited-support-count ${EXTERNAL_ID} ${EXPECTED_COUNT}
 
+random_mc_id=$(tr -dc 'a-z' < /dev/urandom | head -c 5)
 # Test parallel execution 
 echo
 echo "### TEST 4 - Parallel execution"
