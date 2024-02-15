@@ -286,7 +286,7 @@ func (h *WebhookRHOBSReceiverHandler) updateManagedFleetNotificationRecord(alert
 		// Fetch the ManagedFleetNotificationRecord, or create it if it does not already exist
 		mfnr, err := h.getOrCreateManagedFleetNotificationRecord(mcID, hcID, mfn)
 		if err != nil {
-			log.WithFields(log.Fields{LogFieldNotificationRecordName: mfnr.Name}).Infof("getOrCreate of managedfleetnotificationrecord failed: %s. Retrying in case of conflict error", err.Error())
+			log.WithFields(log.Fields{LogFieldNotificationRecordName: mcID}).Infof("getOrCreate of managedfleetnotificationrecord failed: %s. Retrying in case of conflict error", err.Error())
 			return err
 		}
 
