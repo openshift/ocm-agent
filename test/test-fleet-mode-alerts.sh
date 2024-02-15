@@ -29,8 +29,10 @@ TEST_DIR=${GIT_ROOT}/test
 alias create-alert=${TEST_DIR}/util/create-alert.sh
 alias post-alert=${TEST_DIR}/util/post-alert.sh
 source ${TEST_DIR}/util/ocm.sh
+source ${TEST_DIR}/util/oc.sh
 
 TEMPLATE_ALERT_JSON_FILE="${TEST_DIR}/template-alert-fleet-notification.json"
+TMP_ALERT_FILE=/tmp/alert_oa_integration.json
 
 # Can be used for --start-date and/or --end-date tests if required
 TODAY_DATE=$(date -u +%Y-%m-%d)
@@ -59,62 +61,63 @@ PreCheck
 echo
 echo "### TEST 1 - Send Service log for a firing alert"
 echo
-ALERT_FILE=/tmp/firing-alert.json
 PRE_SL_COUNT=$(get-servicelog-count ${EXTERNAL_ID})
 echo "Pre-service-log count: $PRE_LS_COUNT"
 # We are using a random MC id to make sure we get a new managedfleetnotificationrecord object
 random_mc_id=$(tr -dc 'a-z' < /dev/urandom | head -c 5)
-create-alert --hc-id ${EXTERNAL_ID} --mc-id $random_mc_id -t "audit-webhook-error-putting-minimized-cloudwatch-log" --template "$TEMPLATE_ALERT_JSON_FILE" > ${ALERT_FILE}
-post-alert ${ALERT_FILE}
+create-alert --hc-id ${EXTERNAL_ID} --mc-id $random_mc_id -t "audit-webhook-error-putting-minimized-cloudwatch-log" --template "$TEMPLATE_ALERT_JSON_FILE" > ${TMP_ALERT_FILE}
+post-alert ${TMP_ALERT_FILE}
 sleep 3
 check-servicelog-count ${EXTERNAL_ID} ${PRE_SL_COUNT} 1
+check-mfnri-count ${random_mc_id} ${EXTERNAL_ID} 1 0 # Expect 1 firing, 0 resolved
 
 
 # We are using a random MC id to make sure we get a new managedfleetnotificationrecord object
 # And avoid the resend timeout
 # For test 2 and 3 they are shared, as we want to map to the same record (fire and resolve)
-random_mc_id=$(tr -dc 'a-z' < /dev/urandom | head -c 5)
 # Test Limited Support for a firing alert using defaults
 echo
 echo "### TEST 2 - Send Limited Support for a firing alert"
 echo
-ALERT_FILE=/tmp/firing-alert.json
+random_mc_id=$(tr -dc 'a-z' < /dev/urandom | head -c 5)
 PRE_LS_COUNT=$(get-limited-support-count ${EXTERNAL_ID})
-create-alert --hc-id ${EXTERNAL_ID} --mc-id $random_mc_id -t "oidc-deleted-notification" --template "$TEMPLATE_ALERT_JSON_FILE" > ${ALERT_FILE}
-post-alert ${ALERT_FILE}
+create-alert --hc-id ${EXTERNAL_ID} --mc-id $random_mc_id -t "oidc-deleted-notification" --template "$TEMPLATE_ALERT_JSON_FILE" > ${TMP_ALERT_FILE}
+post-alert ${TMP_ALERT_FILE}
 sleep 3
 EXPECTED_COUNT=$((${PRE_LS_COUNT} + 1))
 check-limited-support-count ${EXTERNAL_ID} ${EXPECTED_COUNT}
-# Resend alert - we should not resend limited support as it never resolved
-post-alert ${ALERT_FILE}
+check-mfnri-count ${random_mc_id} ${EXTERNAL_ID} 1 0 # Expect 1 firing, 0 resolved
+
+echo
+echo "### TEST 3 - Resend Limited Support for a firing alert without a resolve inbetween"
+echo
 sleep 3
 check-limited-support-count ${EXTERNAL_ID} ${EXPECTED_COUNT}
-
+check-mfnri-count ${random_mc_id} ${EXTERNAL_ID} 1 0 # Expect 1 firing, 0 resolved
 
 # Test Limited support for resolved alert using defaults. 
 echo
-echo "### TEST 3 - Remove Limited Support for resolved alert"
+echo "### TEST 4 - Remove Limited Support for resolved alert"
 echo
-ALERT_FILE=/tmp/resolved-alert.json
 PRE_LS_COUNT=$(get-limited-support-count ${EXTERNAL_ID})
-create-alert --hc-id ${EXTERNAL_ID} --mc-id $random_mc_id --template "$TEMPLATE_ALERT_JSON_FILE" -t "oidc-deleted-notification" --alert-status resolved > ${ALERT_FILE}
-post-alert ${ALERT_FILE}
+create-alert --hc-id ${EXTERNAL_ID} --mc-id $random_mc_id --template "$TEMPLATE_ALERT_JSON_FILE" -t "oidc-deleted-notification" --alert-status resolved > ${TMP_ALERT_FILE}
+post-alert ${TMP_ALERT_FILE}
 sleep 3
 EXPECTED_COUNT=$((${PRE_LS_COUNT} - 1))
 check-limited-support-count ${EXTERNAL_ID} ${EXPECTED_COUNT}
+check-mfnri-count ${random_mc_id} ${EXTERNAL_ID} 1 1 # Expect 1 firing, 1 resolved
 
+# Test parallel execution for a single record
+echo
+echo "### TEST 5 - Parallel execution"
+echo
 random_mc_id=$(tr -dc 'a-z' < /dev/urandom | head -c 5)
-# Test parallel execution 
-echo
-echo "### TEST 4 - Parallel execution"
-echo
-ALERT_FILE_FIRING=/tmp/firing-alert.json
-create-alert --hc-id ${EXTERNAL_ID} --mc-id $random_mc_id --template "$TEMPLATE_ALERT_JSON_FILE" -t "oidc-deleted-notification" > ${ALERT_FILE_FIRING}
-PRE_LS_COUNT=$(get-limited-support-count ${EXTERNAL_ID})
+create-alert --hc-id ${EXTERNAL_ID} --mc-id $random_mc_id -t "audit-webhook-error-putting-minimized-cloudwatch-log" --template "$TEMPLATE_ALERT_JSON_FILE" > ${TMP_ALERT_FILE}
+PRE_SL_COUNT=$(get-servicelog-count ${EXTERNAL_ID})
 
 for ((i=1; i<=10; i++)); do
-  post-alert ${ALERT_FILE_FIRING} &
+  post-alert ${TMP_ALERT_FILE} &
 done
-sleep 15 # Wait for everything to be handled
-EXPECTED_COUNT=$((${PRE_LS_COUNT} + 10))
-check-limited-support-count ${EXTERNAL_ID} ${EXPECTED_COUNT}
+sleep 25 # Wait for everything to be handled
+check-servicelog-count ${EXTERNAL_ID} ${PRE_SL_COUNT} 10
+check-mfnri-count ${random_mc_id} ${EXTERNAL_ID} 10 0 # Expect 10 firing, 0 resolved
