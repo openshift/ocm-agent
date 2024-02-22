@@ -1,21 +1,20 @@
 package handlers
 
 import (
-	"net/http"
-
-	sdk "github.com/openshift-online/ocm-sdk-go"
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	"github.com/openshift/ocm-agent/pkg/ocm"
 	log "github.com/sirupsen/logrus"
+	"net/http"
 )
 
 type ClusterHandler struct {
-	ocm       *sdk.Connection
+	ocm       ocm.OCMClient
 	clusterId string
 }
 
 // For /api/clusters_mgmt/v1/clusters/{cluster_id}
 // https://api.openshift.com/#/default/get_api_clusters_mgmt_v1_clusters__cluster_id_
-func NewClusterHandler(o *sdk.Connection, clusterId string) *ClusterHandler {
+func NewClusterHandler(o ocm.OCMClient, clusterId string) *ClusterHandler {
 	log.Debug("Creating new cluster object Handler")
 	return &ClusterHandler{
 		ocm:       o,
@@ -23,23 +22,12 @@ func NewClusterHandler(o *sdk.Connection, clusterId string) *ClusterHandler {
 	}
 }
 
-// https://pkg.go.dev/github.com/openshift-online/ocm-sdk-go@v0.1.382/clustersmgmt/v1#Cluster
-func (g *ClusterHandler) GetCluster() (*cmv1.Cluster, string, error) {
-	log.Debugf("Sending get cluster object request to OCM API: %s", g.clusterId)
-	request := g.ocm.ClustersMgmt().V1().Clusters().Cluster(g.clusterId)
-	resp, err := request.Get().Send()
-	if err != nil {
-		return nil, resp.Header().Get(OCM_OPERATION_ID_HEADER), err
-	}
-	return resp.Body(), resp.Header().Get(OCM_OPERATION_ID_HEADER), nil
-}
-
 // Proxies to
 // https://api.openshift.com/#/default/get_api_clusters_mgmt_v1_clusters__cluster_id_
 func (g *ClusterHandler) ServeClusterGet(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		cluster, operationIdHeader, err := g.GetCluster()
+		cluster, operationIdHeader, err := g.ocm.GetCluster(g.clusterId)
 
 		w.Header().Set(OCM_OPERATION_ID_HEADER, operationIdHeader)
 		if err != nil {
