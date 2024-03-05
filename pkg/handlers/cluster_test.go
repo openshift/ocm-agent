@@ -15,6 +15,7 @@ import (
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	. "github.com/openshift-online/ocm-sdk-go/testing"
 	"github.com/openshift/ocm-agent/pkg/handlers"
+	"github.com/openshift/ocm-agent/pkg/ocm"
 )
 
 var getCluster = `{
@@ -210,7 +211,7 @@ var _ = Describe("ClusterHandler", func() {
 			URL(apiServer.URL()).
 			Build()
 
-		clusterHandler = handlers.NewClusterHandler(sdkclient, internalId)
+		clusterHandler = handlers.NewClusterHandler(ocm.NewOcmClient(sdkclient), internalId)
 		responseRecorder = httptest.NewRecorder()
 
 	})
@@ -255,6 +256,23 @@ var _ = Describe("ClusterHandler", func() {
 		makeOCMRequest(
 			"GET",
 			http.StatusBadRequest,
+			fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s", internalId),
+			errorMessage,
+		)
+
+		req := httptest.NewRequest("GET", "/cluster", nil)
+
+		clusterHandler.ServeClusterGet(responseRecorder, req)
+
+		Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
+		Expect(responseRecorder.Result().StatusCode).To(Equal(http.StatusBadRequest))
+	})
+
+	It("should return an error if ocm returns a 3xx response", func() {
+		errorMessage := `{"message": "permanently redirected"}`
+		makeOCMRequest(
+			"GET",
+			http.StatusPermanentRedirect,
 			fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s", internalId),
 			errorMessage,
 		)

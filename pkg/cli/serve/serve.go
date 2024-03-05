@@ -306,13 +306,13 @@ func (o *serveOptions) Run() error {
 				r.Use(metrics.PrometheusMiddleware)
 			case config.ClustersService:
 				o.logger.Info("Initialising UpgradePolicy handlers")
-				upgradePolicyHandler := handlers.NewUpgradePoliciesHandler(sdkclient, internalID)
+				upgradePolicyHandler := handlers.NewUpgradePoliciesHandler(ocmclient, internalID)
 				// See https://github.com/gorilla/mux#examples
 				r.HandleFunc("/upgrade_policies", upgradePolicyHandler.ServeUpgradePolicyList)
 				r.HandleFunc("/upgrade_policies/{upgrade_policy_id}", upgradePolicyHandler.ServeUpgradePolicyGet)
 				r.HandleFunc("/upgrade_policies/{upgrade_policy_id}/state", upgradePolicyHandler.ServeUpgradePolicyState)
 				o.logger.Info("Initialising Cluster handlers")
-				clusterHandler := handlers.NewClusterHandler(sdkclient, internalID)
+				clusterHandler := handlers.NewClusterHandler(ocmclient, internalID)
 				r.HandleFunc("/", clusterHandler.ServeClusterGet)
 			}
 		}

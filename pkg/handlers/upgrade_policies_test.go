@@ -17,6 +17,7 @@ import (
 	. "github.com/openshift-online/ocm-sdk-go/testing"
 	"github.com/openshift/ocm-agent/pkg/consts"
 	"github.com/openshift/ocm-agent/pkg/handlers"
+	"github.com/openshift/ocm-agent/pkg/ocm"
 )
 
 var getUpgradePolicies = `{
@@ -83,7 +84,7 @@ var _ = Describe("UpgradePolicies", func() {
 			URL(apiServer.URL()).
 			Build()
 
-		upgradePoliciesHandler = handlers.NewUpgradePoliciesHandler(sdkclient, internalId)
+		upgradePoliciesHandler = handlers.NewUpgradePoliciesHandler(ocm.NewOcmClient(sdkclient), internalId)
 		responseRecorder = httptest.NewRecorder()
 
 	})
@@ -236,6 +237,103 @@ var _ = Describe("UpgradePolicies", func() {
 		makeOCMRequest(
 			"PATCH",
 			http.StatusBadRequest,
+			fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s/upgrade_policies/%s/state", internalId, upgradePolicyId),
+			errorMessage,
+		)
+
+		req := httptest.NewRequest("GET", "/upgrade_policies", nil)
+
+		upgradePoliciesHandler.ServeUpgradePolicyList(responseRecorder, req)
+
+		Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
+		Expect(responseRecorder.Result().StatusCode).To(Equal(http.StatusBadRequest))
+
+		req = httptest.NewRequest("GET", fmt.Sprintf("/upgrade_policies/%s", upgradePolicyId), nil)
+		req = mux.SetURLVars(
+			req,
+			map[string]string{
+				consts.UpgradePolicyIdParam: upgradePolicyId,
+			},
+		)
+
+		upgradePoliciesHandler.ServeUpgradePolicyGet(responseRecorder, req)
+		Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
+		Expect(responseRecorder.Result().StatusCode).To(Equal(http.StatusBadRequest))
+
+		req = httptest.NewRequest("PATCH", fmt.Sprintf("/upgrade_policies/%s", upgradePolicyId), nil)
+		req = mux.SetURLVars(
+			req,
+			map[string]string{
+				consts.UpgradePolicyIdParam: upgradePolicyId,
+			},
+		)
+
+		upgradePoliciesHandler.ServeUpgradePolicyGet(responseRecorder, req)
+		Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
+		Expect(responseRecorder.Result().StatusCode).To(Equal(http.StatusBadRequest))
+
+		req = httptest.NewRequest("DELETE", fmt.Sprintf("/upgrade_policies/%s", upgradePolicyId), nil)
+
+		req = mux.SetURLVars(
+			req,
+			map[string]string{
+				consts.UpgradePolicyIdParam: upgradePolicyId,
+			},
+		)
+
+		upgradePoliciesHandler.ServeUpgradePolicyGet(responseRecorder, req)
+		Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
+		Expect(responseRecorder.Result().StatusCode).To(Equal(http.StatusBadRequest))
+
+		req = httptest.NewRequest("GET", fmt.Sprintf("/upgrade_policies/%s/state", upgradePolicyId), nil)
+
+		req = mux.SetURLVars(
+			req,
+			map[string]string{
+				consts.UpgradePolicyIdParam: upgradePolicyId,
+			},
+		)
+
+		upgradePoliciesHandler.ServeUpgradePolicyState(responseRecorder, req)
+		Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
+		Expect(responseRecorder.Result().StatusCode).To(Equal(http.StatusBadRequest))
+
+		req = httptest.NewRequest("PATCH", fmt.Sprintf("/upgrade_policies/%s/state", upgradePolicyId), nil)
+		req = mux.SetURLVars(
+			req,
+			map[string]string{
+				consts.UpgradePolicyIdParam: upgradePolicyId,
+			},
+		)
+
+		upgradePoliciesHandler.ServeUpgradePolicyState(responseRecorder, req)
+		Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
+		Expect(responseRecorder.Result().StatusCode).To(Equal(http.StatusBadRequest))
+	})
+
+	It("should return an error if ocm returns 3xx response for all methods", func() {
+		errorMessage := `{"message": "permanently redirected"}`
+		makeOCMRequest(
+			"GET",
+			http.StatusPermanentRedirect,
+			fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s/upgrade_policies", internalId),
+			errorMessage,
+		)
+		makeOCMRequest(
+			"GET",
+			http.StatusPermanentRedirect,
+			fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s/upgrade_policies/%s", internalId, upgradePolicyId),
+			errorMessage,
+		)
+		makeOCMRequest(
+			"GET",
+			http.StatusPermanentRedirect,
+			fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s/upgrade_policies/%s/state", internalId, upgradePolicyId),
+			errorMessage,
+		)
+		makeOCMRequest(
+			"PATCH",
+			http.StatusPermanentRedirect,
 			fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s/upgrade_policies/%s/state", internalId, upgradePolicyId),
 			errorMessage,
 		)
