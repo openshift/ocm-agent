@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/openshift/ocm-agent/pkg/ocm"
 	"github.com/prometheus/alertmanager/template"
 	log "github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/openshift/ocm-agent/pkg/ocm"
 
 	_ "github.com/golang/mock/mockgen/model"
 )
@@ -17,9 +18,6 @@ const (
 	AMLabelAlertName           = "alertname"
 	AMLabelTemplateName        = "managed_notification_template"
 	AMLabelManagedNotification = "send_managed_notification"
-	AMLabelAlertSourceName     = "source"
-	AMLabelAlertSourceHCP      = "HCP"
-	AMLabelAlertSourceDP       = "DP"
 	AMLabelAlertMCID           = "_mc_id"
 	AMLabelAlertHCID           = "_id"
 
@@ -82,12 +80,6 @@ func isValidAlert(alert template.Alert, fleetMode bool) bool {
 	}
 
 	if fleetMode {
-		// An alert in fleet mode must have a source label
-		if _, ok := alert.Labels[AMLabelAlertSourceName]; !ok {
-			log.WithField(LogFieldAlertname, alertname).Error("fleet mode alert has no source")
-			return false
-		}
-
 		// An alert in fleet mode must have a management cluster ID label
 		if _, ok := alert.Labels[AMLabelAlertMCID]; !ok {
 			log.WithField(LogFieldAlertname, alertname).Error("fleet mode alert has no management cluster ID")

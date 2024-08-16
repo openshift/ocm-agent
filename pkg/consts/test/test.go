@@ -6,13 +6,14 @@ import (
 
 	slv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	ocmagentv1alpha1 "github.com/openshift/ocm-agent-operator/api/v1alpha1"
-	"github.com/openshift/ocm-agent/pkg/consts"
 	"github.com/prometheus/alertmanager/template"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+
+	"github.com/openshift/ocm-agent/pkg/consts"
 )
 
 const (
@@ -193,7 +194,6 @@ func NewTestAlert(resolved bool, fleet bool) template.Alert {
 	}
 
 	if fleet {
-		alert.Labels["source"] = "MC"
 		alert.Labels["_mc_id"] = TestManagedClusterID
 		alert.Labels["_id"] = TestHostedClusterID
 	}
