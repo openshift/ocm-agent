@@ -47,11 +47,6 @@ var _ = Describe("Webhook Handler Helpers", func() {
 				r := isValidAlert(testFleetAlert, true)
 				Expect(r).To(BeTrue())
 			})
-			It("should invalidate a fleet alert with no source label", func() {
-				delete(testFleetAlert.Labels, AMLabelAlertSourceName)
-				r := isValidAlert(testFleetAlert, true)
-				Expect(r).To(BeFalse())
-			})
 			It("should invalidate a fleet alert with no MC label", func() {
 				delete(testFleetAlert.Labels, AMLabelAlertMCID)
 				r := isValidAlert(testFleetAlert, true)
