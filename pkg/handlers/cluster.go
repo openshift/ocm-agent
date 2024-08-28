@@ -1,10 +1,11 @@
 package handlers
 
 import (
+	"net/http"
+
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/ocm-agent/pkg/ocm"
 	log "github.com/sirupsen/logrus"
-	"net/http"
 )
 
 type ClusterHandler struct {

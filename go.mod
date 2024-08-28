@@ -1,6 +1,8 @@
 module github.com/openshift/ocm-agent
 
-go 1.19
+go 1.21
+
+toolchain go1.21.11
 
 require (
 	github.com/golang/mock v1.6.0
