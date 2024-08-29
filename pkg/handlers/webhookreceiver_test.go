@@ -525,7 +525,7 @@ var _ = Describe("Webhook Handlers", func() {
 											},
 											{
 												Type:               ocmagentv1alpha1.ConditionServiceLogSent,
-												Status:             corev1.ConditionTrue,
+												Status:             corev1.ConditionFalse,
 												LastTransitionTime: &metav1.Time{Time: time.Now().Add(time.Duration(-90) * time.Minute)},
 											},
 										},
@@ -536,10 +536,13 @@ var _ = Describe("Webhook Handlers", func() {
 					},
 				}
 				gomock.InOrder(
-					mockOCMClient.EXPECT().SendServiceLog(activeServiceLog).Return(k8serrs.NewInternalError(fmt.Errorf("a fake error"))),
+					mockOCMClient.EXPECT().SendServiceLog(activeServiceLog).Return(k8serrs.NewInternalError(fmt.Errorf("a fake error"))).Times(5),
+					mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testManagedNotificationList.Items[0]),
+					mockClient.EXPECT().Status().Return(mockStatusWriter),
+					mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
 				)
 				err := webhookReceiverHandler.processAlert(testAlert, testManagedNotificationList, true)
-				Expect(err).Should(HaveOccurred())
+				Expect(err).ToNot(BeNil())
 			})
 			It("Should report error if not able to update NotificationStatus", func() {
 				testManagedNotificationList = &ocmagentv1alpha1.ManagedNotificationList{
@@ -585,7 +588,7 @@ var _ = Describe("Webhook Handlers", func() {
 					mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(k8serrs.NewInternalError(fmt.Errorf("a fake error"))),
 				)
 				err := webhookReceiverHandler.processAlert(testAlert, testManagedNotificationList, true)
-				Expect(err).Should(HaveOccurred())
+				Expect(err).NotTo(BeNil())
 			})
 		})
 	})

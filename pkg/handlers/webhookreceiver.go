@@ -4,14 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"net/http"
 	"time"
 
-	"github.com/spf13/viper"
-
 	"github.com/openshift/ocm-agent/pkg/config"
 	"github.com/openshift/ocm-agent/pkg/ocm"
+	"github.com/spf13/viper"
 
 	"github.com/prometheus/alertmanager/template"
 	log "github.com/sirupsen/logrus"
@@ -149,27 +147,23 @@ func (h *WebhookReceiverHandler) processAlert(alert template.Alert, mnl *oav1alp
 	// Send the servicelog for the alert
 	log.WithFields(log.Fields{LogFieldNotificationName: notification.Name}).Info("will send servicelog for notification")
 
-	var retrycount int = 0
-	for {
-		slerr := ocm.BuildAndSendServiceLog(ocm.NewServiceLogBuilder(notification.Summary, notification.ActiveDesc, notification.ResolvedDesc, viper.GetString(config.ExternalClusterID), notification.Severity, notification.LogType, notification.References), firing, &alert, h.ocm)
-		if slerr == nil {
-			break
-		} else {
-			log.WithError(err).WithFields(log.Fields{LogFieldNotificationName: notification.Name, LogFieldIsFiring: true}).Error("unable to send a notification")
-			retrycount++
-			time.Sleep(10*time.Second + 5*time.Second*time.Duration(time.Duration(math.Pow(2, float64(retrycount))).Seconds()))
-			if retrycount == 7 {
-				// Update the notification status to indicate a servicelog has been failed to send
-				_, err := h.updateNotificationStatus(notification, managedNotifications, firing, corev1.ConditionFalse)
-				if err != nil {
-					log.WithFields(log.Fields{LogFieldNotificationName: notification.Name, LogFieldManagedNotification: managedNotifications.Name}).WithError(err).Error("unable to update notification status")
-				}
-				metrics.SetResponseMetricFailure("service_logs")
-				metrics.CountFailedServiceLogs(notification.Name)
-				return slerr
-			}
+	var attempts int = 5
+	var sleep time.Duration = 10
+	// Call reattempt with a closure capturing notification, alert, firing, and h.ocm
+	slerr := reattempt(attempts, sleep, func() error {
+		return h.sendServiceLog(notification, alert, firing, h.ocm)
+	})
+
+	if slerr != nil {
+		_, err := h.updateNotificationStatus(notification, managedNotifications, firing, corev1.ConditionFalse)
+		if err != nil {
+			log.WithFields(log.Fields{LogFieldNotificationName: notification.Name, LogFieldManagedNotification: managedNotifications.Name}).WithError(err).Error("unable to update notification status")
 		}
+		metrics.SetResponseMetricFailure("service_logs")
+		metrics.CountFailedServiceLogs(notification.Name)
+		return slerr
 	}
+
 	// Reset the metric if we got correct Response from OCM
 	metrics.ResetMetric(metrics.MetricResponseFailure)
 
@@ -192,6 +186,16 @@ func (h *WebhookReceiverHandler) processAlert(alert template.Alert, mnl *oav1alp
 
 	metrics.SetTotalServiceLogCount(notification.Name, status.ServiceLogSentCount)
 
+	return nil
+}
+
+// sendServiceLog is to build notification and send servicelog
+func (h *WebhookReceiverHandler) sendServiceLog(notification *oav1alpha1.Notification, alert template.Alert, firing bool, client ocm.OCMClient) error {
+	err := ocm.BuildAndSendServiceLog(ocm.NewServiceLogBuilder(notification.Summary, notification.ActiveDesc, notification.ResolvedDesc, viper.GetString(config.ExternalClusterID), notification.Severity, notification.LogType, notification.References),
+		firing, &alert, client)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
