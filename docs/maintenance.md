@@ -20,7 +20,7 @@ Unlike the maintenance tasks for SREP managed operators, the maintenance tasks f
 
 ### Updating Golang version
 
-To update the Golang minor version (example 1.17 to 1.19), there are two main files to update:
+To update the Golang minor version (example 1.19 to 1.21), there are two main files to update:
 
 1. [openshift-ocm-agent-master.yaml](https://github.com/openshift/release/blob/master/ci-operator/config/openshift/ocm-agent/openshift-ocm-agent-master.yaml) file in [openshift/release](https://github.com/openshift/release) repository.
 2. [Dockerfile](https://github.com/openshift/ocm-agent/blob/master/build/Dockerfile) file in [openshift/ocm-agent](https://github.com/openshift/ocm-agent) repository.
@@ -37,7 +37,7 @@ The easiest and the cleanest way to update the go.mod dependencies is to do the 
     ```go
     module github.com/openshift/ocm-agent
 
-    go 1.19
+    go 1.21
     ```
 
 3. Run command `go mod tidy` to fetch the required latest dependencies.
