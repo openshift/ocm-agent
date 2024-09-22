@@ -147,8 +147,8 @@ func (h *WebhookReceiverHandler) processAlert(alert template.Alert, mnl *oav1alp
 	// Send the servicelog for the alert
 	log.WithFields(log.Fields{LogFieldNotificationName: notification.Name}).Info("will send servicelog for notification")
 
-	var attempts int = 5
-	var sleep time.Duration = 10
+	var attempts int = 2
+	var sleep time.Duration = 300
 	// Call reattempt with a closure capturing notification, alert, firing, and h.ocm
 	slerr := reattempt(attempts, sleep, func() error {
 		return h.sendServiceLog(notification, alert, firing, h.ocm)
