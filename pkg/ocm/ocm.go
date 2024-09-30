@@ -98,7 +98,7 @@ func (b *ServiceLogBuilder) Build(firing bool, alert *template.Alert) (*ServiceL
 	}
 
 	// Handle DocReferences
-	if b.references != nil && len(b.references) > 0 {
+	if len(b.references) > 0 {
 		for _, ref := range b.references {
 			docReferences = append(docReferences, string(ref))
 		}
