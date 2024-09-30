@@ -120,7 +120,7 @@ getlint:
 
 .PHONY: lint
 lint: getlint
-	$(GOPATH)/bin/golangci-lint run
+	$(GOPATH)/bin/golangci-lint run --timeout=5m
 
 mockgen: ensure-mockgen
 	go generate $(GOBUILDFLAGS) ./...
