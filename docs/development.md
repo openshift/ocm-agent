@@ -8,7 +8,7 @@ A recent Go distribution (>=1.22) with enabled Go modules.
 
 ```shell
 $ go version
-go version go1.22.7 linux/amd64
+go version go1.22.1 linux/amd64
 ```
 
 ## Makefile
