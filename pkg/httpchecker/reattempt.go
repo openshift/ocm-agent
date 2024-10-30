@@ -3,6 +3,8 @@ package httpchecker
 import (
 	"math/rand"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func init() {
@@ -17,8 +19,8 @@ type stop struct {
 func Reattempt(attempts int, sleep time.Duration, f func() error) error {
 	if err := f(); err != nil {
 		if s, ok := err.(stop); ok {
-			// Return the original error for later checking
-			return s.error
+			// Log the original error for later checking
+			log.Errorf("connection check failed with error: %s", s.error)
 		}
 
 		if attempts--; attempts > 0 {
@@ -26,11 +28,10 @@ func Reattempt(attempts int, sleep time.Duration, f func() error) error {
 			jitter := time.Duration(rand.Int63n(int64(sleep))) //nolint:gosec
 			sleep = sleep + jitter/2
 
-			time.Sleep(sleep)
+			time.Sleep(time.Duration(time.Duration(sleep.Seconds()).Seconds()))
 			return Reattempt(attempts, 2*sleep, f)
 		}
 		return err
 	}
-
 	return nil
 }

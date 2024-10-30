@@ -34,7 +34,7 @@ func (c *UrlHTTPChecker) UrlAvailabilityCheck(url string) error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
 		return nil
 	}
 	return fmt.Errorf("failed to connect to %s with http response code: %d", url, resp.StatusCode)

@@ -147,7 +147,7 @@ func (h *WebhookReceiverHandler) processAlert(alert template.Alert, mnl *oav1alp
 	}
 
 	var attempts int = 3
-	var sleep time.Duration = 10
+	var sleep time.Duration = 30 * time.Second
 	ocmURL := viper.GetString(config.OcmURL)
 	if ocmURL == "" {
 		return fmt.Errorf("OCM URL is missing or empty in the configuration")
