@@ -14,6 +14,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/ghttp"
+	"github.com/spf13/viper"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -26,6 +27,7 @@ import (
 
 	ocmagentv1alpha1 "github.com/openshift/ocm-agent-operator/api/v1alpha1"
 
+	"github.com/openshift/ocm-agent/pkg/config"
 	testconst "github.com/openshift/ocm-agent/pkg/consts/test"
 	"github.com/openshift/ocm-agent/pkg/ocm"
 	webhookreceivermock "github.com/openshift/ocm-agent/pkg/ocm/mocks"
@@ -41,9 +43,10 @@ func (fn RoundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 var _ = Describe("Webhook Handlers", func() {
 
 	var (
-		mockCtrl                    *gomock.Controller
-		mockClient                  *clientmocks.MockClient
-		mockStatusWriter            *clientmocks.MockStatusWriter
+		mockCtrl         *gomock.Controller
+		mockClient       *clientmocks.MockClient
+		mockStatusWriter *clientmocks.MockStatusWriter
+		//mockHTTPChecker             *httpcheckermock.MockHTTPChecker
 		mockOCMClient               *webhookreceivermock.MockOCMClient
 		webhookReceiverHandler      *WebhookReceiverHandler
 		server                      *ghttp.Server
@@ -55,6 +58,8 @@ var _ = Describe("Webhook Handlers", func() {
 	)
 
 	BeforeEach(func() {
+		// Mock valid OCM URL in viper configuration
+		viper.Set(config.OcmURL, "http://api.stage.openshift.com") // Mock a valid URL for the test
 		slRefs := ""
 		for k, ref := range testconst.TestNotification.References {
 			if k > 0 {
@@ -67,6 +72,7 @@ var _ = Describe("Webhook Handlers", func() {
 		mockClient = clientmocks.NewMockClient(mockCtrl)
 		mockStatusWriter = clientmocks.NewMockStatusWriter(mockCtrl)
 		server = ghttp.NewServer()
+		//mockHTTPChecker = httpcheckermock.NewMockHTTPChecker(mockCtrl)
 		mockOCMClient = webhookreceivermock.NewMockOCMClient(mockCtrl)
 		webhookReceiverHandler = &WebhookReceiverHandler{
 			c:   mockClient,
@@ -281,6 +287,25 @@ var _ = Describe("Webhook Handlers", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 			})
 			It("Should send service log for a firing alert if one hasn't already sent after resend time and update notification", func() {
+				alerttest := template.Alert{
+					Labels: map[string]string{
+						"managed_notification_template": testconst.TestNotificationName,
+						"send_managed_notification":     "true",
+						"alertname":                     "TestAlertName",
+						"alertstate":                    "firing",
+						"namespace":                     "openshift-monitoring",
+						"openshift_io_alert_source":     "platform",
+						"prometheus":                    "openshift-monitoring/k8s",
+						"severity":                      "info",
+						"overriden-key":                 "label-value",
+					},
+					Annotations: map[string]string{
+						"description":   "alert-desc",
+						"overriden-key": "annotation-value",
+						"recursive-key": "_${recursive-key}_",
+					},
+					StartsAt: time.Now().Add(time.Duration(-27) * time.Hour),
+				}
 				testManagedNotificationList = &ocmagentv1alpha1.ManagedNotificationList{
 					Items: []ocmagentv1alpha1.ManagedNotification{
 						{
@@ -308,7 +333,7 @@ var _ = Describe("Webhook Handlers", func() {
 											{
 												Type:               ocmagentv1alpha1.ConditionServiceLogSent,
 												Status:             corev1.ConditionTrue,
-												LastTransitionTime: &metav1.Time{Time: time.Now().Add(time.Duration(-90) * time.Minute)},
+												LastTransitionTime: &metav1.Time{Time: time.Now().Add(time.Duration(-25) * time.Hour)},
 											},
 										},
 									},
@@ -318,12 +343,13 @@ var _ = Describe("Webhook Handlers", func() {
 					},
 				}
 				gomock.InOrder(
+					//mockHTTPChecker.EXPECT().UrlAvailabilityCheck(gomock.Any().String()).Return(nil).Times(5),
 					mockOCMClient.EXPECT().SendServiceLog(activeServiceLog).Return(nil),
 					mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testManagedNotificationList.Items[0]),
 					mockClient.EXPECT().Status().Return(mockStatusWriter),
 					mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
 				)
-				err := webhookReceiverHandler.processAlert(testAlert, testManagedNotificationList, true)
+				err := webhookReceiverHandler.processAlert(alerttest, testManagedNotificationList, true)
 				Expect(err).ShouldNot(HaveOccurred())
 			})
 			It("Should not send service log for a firing alert if some place holder cannot be resolved with an alert label or annotation", func() {
@@ -499,6 +525,25 @@ var _ = Describe("Webhook Handlers", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 			})
 			It("Should report error if not able to send service log", func() {
+				alerttest := template.Alert{
+					Labels: map[string]string{
+						"managed_notification_template": testconst.TestNotificationName,
+						"send_managed_notification":     "true",
+						"alertname":                     "TestAlertName",
+						"alertstate":                    "firing",
+						"namespace":                     "openshift-monitoring",
+						"openshift_io_alert_source":     "platform",
+						"prometheus":                    "openshift-monitoring/k8s",
+						"severity":                      "info",
+						"overriden-key":                 "label-value",
+					},
+					Annotations: map[string]string{
+						"description":   "alert-desc",
+						"overriden-key": "annotation-value",
+						"recursive-key": "_${recursive-key}_",
+					},
+					StartsAt: time.Now(),
+				}
 				testManagedNotificationList = &ocmagentv1alpha1.ManagedNotificationList{
 					Items: []ocmagentv1alpha1.ManagedNotification{
 						{
@@ -526,7 +571,7 @@ var _ = Describe("Webhook Handlers", func() {
 											{
 												Type:               ocmagentv1alpha1.ConditionServiceLogSent,
 												Status:             corev1.ConditionTrue,
-												LastTransitionTime: &metav1.Time{Time: time.Now().Add(time.Duration(-90) * time.Minute)},
+												LastTransitionTime: &metav1.Time{Time: time.Now().Add(time.Duration(-25) * time.Hour)},
 											},
 										},
 									},
@@ -537,8 +582,11 @@ var _ = Describe("Webhook Handlers", func() {
 				}
 				gomock.InOrder(
 					mockOCMClient.EXPECT().SendServiceLog(activeServiceLog).Return(k8serrs.NewInternalError(fmt.Errorf("a fake error"))),
+					mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).SetArg(2, testManagedNotificationList.Items[0]),
+					mockClient.EXPECT().Status().Return(mockStatusWriter),
+					mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
 				)
-				err := webhookReceiverHandler.processAlert(testAlert, testManagedNotificationList, true)
+				err := webhookReceiverHandler.processAlert(alerttest, testManagedNotificationList, true)
 				Expect(err).Should(HaveOccurred())
 			})
 			It("Should report error if not able to update NotificationStatus", func() {
@@ -596,7 +644,7 @@ var _ = Describe("Webhook Handlers", func() {
 			gomock.InOrder(
 				mockClient.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(fakeError),
 			)
-			_, err := webhookReceiverHandler.updateNotificationStatus(&testconst.TestNotification, &testconst.TestManagedNotification, true)
+			_, err := webhookReceiverHandler.updateNotificationStatus(&testconst.TestNotification, &testconst.TestManagedNotification, true, corev1.ConditionTrue)
 			Expect(err).ShouldNot(BeNil())
 		})
 		When("Getting NotificationRecord for which status does not exist", func() {
@@ -612,7 +660,7 @@ var _ = Describe("Webhook Handlers", func() {
 							return nil
 						}),
 				)
-				_, err := webhookReceiverHandler.updateNotificationStatus(&ocmagentv1alpha1.Notification{Name: "randomnotification"}, &testconst.TestManagedNotificationWithoutStatus, true)
+				_, err := webhookReceiverHandler.updateNotificationStatus(&ocmagentv1alpha1.Notification{Name: "randomnotification"}, &testconst.TestManagedNotificationWithoutStatus, true, corev1.ConditionTrue)
 				Expect(err).Should(BeNil())
 				Expect(&testconst.TestManagedNotificationWithoutStatus).ToNot(BeNil())
 			})
@@ -630,7 +678,7 @@ var _ = Describe("Webhook Handlers", func() {
 							return nil
 						}),
 				)
-				_, err := webhookReceiverHandler.updateNotificationStatus(&testconst.TestNotification, &testconst.TestManagedNotification, true)
+				_, err := webhookReceiverHandler.updateNotificationStatus(&testconst.TestNotification, &testconst.TestManagedNotification, true, corev1.ConditionTrue)
 				Expect(err).Should(BeNil())
 			})
 			It("should send service log for alert resolved when no longer firing", func() {
@@ -645,7 +693,7 @@ var _ = Describe("Webhook Handlers", func() {
 							return nil
 						}),
 				)
-				_, err := webhookReceiverHandler.updateNotificationStatus(&testconst.TestNotification, &testconst.TestManagedNotification, false)
+				_, err := webhookReceiverHandler.updateNotificationStatus(&testconst.TestNotification, &testconst.TestManagedNotification, false, corev1.ConditionTrue)
 				Expect(err).Should(BeNil())
 			})
 		})
@@ -655,7 +703,7 @@ var _ = Describe("Webhook Handlers", func() {
 				mockClient.EXPECT().Status().Return(mockStatusWriter),
 				mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
 			)
-			_, err := webhookReceiverHandler.updateNotificationStatus(&testconst.TestNotification, &testconst.TestManagedNotification, true)
+			_, err := webhookReceiverHandler.updateNotificationStatus(&testconst.TestNotification, &testconst.TestManagedNotification, true, corev1.ConditionTrue)
 			Expect(err).Should(BeNil())
 		})
 	})
