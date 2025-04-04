@@ -1,4 +1,4 @@
-FROM registry.ci.openshift.org/openshift/release:rhel-8-release-golang-1.21-openshift-4.16 AS builder
+FROM registry.ci.openshift.org/openshift/release:rhel-8-release-golang-1.22-openshift-4.18 AS builder
 
 RUN mkdir -p /workdir
 WORKDIR /workdir
@@ -7,7 +7,7 @@ RUN go mod download
 COPY . .
 RUN make build
 
-FROM registry.access.redhat.com/ubi8/ubi-micro:8.10-20
+FROM registry.access.redhat.com/ubi8/ubi-micro:8.10-22
 
 LABEL io.openshift.managed.name="ocm-agent" \
   io.openshift.managed.description="Agent to interact with OCM on managed clusters"
