@@ -23,3 +23,4 @@ RUN /usr/local/bin/user_setup
 USER ${USER_UID}
 
 ENTRYPOINT [ "/usr/local/bin/entrypoint" ]
+
