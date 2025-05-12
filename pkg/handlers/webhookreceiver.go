@@ -125,6 +125,7 @@ func (h *WebhookReceiverHandler) processAlert(alert template.Alert, mnl *oav1alp
 			log.WithFields(log.Fields{"notification": notification.Name,
 				LogFieldResendInterval: notification.ResendWait,
 			}).Info("not sending a notification as one was already sent recently")
+			metrics.ResetMetric(metrics.MetricResponseFailure)
 		} else {
 			log.WithFields(log.Fields{"notification": notification.Name}).Info("not sending a resolve notification if it was not firing or resolved body is empty")
 			s, err := managedNotifications.Status.GetNotificationRecord(notification.Name)

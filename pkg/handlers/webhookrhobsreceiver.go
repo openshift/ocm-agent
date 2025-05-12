@@ -192,6 +192,7 @@ func (h *WebhookRHOBSReceiverHandler) processFiringAlert(alert template.Alert, m
 		log.WithFields(log.Fields{"notification": fn.Name,
 			LogFieldResendInterval: fn.ResendWait,
 		}).Info("not sending a notification as one was already sent recently")
+		metrics.ResetMetric(metrics.MetricResponseFailure)
 		return nil
 	}
 
