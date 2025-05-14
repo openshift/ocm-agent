@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 
+	"github.com/openshift/ocm-agent/pkg/config"
 	"github.com/openshift/ocm-agent/pkg/consts"
 	"github.com/openshift/ocm-agent/pkg/metrics"
 	"github.com/openshift/ocm-agent/pkg/ocm"
@@ -168,14 +169,15 @@ func (h *WebhookRHOBSReceiverHandler) processResolvedAlert(alert template.Alert,
 			err := h.ocm.RemoveLimitedSupport(hcID, reason.ID())
 			if err != nil {
 				metrics.IncrementFailedLimitedSupportRemoved(fn.Name)
-				metrics.SetResponseMetricFailure("clusters_mgmt")
+				// Set the metric for failed limited support response from OCM
+				metrics.SetResponseMetricFailure(config.ClustersService, config.LimitedSupport)
 				return fmt.Errorf("limited support reason with ID '%s' couldn't be removed for cluster %s, err: %w", reason.ID(), hcID, err)
 			}
 			metrics.IncrementLimitedSupportRemovedCount(fn.Name)
 		}
 	}
-	// Reset the metric if we got correct Response from OCM
-	metrics.ResetMetric(metrics.MetricResponseFailure)
+	// Reset the metric for correct limited support response from OCM
+	metrics.ResetResponseMetricFailure(config.ClustersService, config.LimitedSupport)
 
 	return h.updateManagedFleetNotificationRecord(alert, mfn)
 }
@@ -192,7 +194,8 @@ func (h *WebhookRHOBSReceiverHandler) processFiringAlert(alert template.Alert, m
 		log.WithFields(log.Fields{"notification": fn.Name,
 			LogFieldResendInterval: fn.ResendWait,
 		}).Info("not sending a notification as one was already sent recently")
-		metrics.ResetMetric(metrics.MetricResponseFailure)
+		// Reset the metric for correct service log response from OCM
+		metrics.ResetResponseMetricFailure(config.ServiceLogService, fn.Name)
 		return nil
 	}
 
@@ -209,11 +212,14 @@ func (h *WebhookRHOBSReceiverHandler) processFiringAlert(alert template.Alert, m
 		}
 		err = h.ocm.SendLimitedSupport(hcID, reason)
 		if err != nil {
-			metrics.SetResponseMetricFailure("clusters_mgmt")
+			// Set the metric for failed limited support response from OCM
+			metrics.SetResponseMetricFailure("clusters_mgmt", config.LimitedSupport)
 			metrics.IncrementFailedLimitedSupportSend(fn.Name)
 			return fmt.Errorf("limited support reason for fleetnotification '%s' could not be set for cluster %s, err: %w", fn.Name, hcID, err)
 		}
 		metrics.IncrementLimitedSupportSentCount(fn.Name)
+		// Reset the metric for correct limited support response from OCM
+		metrics.ResetResponseMetricFailure(config.ClustersService, config.LimitedSupport)
 	} else { // Notification is for a service log
 		log.WithFields(log.Fields{LogFieldNotificationName: fn.Name}).Info("will send servicelog for notification")
 		err := ocm.BuildAndSendServiceLog(
@@ -221,16 +227,16 @@ func (h *WebhookRHOBSReceiverHandler) processFiringAlert(alert template.Alert, m
 			true, &alert, h.ocm)
 		if err != nil {
 			log.WithError(err).WithFields(log.Fields{LogFieldNotificationName: fn.Name, LogFieldIsFiring: true}).Error("unable to send service log for notification")
-			metrics.SetResponseMetricFailure("service_logs")
+			// Set the metric for failed service log response from OCM
+			metrics.SetResponseMetricFailure(config.ServiceLogService, fn.Name)
 			metrics.CountFailedServiceLogs(fn.Name)
 			return err
 		}
 		// Count the service log sent by the template name
 		metrics.CountServiceLogSent(fn.Name, "firing")
+		// Reset the metric for correct service log response from OCM
+		metrics.ResetResponseMetricFailure(config.ServiceLogService, fn.Name)
 	}
-
-	// Reset the metric if we got correct Response from OCM
-	metrics.ResetMetric(metrics.MetricResponseFailure)
 
 	return h.updateManagedFleetNotificationRecord(alert, mfn)
 }

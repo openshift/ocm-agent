@@ -21,4 +21,6 @@ const (
 	ServiceLogService string = "service_logs" //#nosec G101 -- This is a false positive
 
 	ClustersService string = "clusters_mgmt" //#nosec G101 -- This is a false positive
+	// Limited support label value for metrics
+	LimitedSupport string = "limited_support"
 )
