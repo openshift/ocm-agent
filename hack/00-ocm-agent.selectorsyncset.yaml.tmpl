@@ -44,9 +44,59 @@ objects:
     name: ocm-agent-management-cluster-fleet-resources
   spec:
     clusterDeploymentSelector:
-      matchLabels:
-        api.openshift.com/managed: "true"
-        ext-hypershift.openshift.io/cluster-type: "management-cluster"
+      matchExpressions:
+        - key: api.openshift.com/managed
+          operator: In
+          values:
+            - "true"
+        - key: ext-hypershift.openshift.io/cluster-type
+          operator: In
+          values:
+            - "management-cluster"
+        - key: hive.openshift.io/cluster-region
+          operator: NotIn
+          values:
+            - ap-southeast-1
+    resourceApplyMode: Sync
+    resources:
+    - apiVersion: ocmagent.managed.openshift.io/v1alpha1
+      kind: OcmAgent
+      metadata:
+        name: ocm-agent-fleet
+        namespace: openshift-ocm-agent-operator
+      spec:
+        fleetMode: true
+        agentConfig:
+          ocmBaseUrl: ${OCM_BASE_URL}
+          services:
+          - service_logs
+        ocmAgentImage: ${REGISTRY_IMG}@${IMAGE_DIGEST}
+        replicas: 2
+        tokenSecret: ocm-access-token-fleet
+- apiVersion: hive.openshift.io/v1
+  kind: SelectorSyncSet
+  metadata:
+    creationTimestamp: null
+    labels:
+      managed.openshift.io/gitHash: ${IMAGE_TAG}
+      managed.openshift.io/gitRepoName: ${REPO_NAME}
+      managed.openshift.io/osd: "true"
+    name: ocm-agent-management-cluster-fleet-resources-regional-singapore
+  spec:
+    clusterDeploymentSelector:
+      matchExpressions:
+        - key: api.openshift.com/managed
+          operator: In
+          values:
+            - "true"
+        - key: ext-hypershift.openshift.io/cluster-type
+          operator: In
+          values:
+            - "management-cluster"
+        - key: hive.openshift.io/cluster-region
+          operator: In
+          values:
+            - ap-southeast-1
     resourceApplyMode: Sync
     resources:
     - apiVersion: ocmagent.managed.openshift.io/v1alpha1
