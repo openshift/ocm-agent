@@ -37,7 +37,7 @@ var (
 		prometheus.GaugeOpts{
 			Name: "ocm_agent_response_failure",
 			Help: "Indicates that the call to the OCM service endpoint failed",
-		}, []string{"ocm_service", "name"})
+		}, []string{"ocm_service", "notification_name", "alert_name"})
 
 	metricServiceLogSent = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -158,10 +158,11 @@ func getRouteName(r *http.Request) string {
 }
 
 // SetResponseMetricFailure sets the metric when a call to the external service has failed
-func SetResponseMetricFailure(service string, name string) {
+func SetResponseMetricFailure(service string, notificationName string, alertName string) {
 	MetricResponseFailure.With(prometheus.Labels{
-		"ocm_service": service,
-		"name":        name,
+		"ocm_service":       service,
+		"notification_name": notificationName,
+		"alert_name":        alertName,
 	}).Set(float64(1))
 }
 
@@ -245,9 +246,10 @@ func ResetMetric(m *prometheus.GaugeVec) {
 }
 
 // ResetRequestMetricFailure with labels
-func ResetResponseMetricFailure(service string, name string) {
+func ResetResponseMetricFailure(service string, notificationName string, alertName string) {
 	MetricResponseFailure.With(prometheus.Labels{
-		"ocm_service": service,
-		"name":        name,
+		"ocm_service":       service,
+		"notification_name": notificationName,
+		"alert_name":        alertName,
 	}).Set(float64(0))
 }
