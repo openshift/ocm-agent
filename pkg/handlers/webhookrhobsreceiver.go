@@ -170,14 +170,14 @@ func (h *WebhookRHOBSReceiverHandler) processResolvedAlert(alert template.Alert,
 			if err != nil {
 				metrics.IncrementFailedLimitedSupportRemoved(fn.Name)
 				// Set the metric for failed limited support response from OCM
-				metrics.SetResponseMetricFailure(config.ClustersService, config.LimitedSupport, alert.Labels["alertname"])
+				metrics.SetResponseMetricFailure(config.ClustersService, fn.Name, alert.Labels["alertname"])
 				return fmt.Errorf("limited support reason with ID '%s' couldn't be removed for cluster %s, err: %w", reason.ID(), hcID, err)
 			}
 			metrics.IncrementLimitedSupportRemovedCount(fn.Name)
 		}
 	}
 	// Reset the metric for correct limited support response from OCM
-	metrics.ResetResponseMetricFailure(config.ClustersService, config.LimitedSupport, alert.Labels["alertname"])
+	metrics.ResetResponseMetricFailure(config.ClustersService, fn.Name, alert.Labels["alertname"])
 
 	return h.updateManagedFleetNotificationRecord(alert, mfn)
 }
@@ -213,13 +213,13 @@ func (h *WebhookRHOBSReceiverHandler) processFiringAlert(alert template.Alert, m
 		err = h.ocm.SendLimitedSupport(hcID, reason)
 		if err != nil {
 			// Set the metric for failed limited support response from OCM
-			metrics.SetResponseMetricFailure("clusters_mgmt", config.LimitedSupport, alert.Labels["alertname"])
+			metrics.SetResponseMetricFailure("clusters_mgmt", fn.Name, alert.Labels["alertname"])
 			metrics.IncrementFailedLimitedSupportSend(fn.Name)
 			return fmt.Errorf("limited support reason for fleetnotification '%s' could not be set for cluster %s, err: %w", fn.Name, hcID, err)
 		}
 		metrics.IncrementLimitedSupportSentCount(fn.Name)
 		// Reset the metric for correct limited support response from OCM
-		metrics.ResetResponseMetricFailure(config.ClustersService, config.LimitedSupport, alert.Labels["alertname"])
+		metrics.ResetResponseMetricFailure(config.ClustersService, fn.Name, alert.Labels["alertname"])
 	} else { // Notification is for a service log
 		log.WithFields(log.Fields{LogFieldNotificationName: fn.Name}).Info("will send servicelog for notification")
 		err := ocm.BuildAndSendServiceLog(
