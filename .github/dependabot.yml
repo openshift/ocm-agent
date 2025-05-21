@@ -6,7 +6,7 @@ updates:
       - "area/dependency"
       - "ok-to-test"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     ignore:
       - dependency-name: "openshift/release"
         # don't automatically upgrade golang version here
