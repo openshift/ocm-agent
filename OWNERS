@@ -8,8 +8,13 @@ reviewers:
 - hectorakemp
 - Tafhim
 - tkong-redhat
+- rbhilare
+- charlesgong
+- chamalabey
+- TheUndeadKing
 
 approvers:
 - bmeng
 - ravitri
 - a7vicky
+- tkong-redhat
