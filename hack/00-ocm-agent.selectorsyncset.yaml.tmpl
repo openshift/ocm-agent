@@ -53,10 +53,10 @@ objects:
           operator: In
           values:
             - "management-cluster"
-        - key: hive.openshift.io/cluster-region
+        - key: ext-hypershift.openshift.io/cluster-sector
           operator: NotIn
           values:
-            - ap-southeast-1
+            - regional-ap-southeast-1
     resourceApplyMode: Sync
     resources:
     - apiVersion: ocmagent.managed.openshift.io/v1alpha1
@@ -107,7 +107,7 @@ objects:
       spec:
         fleetMode: true
         agentConfig:
-          ocmBaseUrl: ${OCM_BASE_URL}
+          ocmBaseUrl: ${OCM_BASE_URL_SGP}
           services:
           - service_logs
         ocmAgentImage: ${REGISTRY_IMG}@${IMAGE_DIGEST}
@@ -124,4 +124,6 @@ parameters:
 - name: IMAGE_DIGEST
   required: true
 - name: OCM_BASE_URL
+  required: true
+- name: OCM_BASE_URL_SGP
   required: true
