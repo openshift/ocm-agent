@@ -15,11 +15,13 @@ import (
 var _ = Describe("Webhook Handlers", func() {
 
 	var (
-		testService  = "TestService"
-		testPath     = "/test-path"
-		testState    = "test-state"
-		testTemplate = "test-template"
-		server       *ghttp.Server
+		testService         = "TestService"
+		testMetricLabelName = "testMetricLabelName"
+		testPath            = "/test-path"
+		testState           = "test-state"
+		testTemplate        = "test-template"
+		testAlertName       = "testAlertName"
+		server              *ghttp.Server
 	)
 
 	BeforeEach(func() {
@@ -102,12 +104,20 @@ var _ = Describe("Webhook Handlers", func() {
 # HELP ocm_agent_response_failure Indicates that the call to the OCM service endpoint failed
 # TYPE ocm_agent_response_failure gauge
 `
-			metricValueHeader = fmt.Sprintf(`ocm_agent_response_failure{ocm_service="%s"} `, testService)
+			metricValueHeader = fmt.Sprintf(`ocm_agent_response_failure{alert_name = "%s", notification_name="%s", ocm_service="%s"} `, testAlertName, testMetricLabelName, testService)
 		)
 		When("the metric is set", func() {
 			It("does so correctly", func() {
-				SetResponseMetricFailure(testService)
+				SetResponseMetricFailure(testService, testMetricLabelName, testAlertName)
 				expectedMetric := fmt.Sprintf("%s%s%d\n", metricHelpHeader, metricValueHeader, 1)
+				err := testutil.CollectAndCompare(MetricResponseFailure, strings.NewReader(expectedMetric))
+				Expect(err).To(BeNil())
+			})
+		})
+		When("the metric is reset", func() {
+			It("does so correctly", func() {
+				ResetResponseMetricFailure(testService, testMetricLabelName, testAlertName)
+				expectedMetric := fmt.Sprintf("%s%s%d\n", metricHelpHeader, metricValueHeader, 0)
 				err := testutil.CollectAndCompare(MetricResponseFailure, strings.NewReader(expectedMetric))
 				Expect(err).To(BeNil())
 			})
