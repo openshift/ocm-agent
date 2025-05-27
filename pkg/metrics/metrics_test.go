@@ -114,6 +114,14 @@ var _ = Describe("Webhook Handlers", func() {
 				Expect(err).To(BeNil())
 			})
 		})
+		When("the metric is reset", func() {
+			It("does so correctly", func() {
+				ResetResponseMetricFailure(testService, testMetricLabelName, testAlertName)
+				expectedMetric := fmt.Sprintf("%s%s%d\n", metricHelpHeader, metricValueHeader, 0)
+				err := testutil.CollectAndCompare(MetricResponseFailure, strings.NewReader(expectedMetric))
+				Expect(err).To(BeNil())
+			})
+		})
 	})
 
 	Context("Request Failure metric", func() {
