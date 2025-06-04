@@ -125,6 +125,8 @@ func (h *WebhookReceiverHandler) processAlert(alert template.Alert, mnl *oav1alp
 			log.WithFields(log.Fields{"notification": notification.Name,
 				LogFieldResendInterval: notification.ResendWait,
 			}).Info("not sending a notification as one was already sent recently")
+			// Reset the metric for correct service log response from OCM
+			metrics.ResetResponseMetricFailure(config.ServiceLogService, notification.Name, alert.Labels["alertname"])
 		} else {
 			log.WithFields(log.Fields{"notification": notification.Name}).Info("not sending a resolve notification if it was not firing or resolved body is empty")
 			s, err := managedNotifications.Status.GetNotificationRecord(notification.Name)
@@ -168,13 +170,14 @@ func (h *WebhookReceiverHandler) processAlert(alert template.Alert, mnl *oav1alp
 		if err != nil {
 			log.WithFields(log.Fields{LogFieldNotificationName: notification.Name, LogFieldManagedNotification: managedNotifications.Name}).WithError(err).Error("unable to update notification status")
 		}
-		metrics.SetResponseMetricFailure("service_logs")
+		// Set the metric for failed service log response from OCM
+		metrics.SetResponseMetricFailure(config.ServiceLogService, notification.Name, alert.Labels["alertname"])
 		metrics.CountFailedServiceLogs(notification.Name)
 		return slerr
 	}
 
-	// Reset the metric if we got correct Response from OCM
-	metrics.ResetMetric(metrics.MetricResponseFailure)
+	// Reset the metric for correct service log response from OCM
+	metrics.ResetResponseMetricFailure(config.ServiceLogService, notification.Name, alert.Labels["alertname"])
 
 	// Count the service log sent by the template name
 	if firing {
