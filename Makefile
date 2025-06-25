@@ -13,6 +13,8 @@ IMAGE_REGISTRY ?= quay.io
 IMAGE_REPOSITORY ?= app-sre
 IMG ?= $(IMAGE_REGISTRY)/$(IMAGE_REPOSITORY)/${BASE_IMG}
 
+include test/e2e/project.mk
+
 BINARY_FILE ?= build/_output/ocm-agent
 
 GO_SOURCES := $(find $(CURDIR) -type f -name "*.go" -print)
