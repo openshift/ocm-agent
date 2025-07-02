@@ -7,7 +7,7 @@ RUN go mod download
 COPY . .
 RUN make build
 
-FROM registry.access.redhat.com/ubi8-minimal:8.10-1255
+FROM registry.access.redhat.com/ubi8-minimal:8.10-1295.1749680713
 
 LABEL io.openshift.managed.name="ocm-agent" \
   io.openshift.managed.description="Agent to interact with OCM on managed clusters"
