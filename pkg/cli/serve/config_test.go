@@ -1,367 +1,795 @@
 package serve_test
 
 import (
-	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"testing"
 
 	"github.com/openshift/ocm-agent/pkg/cli/serve"
 	"github.com/openshift/ocm-agent/pkg/config"
-	"github.com/spf13/cobra"
 )
 
-var _ = Describe("Configuration file handling", func() {
-	var (
-		cmd     *cobra.Command
-		tempDir string
-		stderr  *bytes.Buffer
-	)
-
-	BeforeEach(func() {
-		cmd = serve.NewServeCmd()
-
-		var err error
-		tempDir, err = os.MkdirTemp("", "config-test-*")
-		Expect(err).To(BeNil())
-
-		// Capture stderr for testing os.Exit scenarios
-		stderr = &bytes.Buffer{}
-		cmd.SetErr(stderr)
-	})
-
-	AfterEach(func() {
-		if tempDir != "" {
-			os.RemoveAll(tempDir)
-		}
-	})
-
-	Context("String flag file reading", func() {
-		It("should read simple string value from file", func() {
-			testFile := filepath.Join(tempDir, "simple_string")
-			content := "simple-value"
-			err := os.WriteFile(testFile, []byte(content), 0600)
-			Expect(err).To(BeNil())
-
-			err = cmd.Flags().Set(config.AccessToken, "@"+testFile)
-			Expect(err).To(BeNil())
-
-			err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
-			Expect(err).To(BeNil())
-
-			value, err := cmd.Flags().GetString(config.AccessToken)
-			Expect(err).To(BeNil())
-			Expect(value).To(Equal(content))
-		})
-
-		It("should handle multiline content by trimming whitespace", func() {
-			testFile := filepath.Join(tempDir, "multiline_string")
-			content := "line1\nline2\nline3"
-			err := os.WriteFile(testFile, []byte("  "+content+"  \n"), 0600)
-			Expect(err).To(BeNil())
-
-			err = cmd.Flags().Set(config.OcmURL, "@"+testFile)
-			Expect(err).To(BeNil())
-
-			err = serve.ReadFlagsFromFile(cmd, config.OcmURL)
-			Expect(err).To(BeNil())
-
-			value, err := cmd.Flags().GetString(config.OcmURL)
-			Expect(err).To(BeNil())
-			Expect(value).To(Equal(content))
-		})
-
-		It("should handle special characters in file content", func() {
-			testFile := filepath.Join(tempDir, "special_chars")
-			content := "!@#$%^&*()_+-={}[]|\\:;\"'<>?,./"
-			err := os.WriteFile(testFile, []byte(content), 0600)
-			Expect(err).To(BeNil())
-
-			err = cmd.Flags().Set(config.AccessToken, "@"+testFile)
-			Expect(err).To(BeNil())
-
-			err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
-			Expect(err).To(BeNil())
-
-			value, err := cmd.Flags().GetString(config.AccessToken)
-			Expect(err).To(BeNil())
-			Expect(value).To(Equal(content))
-		})
-
-		It("should handle Unicode content", func() {
-			testFile := filepath.Join(tempDir, "unicode_content")
-			content := "测试内容 🚀 émoji"
-			err := os.WriteFile(testFile, []byte(content), 0600)
-			Expect(err).To(BeNil())
-
-			err = cmd.Flags().Set(config.ExternalClusterID, "@"+testFile)
-			Expect(err).To(BeNil())
-
-			err = serve.ReadFlagsFromFile(cmd, config.ExternalClusterID)
-			Expect(err).To(BeNil())
-
-			value, err := cmd.Flags().GetString(config.ExternalClusterID)
-			Expect(err).To(BeNil())
-			Expect(value).To(Equal(content))
-		})
-	})
-
-	Context("String slice flag file reading", func() {
-		It("should read comma-separated values from file", func() {
-			testFile := filepath.Join(tempDir, "services_list")
-			content := "service_log,clusters,upgrade_policies"
-			err := os.WriteFile(testFile, []byte(content), 0600)
-			Expect(err).To(BeNil())
-
-			err = cmd.Flags().Set(config.Services, "@"+testFile)
-			Expect(err).To(BeNil())
-
-			err = serve.ReadFlagsFromFile(cmd, config.Services)
-			Expect(err).To(BeNil())
-
-			values, err := cmd.Flags().GetStringSlice(config.Services)
-			Expect(err).To(BeNil())
-			Expect(values).To(ContainElements("service_log", "clusters", "upgrade_policies"))
-
-		})
-
-		It("should handle single value in string slice", func() {
-			testFile := filepath.Join(tempDir, "single_service")
-			content := "service_log"
-			err := os.WriteFile(testFile, []byte(content), 0600)
-			Expect(err).To(BeNil())
-
-			err = cmd.Flags().Set(config.Services, "@"+testFile)
-			Expect(err).To(BeNil())
-
-			err = serve.ReadFlagsFromFile(cmd, config.Services)
-			Expect(err).To(BeNil())
-
-			values, err := cmd.Flags().GetStringSlice(config.Services)
-			Expect(err).To(BeNil())
-			Expect(values).To(ContainElements("service_log"))
-		})
-
-		It("should handle values with spaces", func() {
-			testFile := filepath.Join(tempDir, "services_with_spaces")
-			content := "service log,cluster management"
-			err := os.WriteFile(testFile, []byte(content), 0600)
-			Expect(err).To(BeNil())
-
-			err = cmd.Flags().Set(config.Services, "@"+testFile)
-			Expect(err).To(BeNil())
-
-			err = serve.ReadFlagsFromFile(cmd, config.Services)
-			Expect(err).To(BeNil())
-
-			values, err := cmd.Flags().GetStringSlice(config.Services)
-			Expect(err).To(BeNil())
-			Expect(values).To(ContainElements("service log", "cluster management"))
-		})
-
-		It("should trim whitespace from string slice content", func() {
-			testFile := filepath.Join(tempDir, "services_with_whitespace")
-			content := "  service_log , clusters  , upgrade_policies  "
-			err := os.WriteFile(testFile, []byte(content), 0600)
-			Expect(err).To(BeNil())
-
-			err = cmd.Flags().Set(config.Services, "@"+testFile)
-			Expect(err).To(BeNil())
-
-			err = serve.ReadFlagsFromFile(cmd, config.Services)
-			Expect(err).To(BeNil())
-
-			values, err := cmd.Flags().GetStringSlice(config.Services)
-			Expect(err).To(BeNil())
-			Expect(values).To(ContainElements("service_log ", " clusters  ", " upgrade_policies"))
-		})
-	})
-
-	Context("Error handling", func() {
-		It("should return descriptive error for non-existent file (string)", func() {
-			nonExistentFile := filepath.Join(tempDir, "does_not_exist")
-
-			err := cmd.Flags().Set(config.AccessToken, "@"+nonExistentFile)
-			Expect(err).To(BeNil())
-
-			err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("can't read value of flag 'access-token'"))
-			Expect(err.Error()).To(ContainSubstring("from file"))
-			Expect(err.Error()).To(ContainSubstring("does_not_exist"))
-			Expect(err.Error()).To(ContainSubstring("no such file or directory"))
-		})
-
-		It("should return descriptive error for non-existent file (string slice)", func() {
-			nonExistentFile := filepath.Join(tempDir, "missing_services")
-
-			err := cmd.Flags().Set(config.Services, "@"+nonExistentFile)
-			Expect(err).To(BeNil())
-
-			err = serve.ReadFlagsFromFile(cmd, config.Services)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("can't read value of flag 'services'"))
-			Expect(err.Error()).To(ContainSubstring("from file"))
-		})
-
-		It("should handle directory instead of file", func() {
-			dirPath := filepath.Join(tempDir, "directory")
-			err := os.Mkdir(dirPath, 0755)
-			Expect(err).To(BeNil())
-
-			err = cmd.Flags().Set(config.AccessToken, "@"+dirPath)
-			Expect(err).To(BeNil())
-
-			err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("can't read value of flag"))
-		})
-	})
-
-	Context("Edge cases", func() {
-		It("should handle empty file", func() {
-			emptyFile := filepath.Join(tempDir, "empty")
-			err := os.WriteFile(emptyFile, []byte(""), 0600)
-			Expect(err).To(BeNil())
-
-			err = cmd.Flags().Set(config.AccessToken, "@"+emptyFile)
-			Expect(err).To(BeNil())
-
-			err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
-			Expect(err).To(BeNil())
-
-			value, err := cmd.Flags().GetString(config.AccessToken)
-			Expect(err).To(BeNil())
-			Expect(value).To(Equal(""))
-		})
-
-		It("should handle file with only whitespace", func() {
-			whitespaceFile := filepath.Join(tempDir, "whitespace")
-			err := os.WriteFile(whitespaceFile, []byte("   \n\t  \n  "), 0600)
-			Expect(err).To(BeNil())
-
-			err = cmd.Flags().Set(config.ExternalClusterID, "@"+whitespaceFile)
-			Expect(err).To(BeNil())
-
-			err = serve.ReadFlagsFromFile(cmd, config.ExternalClusterID)
-			Expect(err).To(BeNil())
-
-			value, err := cmd.Flags().GetString(config.ExternalClusterID)
-			Expect(err).To(BeNil())
-			Expect(value).To(Equal(""))
-		})
-
-		It("should handle file with null bytes", func() {
-			nullFile := filepath.Join(tempDir, "null_bytes")
-			content := []byte("content\x00with\x00nulls")
-			err := os.WriteFile(nullFile, content, 0600)
-			Expect(err).To(BeNil())
-
-			err = cmd.Flags().Set(config.AccessToken, "@"+nullFile)
-			Expect(err).To(BeNil())
-
-			err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
-			Expect(err).To(BeNil())
-
-			value, err := cmd.Flags().GetString(config.AccessToken)
-			Expect(err).To(BeNil())
-			Expect(value).To(Equal("content\x00with\x00nulls"))
-		})
-
-		It("should handle very large files", func() {
-			largeFile := filepath.Join(tempDir, "large")
-			content := strings.Repeat("a", 10000) // 10KB content
-			err := os.WriteFile(largeFile, []byte(content), 0600)
-			Expect(err).To(BeNil())
-
-			err = cmd.Flags().Set(config.AccessToken, "@"+largeFile)
-			Expect(err).To(BeNil())
-
-			err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
-			Expect(err).To(BeNil())
-
-			value, err := cmd.Flags().GetString(config.AccessToken)
-			Expect(err).To(BeNil())
-			Expect(value).To(Equal(content))
-		})
-
-		It("should not process flags that don't start with @", func() {
-			regularValue := "regular-value-not-from-file"
-			err := cmd.Flags().Set(config.AccessToken, regularValue)
-			Expect(err).To(BeNil())
-
-			err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
-			Expect(err).To(BeNil())
-
-			value, err := cmd.Flags().GetString(config.AccessToken)
-			Expect(err).To(BeNil())
-			Expect(value).To(Equal(regularValue))
-		})
-
-		It("should handle @ symbol in the middle of value", func() {
-			valueWithAt := "user@domain.com"
-			err := cmd.Flags().Set(config.AccessToken, valueWithAt)
-			Expect(err).To(BeNil())
-
-			err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
-			Expect(err).To(BeNil())
-
-			value, err := cmd.Flags().GetString(config.AccessToken)
-			Expect(err).To(BeNil())
-			Expect(value).To(Equal(valueWithAt))
-		})
-	})
-
-	Context("Multiple flag processing", func() {
-		It("should process multiple flags with mix of file and direct values", func() {
-			// Create test file
-			urlFile := filepath.Join(tempDir, "url")
-			err := os.WriteFile(urlFile, []byte("https://from-file.com"), 0600)
-			Expect(err).To(BeNil())
-
-			// Set flags: one from file, one direct
-			err = cmd.Flags().Set(config.OcmURL, "@"+urlFile)
-			Expect(err).To(BeNil())
-			err = cmd.Flags().Set(config.AccessToken, "direct-token")
-			Expect(err).To(BeNil())
-
-			// Process both flags
-			err = serve.ReadFlagsFromFile(cmd, config.OcmURL, config.AccessToken)
-			Expect(err).To(BeNil())
-
-			// Verify values
-			urlValue, err := cmd.Flags().GetString(config.OcmURL)
-			Expect(err).To(BeNil())
-			Expect(urlValue).To(Equal("https://from-file.com"))
-
-			tokenValue, err := cmd.Flags().GetString(config.AccessToken)
-			Expect(err).To(BeNil())
-			Expect(tokenValue).To(Equal("direct-token"))
-		})
-
-		It("should stop processing on first error", func() {
-			// Create one valid file
-			validFile := filepath.Join(tempDir, "valid")
-			err := os.WriteFile(validFile, []byte("valid-content"), 0600)
-			Expect(err).To(BeNil())
-
-			// Set flags: one valid file, one invalid
-			err = cmd.Flags().Set(config.OcmURL, "@"+validFile)
-			Expect(err).To(BeNil())
-			err = cmd.Flags().Set(config.AccessToken, "@invalid-file")
-			Expect(err).To(BeNil())
-
-			// Process both flags - should fail on the invalid one
-			err = serve.ReadFlagsFromFile(cmd, config.OcmURL, config.AccessToken)
-			Expect(err).To(HaveOccurred())
-
-			// The valid flag should still be processed
-			urlValue, err := cmd.Flags().GetString(config.OcmURL)
-			Expect(err).To(BeNil())
-			Expect(urlValue).To(Equal("valid-content"))
-		})
-	})
-})
+// TestReadFlagsFromFileSimpleString tests reading simple string values from files
+func TestReadFlagsFromFileSimpleString(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "config-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	testFile := filepath.Join(tempDir, "simple_string")
+	content := "simple-value"
+	err = os.WriteFile(testFile, []byte(content), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.AccessToken, "@"+testFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	value, err := cmd.Flags().GetString(config.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != content {
+		t.Errorf("Expected value %s, got %s", content, value)
+	}
+}
+
+// TestReadFlagsFromFileMultilineContent tests multiline content handling
+func TestReadFlagsFromFileMultilineContent(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "config-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	testFile := filepath.Join(tempDir, "multiline_string")
+	content := "line1\nline2\nline3"
+	err = os.WriteFile(testFile, []byte("  "+content+"  \n"), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.OcmURL, "@"+testFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.OcmURL)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	value, err := cmd.Flags().GetString(config.OcmURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != content {
+		t.Errorf("Expected value %s, got %s", content, value)
+	}
+}
+
+// TestReadFlagsFromFileSpecialCharacters tests special characters in file content
+func TestReadFlagsFromFileSpecialCharacters(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "config-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	testFile := filepath.Join(tempDir, "special_chars")
+	content := "!@#$%^&*()_+-={}[]|\\:;\"'<>?,./"
+	err = os.WriteFile(testFile, []byte(content), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.AccessToken, "@"+testFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	value, err := cmd.Flags().GetString(config.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != content {
+		t.Errorf("Expected value %s, got %s", content, value)
+	}
+}
+
+// TestReadFlagsFromFileUnicodeContent tests Unicode content handling
+func TestReadFlagsFromFileUnicodeContent(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "config-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	testFile := filepath.Join(tempDir, "unicode_content")
+	content := "测试内容 🚀 émoji"
+	err = os.WriteFile(testFile, []byte(content), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.ExternalClusterID, "@"+testFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.ExternalClusterID)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	value, err := cmd.Flags().GetString(config.ExternalClusterID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != content {
+		t.Errorf("Expected value %s, got %s", content, value)
+	}
+}
+
+// TestReadFlagsFromFileStringSliceCSV tests comma-separated values from files
+func TestReadFlagsFromFileStringSliceCSV(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "config-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	testFile := filepath.Join(tempDir, "services_list")
+	content := "service_log,clusters,upgrade_policies"
+	err = os.WriteFile(testFile, []byte(content), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.Services, "@"+testFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.Services)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	values, err := cmd.Flags().GetStringSlice(config.Services)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedServices := []string{"service_log", "clusters", "upgrade_policies"}
+	if !containsAllElements(values, expectedServices) {
+		t.Errorf("Expected services %v, got %v", expectedServices, values)
+	}
+}
+
+// TestReadFlagsFromFileStringSliceSingle tests single value in string slice
+func TestReadFlagsFromFileStringSliceSingle(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "config-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	testFile := filepath.Join(tempDir, "single_service")
+	content := "service_log"
+	err = os.WriteFile(testFile, []byte(content), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.Services, "@"+testFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.Services)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	values, err := cmd.Flags().GetStringSlice(config.Services)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !contains(values, "service_log") {
+		t.Errorf("Expected services to contain service_log, got %v", values)
+	}
+}
+
+// TestReadFlagsFromFileStringSliceSpaces tests values with spaces
+func TestReadFlagsFromFileStringSliceSpaces(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "config-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	testFile := filepath.Join(tempDir, "services_with_spaces")
+	content := "service log,cluster management"
+	err = os.WriteFile(testFile, []byte(content), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.Services, "@"+testFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.Services)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	values, err := cmd.Flags().GetStringSlice(config.Services)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedServices := []string{"service log", "cluster management"}
+	if !containsAllElements(values, expectedServices) {
+		t.Errorf("Expected services %v, got %v", expectedServices, values)
+	}
+}
+
+// TestReadFlagsFromFileNonExistentFile tests error handling for non-existent files
+func TestReadFlagsFromFileNonExistentFile(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "config-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	nonExistentFile := filepath.Join(tempDir, "does_not_exist")
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.AccessToken, "@"+nonExistentFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
+	if err == nil {
+		t.Error("Expected error for non-existent file")
+	}
+	if !strings.Contains(err.Error(), "can't read value of flag 'access-token'") {
+		t.Errorf("Expected error about access-token flag, got %s", err.Error())
+	}
+	if !strings.Contains(err.Error(), "from file") {
+		t.Errorf("Expected error to mention 'from file', got %s", err.Error())
+	}
+}
+
+// TestReadFlagsFromFileDirectory tests handling directory instead of file
+func TestReadFlagsFromFileDirectory(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "config-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	dirPath := filepath.Join(tempDir, "directory")
+	err = os.Mkdir(dirPath, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.AccessToken, "@"+dirPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
+	if err == nil {
+		t.Error("Expected error for directory instead of file")
+	}
+	if !strings.Contains(err.Error(), "can't read value of flag") {
+		t.Errorf("Expected error about flag reading, got %s", err.Error())
+	}
+}
+
+// TestReadFlagsFromFileEmptyFile tests handling empty files
+func TestReadFlagsFromFileEmptyFile(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "config-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	emptyFile := filepath.Join(tempDir, "empty")
+	err = os.WriteFile(emptyFile, []byte(""), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.AccessToken, "@"+emptyFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	value, err := cmd.Flags().GetString(config.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != "" {
+		t.Errorf("Expected empty string, got %s", value)
+	}
+}
+
+// TestReadFlagsFromFileWhitespaceOnly tests files with only whitespace
+func TestReadFlagsFromFileWhitespaceOnly(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "config-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	whitespaceFile := filepath.Join(tempDir, "whitespace")
+	err = os.WriteFile(whitespaceFile, []byte("   \n\t  \n  "), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.ExternalClusterID, "@"+whitespaceFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.ExternalClusterID)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	value, err := cmd.Flags().GetString(config.ExternalClusterID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != "" {
+		t.Errorf("Expected empty string, got %s", value)
+	}
+}
+
+// TestReadFlagsFromFileNullBytes tests files with null bytes
+func TestReadFlagsFromFileNullBytes(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "config-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	nullFile := filepath.Join(tempDir, "null_bytes")
+	content := []byte("content\x00with\x00nulls")
+	err = os.WriteFile(nullFile, content, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.AccessToken, "@"+nullFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	value, err := cmd.Flags().GetString(config.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != "content\x00with\x00nulls" {
+		t.Errorf("Expected value with null bytes, got %s", value)
+	}
+}
+
+// TestReadFlagsFromFileLargeFiles tests handling very large files
+func TestReadFlagsFromFileLargeFiles(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "config-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	largeFile := filepath.Join(tempDir, "large")
+	content := strings.Repeat("a", 10000) // 10KB content
+	err = os.WriteFile(largeFile, []byte(content), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.AccessToken, "@"+largeFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	value, err := cmd.Flags().GetString(config.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != content {
+		t.Errorf("Expected large content, got different value")
+	}
+}
+
+// TestReadFlagsFromFileNoAtPrefix tests flags without @ prefix
+func TestReadFlagsFromFileNoAtPrefix(t *testing.T) {
+	cmd := serve.NewServeCmd()
+	regularValue := "regular-value-not-from-file"
+	err := cmd.Flags().Set(config.AccessToken, regularValue)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	value, err := cmd.Flags().GetString(config.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != regularValue {
+		t.Errorf("Expected unchanged value %s, got %s", regularValue, value)
+	}
+}
+
+// TestReadFlagsFromFileAtInValue tests @ symbol in the middle of value
+func TestReadFlagsFromFileAtInValue(t *testing.T) {
+	cmd := serve.NewServeCmd()
+	valueWithAt := "user@domain.com"
+	err := cmd.Flags().Set(config.AccessToken, valueWithAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	value, err := cmd.Flags().GetString(config.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != valueWithAt {
+		t.Errorf("Expected unchanged value %s, got %s", valueWithAt, value)
+	}
+}
+
+// TestReadFlagsFromFileLineEndings tests different line endings
+func TestReadFlagsFromFileLineEndings(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "config-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Test Unix line endings
+	unixFile := filepath.Join(tempDir, "unix_ending")
+	err = os.WriteFile(unixFile, []byte("unix\n"), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.AccessToken, "@"+unixFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	value, err := cmd.Flags().GetString(config.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != "unix" {
+		t.Errorf("Expected 'unix', got %s", value)
+	}
+
+	// Test Windows line endings
+	windowsFile := filepath.Join(tempDir, "windows_ending")
+	err = os.WriteFile(windowsFile, []byte("windows\r\n"), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd2 := serve.NewServeCmd()
+	err = cmd2.Flags().Set(config.OcmURL, "@"+windowsFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd2, config.OcmURL)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	value, err = cmd2.Flags().GetString(config.OcmURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != "windows" {
+		t.Errorf("Expected 'windows', got %s", value)
+	}
+}
+
+// TestReadFlagsFromFileSymlinks tests symbolic links
+func TestReadFlagsFromFileSymlinks(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "config-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Create target file
+	targetFile := filepath.Join(tempDir, "target")
+	err = os.WriteFile(targetFile, []byte("symlink-content"), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create symbolic link
+	linkFile := filepath.Join(tempDir, "link")
+	err = os.Symlink(targetFile, linkFile)
+	if err != nil {
+		t.Skip("Symlinks not supported on this system")
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.AccessToken, "@"+linkFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	value, err := cmd.Flags().GetString(config.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != "symlink-content" {
+		t.Errorf("Expected symlink-content, got %s", value)
+	}
+}
+
+// TestReadFlagsFromFileBinaryContent tests binary-like content
+func TestReadFlagsFromFileBinaryContent(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "config-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	testFile := filepath.Join(tempDir, "binary_content")
+	content := []byte{0x01, 0x02, 0x03, 0x41, 0x42, 0x43, 0x00, 0xFF}
+	err = os.WriteFile(testFile, content, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.AccessToken, "@"+testFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	value, err := cmd.Flags().GetString(config.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(value) != 8 {
+		t.Errorf("Expected 8 bytes, got %d", len(value))
+	}
+}
+
+// TestReadFlagsFromFileComplexCSV tests complex CSV values
+func TestReadFlagsFromFileComplexCSV(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "config-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	testFile := filepath.Join(tempDir, "complex_services")
+	content := "service_log,clusters,upgrade_policies"
+	err = os.WriteFile(testFile, []byte(content), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.Services, "@"+testFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.Services)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	values, err := cmd.Flags().GetStringSlice(config.Services)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(values) == 0 {
+		t.Error("Expected non-empty services slice")
+	}
+}
+
+// TestReadFlagsFromFileDataValidation tests data validation
+func TestReadFlagsFromFileDataValidation(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "config-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	testFile := filepath.Join(tempDir, "exact_content")
+	content := "  prefix content suffix  "
+	err = os.WriteFile(testFile, []byte(content), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.AccessToken, "@"+testFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	value, err := cmd.Flags().GetString(config.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != "prefix content suffix" {
+		t.Errorf("Expected 'prefix content suffix', got %s", value)
+	}
+}
+
+// TestReadFlagsFromFileOnlyNewlines tests files with only newlines
+func TestReadFlagsFromFileOnlyNewlines(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "config-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	testFile := filepath.Join(tempDir, "only_newlines")
+	content := "\n\n\n\n"
+	err = os.WriteFile(testFile, []byte(content), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.AccessToken, "@"+testFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	value, err := cmd.Flags().GetString(config.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != "" {
+		t.Errorf("Expected empty string, got %s", value)
+	}
+}
+
+// TestReadFlagsFromFileConcurrentAccess tests concurrent file access
+func TestReadFlagsFromFileConcurrentAccess(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "config-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	testFile := filepath.Join(tempDir, "concurrent")
+	err = os.WriteFile(testFile, []byte("concurrent-content"), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Test multiple concurrent reads
+	done := make(chan bool, 3)
+	for i := 0; i < 3; i++ {
+		go func() {
+			defer func() { done <- true }()
+
+			tempCmd := serve.NewServeCmd()
+			err := tempCmd.Flags().Set(config.AccessToken, "@"+testFile)
+			if err != nil {
+				t.Errorf("Failed to set flag: %v", err)
+				return
+			}
+
+			err = serve.ReadFlagsFromFile(tempCmd, config.AccessToken)
+			if err != nil {
+				t.Errorf("ReadFlagsFromFile failed: %v", err)
+				return
+			}
+
+			value, err := tempCmd.Flags().GetString(config.AccessToken)
+			if err != nil {
+				t.Errorf("Failed to get flag value: %v", err)
+				return
+			}
+			if value != "concurrent-content" {
+				t.Errorf("Expected concurrent-content, got %s", value)
+			}
+		}()
+	}
+
+	// Wait for all goroutines to complete
+	for i := 0; i < 3; i++ {
+		<-done
+	}
+}

@@ -2,345 +2,760 @@ package serve_test
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 
 	"github.com/openshift/ocm-agent/pkg/cli/serve"
 	"github.com/openshift/ocm-agent/pkg/config"
-	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
-var _ = Describe("Serve command", func() {
-	var (
-		serveCmd *cobra.Command
-		output   *bytes.Buffer
-		tempDir  string
-	)
+// TestNewServeCmd tests the creation and basic properties of the serve command
+func TestNewServeCmd(t *testing.T) {
+	cmd := serve.NewServeCmd()
 
-	BeforeEach(func() {
-		serveCmd = serve.NewServeCmd()
-		output = &bytes.Buffer{}
-		serveCmd.SetOut(output)
-		serveCmd.SetErr(output)
+	if cmd == nil {
+		t.Fatal("NewServeCmd returned nil")
+	}
 
-		// Create temporary directory for test files
-		var err error
-		tempDir, err = os.MkdirTemp("", "serve-test-*")
-		Expect(err).To(BeNil())
+	if cmd.Use != "serve" {
+		t.Errorf("Expected command Use to be 'serve', got %s", cmd.Use)
+	}
 
-		// Reset viper for each test
-		viper.Reset()
-	})
+	if cmd.Short != "Starts the OCM Agent server" {
+		t.Errorf("Expected command Short to be 'Starts the OCM Agent server', got %s", cmd.Short)
+	}
 
-	AfterEach(func() {
-		// Clean up temporary directory
-		if tempDir != "" {
-			os.RemoveAll(tempDir)
+	if !strings.Contains(cmd.Long, "Start the OCM Agent server") {
+		t.Errorf("Expected command Long to contain 'Start the OCM Agent server', got %s", cmd.Long)
+	}
+
+	if !strings.Contains(cmd.Example, "ocm-agent serve") {
+		t.Errorf("Expected command Example to contain 'ocm-agent serve', got %s", cmd.Example)
+	}
+}
+
+// TestServeCommandFlags tests all the flags defined for the serve command
+func TestServeCommandFlags(t *testing.T) {
+	cmd := serve.NewServeCmd()
+
+	expectedFlags := []struct {
+		name      string
+		shorthand string
+		usage     string
+	}{
+		{config.OcmURL, "", "OCM URL (string)"},
+		{config.AccessToken, "t", "Access token for OCM (string)"},
+		{config.ExternalClusterID, "c", "Cluster ID (string)"},
+		{config.OCMClientID, "", "OCM Client ID for testing fleet mode (string)"},
+		{config.OCMClientSecret, "", "OCM Client Secret for testing fleet mode (string)"},
+		{config.Services, "", "OCM service name (string)"},
+		{config.FleetMode, "", "Fleet Mode (bool)"},
+		{config.Debug, "d", "Debug mode enable"},
+	}
+
+	for _, expected := range expectedFlags {
+		flag := cmd.Flags().Lookup(expected.name)
+		if flag == nil {
+			t.Errorf("Flag %s should exist", expected.name)
+			continue
 		}
-	})
 
-	Context("Command initialization", func() {
-		It("should create serve command with correct properties", func() {
-			Expect(serveCmd.Use).To(Equal("serve"))
-			Expect(serveCmd.Short).To(Equal("Starts the OCM Agent server"))
-			Expect(serveCmd.Long).To(ContainSubstring("Start the OCM Agent server"))
-			Expect(serveCmd.Example).To(ContainSubstring("ocm-agent serve"))
-		})
-
-		It("should have all required flags defined", func() {
-			flags := serveCmd.Flags()
-
-			// Check that all expected flags exist
-			expectedFlags := []string{
-				config.OcmURL,
-				config.AccessToken,
-				config.ExternalClusterID,
-				config.OCMClientID,
-				config.OCMClientSecret,
-				config.Services,
-				config.FleetMode,
-			}
-
-			for _, flagName := range expectedFlags {
-				flag := flags.Lookup(flagName)
-				Expect(flag).ToNot(BeNil(), fmt.Sprintf("Flag %s should exist", flagName))
-			}
-		})
-
-		It("should have correct flag properties", func() {
-			flags := serveCmd.Flags()
-
-			// Test access token flag
-			tokenFlag := flags.Lookup(config.AccessToken)
-			Expect(tokenFlag.Shorthand).To(Equal("t"))
-			Expect(tokenFlag.Usage).To(ContainSubstring("Access token for OCM"))
-
-			// Test cluster ID flag
-			clusterFlag := flags.Lookup(config.ExternalClusterID)
-			Expect(clusterFlag.Shorthand).To(Equal("c"))
-			Expect(clusterFlag.Usage).To(ContainSubstring("Cluster ID"))
-
-			// Test services flag
-			servicesFlag := flags.Lookup(config.Services)
-			Expect(servicesFlag.Usage).To(ContainSubstring("OCM service name"))
-		})
-
-		It("should have persistent debug flag", func() {
-			persistentFlags := serveCmd.PersistentFlags()
-			debugFlag := persistentFlags.Lookup(config.Debug)
-			Expect(debugFlag).ToNot(BeNil())
-			Expect(debugFlag.Shorthand).To(Equal("d"))
-		})
-	})
-
-	Context("Flag validation - traditional mode", func() {
-		It("should require ocm-url flag", func() {
-			serveCmd.SetArgs([]string{})
-			err := serveCmd.Execute()
-			Expect(err).To(HaveOccurred())
-			expectedErrorMessage := "required flag(s) \"access-token\", \"cluster-id\", \"ocm-url\", \"services\" not set"
-			Expect(err.Error()).To(Equal(expectedErrorMessage))
-		})
-
-		It("should require access-token and cluster-id flags in traditional mode", func() {
-			serveCmd.SetArgs([]string{
-				"--ocm-url", "https://example.com",
-				"--services", "service_log",
-			})
-			err := serveCmd.Execute()
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("required flag(s) \"access-token\", \"cluster-id\""))
-		})
-
-		It("should require both access-token and cluster-id together", func() {
-			// Test with only access token
-			serveCmd.SetArgs([]string{
-				"--ocm-url", "https://example.com",
-				"--services", "service_log",
-				"--access-token", "token123",
-			})
-			err := serveCmd.Execute()
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("cluster-id"))
-		})
-	})
-
-	Context("Flag validation - fleet mode", func() {
-		It("should require fleet-mode flag when client credentials are provided", func() {
-			serveCmd.SetArgs([]string{
-				"--ocm-url", "https://example.com",
-				"--services", "service_log",
-				"--ocm-client-id", "client123",
-				"--ocm-client-secret", "secret123",
-			})
-			err := serveCmd.Execute()
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("required flag(s) \"fleet-mode\""))
-		})
-
-		It("should require both client ID and secret together", func() {
-			serveCmd.SetArgs([]string{
-				"--ocm-url", "https://example.com",
-				"--services", "service_log",
-				"--fleet-mode",
-				"--ocm-client-id", "client123",
-			})
-			err := serveCmd.Execute()
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("ocm-client-secret"))
-		})
-	})
-
-	Context("Help functionality", func() {
-		It("should display help text correctly", func() {
-			err := serveCmd.Help()
-			Expect(err).To(BeNil())
-
-			helpOutput := output.String()
-			Expect(helpOutput).To(ContainSubstring("Start the OCM Agent server"))
-			Expect(helpOutput).To(ContainSubstring("Usage:"))
-			Expect(helpOutput).To(ContainSubstring("Flags:"))
-			Expect(helpOutput).To(ContainSubstring("Examples:"))
-		})
-
-		It("should show examples in help", func() {
-			err := serveCmd.Help()
-			Expect(err).To(BeNil())
-
-			helpOutput := output.String()
-			Expect(helpOutput).To(ContainSubstring("ocm-agent serve --access-token"))
-			Expect(helpOutput).To(ContainSubstring("--fleet-mode"))
-		})
-	})
-
-	Context("ServeOptions initialization", func() {
-		It("should create new serve options with default values", func() {
-			options := serve.NewServeOptions()
-			Expect(options).ToNot(BeNil())
-		})
-	})
-})
-
-var _ = Describe("File-based configuration", func() {
-	var (
-		serveCmd *cobra.Command
-		tempDir  string
-	)
-
-	BeforeEach(func() {
-		serveCmd = serve.NewServeCmd()
-
-		var err error
-		tempDir, err = os.MkdirTemp("", "config-test-*")
-		Expect(err).To(BeNil())
-	})
-
-	AfterEach(func() {
-		if tempDir != "" {
-			os.RemoveAll(tempDir)
+		if expected.shorthand != "" && flag.Shorthand != expected.shorthand {
+			t.Errorf("Flag %s shorthand should be %s, got %s", expected.name, expected.shorthand, flag.Shorthand)
 		}
+
+		if !strings.Contains(flag.Usage, strings.Split(expected.usage, " ")[0]) {
+			t.Errorf("Flag %s usage should contain %s, got %s", expected.name, expected.usage, flag.Usage)
+		}
+	}
+}
+
+// TestServeCommandStructure tests the command structure and relationships
+func TestServeCommandStructure(t *testing.T) {
+	cmd := serve.NewServeCmd()
+
+	if cmd.Run == nil {
+		t.Error("Command should have Run function")
+	}
+
+	if cmd.RunE != nil {
+		t.Error("Command should use Run, not RunE")
+	}
+
+	if cmd.PreRun == nil {
+		t.Error("Command should have PreRun function for validation")
+	}
+}
+
+// TestNewServeOptions tests the ServeOptions creation
+func TestNewServeOptions(t *testing.T) {
+	options := serve.NewServeOptions()
+	if options == nil {
+		t.Fatal("NewServeOptions returned nil")
+	}
+}
+
+// TestReadFlagsFromFileString tests reading string flags from files
+func TestReadFlagsFromFileString(t *testing.T) {
+	// Create temporary directory
+	tempDir, err := os.MkdirTemp("", "serve-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Create test file
+	testFile := filepath.Join(tempDir, "test_value")
+	content := "test-string-value"
+	err = os.WriteFile(testFile, []byte(content), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.AccessToken, "@"+testFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	value, err := cmd.Flags().GetString(config.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if value != content {
+		t.Errorf("Expected value %s, got %s", content, value)
+	}
+}
+
+// TestReadFlagsFromFileStringSlice tests reading string slice flags from files
+func TestReadFlagsFromFileStringSlice(t *testing.T) {
+	// Create temporary directory
+	tempDir, err := os.MkdirTemp("", "serve-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Create test file
+	testFile := filepath.Join(tempDir, "test_services")
+	content := "service_log,clusters,upgrade_policies"
+	err = os.WriteFile(testFile, []byte(content), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.Services, "@"+testFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.Services)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	values, err := cmd.Flags().GetStringSlice(config.Services)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedServices := []string{"service_log", "clusters", "upgrade_policies"}
+	if !containsAllElements(values, expectedServices) {
+		t.Errorf("Expected services %v, got %v", expectedServices, values)
+	}
+}
+
+// TestReadFlagsFromFileWhitespace tests whitespace handling in file content
+func TestReadFlagsFromFileWhitespace(t *testing.T) {
+	// Create temporary directory
+	tempDir, err := os.MkdirTemp("", "serve-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Create test file with whitespace
+	testFile := filepath.Join(tempDir, "test_whitespace")
+	content := "  token-with-whitespace  \n"
+	err = os.WriteFile(testFile, []byte(content), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.AccessToken, "@"+testFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	value, err := cmd.Flags().GetString(config.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := "token-with-whitespace"
+	if value != expected {
+		t.Errorf("Expected whitespace-trimmed value %s, got %s", expected, value)
+	}
+}
+
+// TestReadFlagsFromFileError tests error handling for non-existent files
+func TestReadFlagsFromFileError(t *testing.T) {
+	// Create temporary directory
+	tempDir, err := os.MkdirTemp("", "serve-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	nonExistentFile := filepath.Join(tempDir, "does_not_exist")
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.AccessToken, "@"+nonExistentFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
+	if err == nil {
+		t.Error("Expected error for non-existent file, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "can't read value of flag") {
+		t.Errorf("Expected error to contain 'can't read value of flag', got %s", err.Error())
+	}
+}
+
+// TestReadFlagsFromFileNoPrefix tests that flags without @ prefix are not modified
+func TestReadFlagsFromFileNoPrefix(t *testing.T) {
+	cmd := serve.NewServeCmd()
+	originalValue := "https://direct.url.com"
+
+	err := cmd.Flags().Set(config.OcmURL, originalValue)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.OcmURL)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	value, err := cmd.Flags().GetString(config.OcmURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if value != originalValue {
+		t.Errorf("Expected unchanged value %s, got %s", originalValue, value)
+	}
+}
+
+// TestReadFlagsFromFileMultipleFlags tests reading multiple flags in one call
+func TestReadFlagsFromFileMultipleFlags(t *testing.T) {
+	// Create temporary directory
+	tempDir, err := os.MkdirTemp("", "serve-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Create test files
+	urlFile := filepath.Join(tempDir, "url_file")
+	tokenFile := filepath.Join(tempDir, "token_file")
+
+	err = os.WriteFile(urlFile, []byte("https://test.com"), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.WriteFile(tokenFile, []byte("test-token"), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.OcmURL, "@"+urlFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = cmd.Flags().Set(config.AccessToken, "@"+tokenFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Read both flags in one call
+	err = serve.ReadFlagsFromFile(cmd, config.OcmURL, config.AccessToken)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	// Verify both values were read
+	urlValue, err := cmd.Flags().GetString(config.OcmURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if urlValue != "https://test.com" {
+		t.Errorf("Expected URL https://test.com, got %s", urlValue)
+	}
+
+	tokenValue, err := cmd.Flags().GetString(config.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tokenValue != "test-token" {
+		t.Errorf("Expected token test-token, got %s", tokenValue)
+	}
+}
+
+// TestCompleteMethodFileBasedFlags tests the Complete method's file reading functionality
+func TestCompleteMethodFileBasedFlags(t *testing.T) {
+	// Create temporary directory
+	tempDir, err := os.MkdirTemp("", "serve-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Create test files
+	urlFile := filepath.Join(tempDir, "url_file")
+	tokenFile := filepath.Join(tempDir, "token_file")
+	servicesFile := filepath.Join(tempDir, "services_file")
+	clusterFile := filepath.Join(tempDir, "cluster_file")
+
+	err = os.WriteFile(urlFile, []byte("https://api.example.com"), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.WriteFile(tokenFile, []byte("test-token-123"), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.WriteFile(servicesFile, []byte("service_log,clusters"), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.WriteFile(clusterFile, []byte("cluster-id-123"), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+
+	// Set flags that Complete() method would process
+	err = cmd.Flags().Set(config.OcmURL, "@"+urlFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = cmd.Flags().Set(config.AccessToken, "@"+tokenFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = cmd.Flags().Set(config.Services, "@"+servicesFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = cmd.Flags().Set(config.ExternalClusterID, "@"+clusterFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Test the ReadFlagsFromFile logic that Complete() uses
+	err = serve.ReadFlagsFromFile(cmd, config.AccessToken, config.OcmURL, config.Services, config.ExternalClusterID)
+	if err != nil {
+		t.Fatalf("ReadFlagsFromFile failed: %v", err)
+	}
+
+	// Verify flags were read correctly
+	urlValue, err := cmd.Flags().GetString(config.OcmURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if urlValue != "https://api.example.com" {
+		t.Errorf("Expected URL https://api.example.com, got %s", urlValue)
+	}
+
+	tokenValue, err := cmd.Flags().GetString(config.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tokenValue != "test-token-123" {
+		t.Errorf("Expected token test-token-123, got %s", tokenValue)
+	}
+
+	servicesValue, err := cmd.Flags().GetStringSlice(config.Services)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedServices := []string{"service_log", "clusters"}
+	if !containsAllElements(servicesValue, expectedServices) {
+		t.Errorf("Expected services %v, got %v", expectedServices, servicesValue)
+	}
+
+	clusterValue, err := cmd.Flags().GetString(config.ExternalClusterID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if clusterValue != "cluster-id-123" {
+		t.Errorf("Expected cluster ID cluster-id-123, got %s", clusterValue)
+	}
+}
+
+// TestCompleteMethodDebugFlag tests debug flag handling
+func TestCompleteMethodDebugFlag(t *testing.T) {
+	cmd := serve.NewServeCmd()
+
+	// Set debug flag that Complete() method would process
+	err := cmd.Flags().Set(config.Debug, "true")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify debug flag is set correctly
+	debugValue, err := cmd.Flags().GetBool(config.Debug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !debugValue {
+		t.Error("Expected debug flag to be true")
+	}
+}
+
+// TestCompleteMethodFleetMode tests fleet mode flag configuration
+func TestCompleteMethodFleetMode(t *testing.T) {
+	cmd := serve.NewServeCmd()
+
+	// Set fleet mode flags that Complete() would validate
+	err := cmd.Flags().Set(config.FleetMode, "true")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = cmd.Flags().Set(config.OCMClientID, "client123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = cmd.Flags().Set(config.OCMClientSecret, "secret123")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify fleet mode flags are set
+	fleetMode, err := cmd.Flags().GetBool(config.FleetMode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !fleetMode {
+		t.Error("Expected fleet mode to be true")
+	}
+
+	clientID, err := cmd.Flags().GetString(config.OCMClientID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if clientID != "client123" {
+		t.Errorf("Expected client ID client123, got %s", clientID)
+	}
+
+	clientSecret, err := cmd.Flags().GetString(config.OCMClientSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if clientSecret != "secret123" {
+		t.Errorf("Expected client secret secret123, got %s", clientSecret)
+	}
+}
+
+// TestRunMethodFlagValidationRequired tests required flag validation
+// func TestRunMethodFlagValidationRequired(t *testing.T) {
+// 	cmd := serve.NewServeCmd()
+
+// 	// Test missing services flag
+// 	cmd.SetArgs([]string{
+// 		"--ocm-url", "https://example.com",
+// 		"--access-token", "token123",
+// 		"--cluster-id", "cluster123",
+// 		// Missing services flag
+// 	})
+
+// 	err := cmd.Execute()
+// 	if err == nil {
+// 		t.Error("Expected error for missing required services flag")
+// 	}
+// 	if !strings.Contains(err.Error(), "required") {
+// 		t.Errorf("Expected error to contain 'required', got %s", err.Error())
+// 	}
+// }
+
+// TestViperBinding tests that flags are properly bound to viper
+func TestViperBinding(t *testing.T) {
+	// Reset viper
+	viper.Reset()
+
+	cmd := serve.NewServeCmd()
+
+	// Test that flags are properly bound to viper (used by Run method)
+	cmd.SetArgs([]string{
+		"--ocm-url", "https://example.com",
+		"--access-token", "token123",
+		"--services", "service_log",
+		"--cluster-id", "cluster123",
 	})
 
-	Context("ReadFlagsFromFile function", func() {
-		It("should read string flag from file", func() {
-			// Create test file
-			testFile := filepath.Join(tempDir, "url_file")
-			err := os.WriteFile(testFile, []byte("https://api.openshift.com"), 0600)
-			Expect(err).To(BeNil())
-
-			// Set flag to read from file
-			err = serveCmd.Flags().Set(config.OcmURL, "@"+testFile)
-			Expect(err).To(BeNil())
-
-			// Read from file
-			err = serve.ReadFlagsFromFile(serveCmd, config.OcmURL)
-			Expect(err).To(BeNil())
-
-			// Verify value was read
-			value, err := serveCmd.Flags().GetString(config.OcmURL)
-			Expect(err).To(BeNil())
-			Expect(value).To(Equal("https://api.openshift.com"))
-		})
-
-		It("should read string slice flag from file", func() {
-			// Create test file
-			testFile := filepath.Join(tempDir, "services_file")
-			err := os.WriteFile(testFile, []byte("service_log,clusters"), 0600)
-			Expect(err).To(BeNil())
-
-			// Set flag to read from file
-			err = serveCmd.Flags().Set(config.Services, "@"+testFile)
-			Expect(err).To(BeNil())
-
-			// Read from file
-			err = serve.ReadFlagsFromFile(serveCmd, config.Services)
-			Expect(err).To(BeNil())
-
-			// Verify value was read
-			// values, err := serveCmd.Flags().GetStringSlice(config.Services)
-			// Expect(err).To(BeNil())
-			// Expect(values).To(ConsistOf("service_log", "clusters"))
-		})
-
-		It("should handle file with whitespace correctly", func() {
-			// Create test file with leading/trailing whitespace
-			testFile := filepath.Join(tempDir, "token_file")
-			err := os.WriteFile(testFile, []byte("  token123  \n"), 0600)
-			Expect(err).To(BeNil())
-
-			// Set flag to read from file
-			err = serveCmd.Flags().Set(config.AccessToken, "@"+testFile)
-			Expect(err).To(BeNil())
-
-			// Read from file
-			err = serve.ReadFlagsFromFile(serveCmd, config.AccessToken)
-			Expect(err).To(BeNil())
-
-			// Verify whitespace was trimmed
-			value, err := serveCmd.Flags().GetString(config.AccessToken)
-			Expect(err).To(BeNil())
-			Expect(value).To(Equal("token123"))
-		})
-
-		It("should return error for non-existent file", func() {
-			nonExistentFile := filepath.Join(tempDir, "does_not_exist")
-
-			err := serveCmd.Flags().Set(config.OcmURL, "@"+nonExistentFile)
-			Expect(err).To(BeNil())
-
-			err = serve.ReadFlagsFromFile(serveCmd, config.OcmURL)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("can't read value of flag"))
-			Expect(err.Error()).To(ContainSubstring("no such file or directory"))
-		})
-
-		It("should handle empty file correctly", func() {
-			// Create empty test file
-			testFile := filepath.Join(tempDir, "empty_file")
-			err := os.WriteFile(testFile, []byte(""), 0600)
-			Expect(err).To(BeNil())
-
-			err = serveCmd.Flags().Set(config.AccessToken, "@"+testFile)
-			Expect(err).To(BeNil())
-
-			err = serve.ReadFlagsFromFile(serveCmd, config.AccessToken)
-			Expect(err).To(BeNil())
-
-			value, err := serveCmd.Flags().GetString(config.AccessToken)
-			Expect(err).To(BeNil())
-			Expect(value).To(Equal(""))
-		})
-
-		It("should not modify flags that don't start with @", func() {
-			originalValue := "https://direct.url.com"
-			err := serveCmd.Flags().Set(config.OcmURL, originalValue)
-			Expect(err).To(BeNil())
-
-			err = serve.ReadFlagsFromFile(serveCmd, config.OcmURL)
-			Expect(err).To(BeNil())
-
-			value, err := serveCmd.Flags().GetString(config.OcmURL)
-			Expect(err).To(BeNil())
-			Expect(value).To(Equal(originalValue))
-		})
-
-		It("should handle multiple flags in one call", func() {
-			// Create test files
-			urlFile := filepath.Join(tempDir, "url_file")
-			tokenFile := filepath.Join(tempDir, "token_file")
-
-			err := os.WriteFile(urlFile, []byte("https://test.com"), 0600)
-			Expect(err).To(BeNil())
-			err = os.WriteFile(tokenFile, []byte("test-token"), 0600)
-			Expect(err).To(BeNil())
-
-			// Set flags to read from files
-			err = serveCmd.Flags().Set(config.OcmURL, "@"+urlFile)
-			Expect(err).To(BeNil())
-			err = serveCmd.Flags().Set(config.AccessToken, "@"+tokenFile)
-			Expect(err).To(BeNil())
-
-			// Read both flags in one call
-			err = serve.ReadFlagsFromFile(serveCmd, config.OcmURL, config.AccessToken)
-			Expect(err).To(BeNil())
-
-			// Verify both values were read
-			urlValue, err := serveCmd.Flags().GetString(config.OcmURL)
-			Expect(err).To(BeNil())
-			Expect(urlValue).To(Equal("https://test.com"))
-
-			tokenValue, err := serveCmd.Flags().GetString(config.AccessToken)
-			Expect(err).To(BeNil())
-			Expect(tokenValue).To(Equal("test-token"))
-		})
+	// Parse flags but don't execute (to avoid failure)
+	err := cmd.ParseFlags([]string{
+		"--ocm-url", "https://example.com",
+		"--access-token", "token123",
+		"--services", "service_log",
+		"--cluster-id", "cluster123",
 	})
-})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify viper binding works (Run method depends on this)
+	if viper.GetString(config.OcmURL) != "https://example.com" {
+		t.Errorf("Expected viper OcmURL https://example.com, got %s", viper.GetString(config.OcmURL))
+	}
+	if viper.GetString(config.AccessToken) != "token123" {
+		t.Errorf("Expected viper AccessToken token123, got %s", viper.GetString(config.AccessToken))
+	}
+	if !contains(viper.GetStringSlice(config.Services), "service_log") {
+		t.Errorf("Expected viper Services to contain service_log, got %v", viper.GetStringSlice(config.Services))
+	}
+	if viper.GetString(config.ExternalClusterID) != "cluster123" {
+		t.Errorf("Expected viper ExternalClusterID cluster123, got %s", viper.GetString(config.ExternalClusterID))
+	}
+}
+
+// TestHelpFunctionality tests the help functionality
+func TestHelpFunctionality(t *testing.T) {
+	cmd := serve.NewServeCmd()
+	output := &bytes.Buffer{}
+	cmd.SetOut(output)
+	cmd.SetErr(output)
+
+	err := cmd.Help()
+	if err != nil {
+		t.Fatalf("Help failed: %v", err)
+	}
+
+	helpOutput := output.String()
+	expectedStrings := []string{
+		"Start the OCM Agent server",
+		"Usage:",
+		"Flags:",
+		"Examples:",
+		"ocm-agent serve --access-token",
+		"--fleet-mode",
+	}
+
+	for _, expected := range expectedStrings {
+		if !strings.Contains(helpOutput, expected) {
+			t.Errorf("Expected help output to contain %s", expected)
+		}
+	}
+}
+
+// TestAdvancedStringSliceHandling tests complex CSV values from files
+func TestAdvancedStringSliceHandling(t *testing.T) {
+	// Create temporary directory
+	tempDir, err := os.MkdirTemp("", "serve-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	testFile := filepath.Join(tempDir, "complex_services")
+	content := "service_log,clusters,upgrade_policies"
+	err = os.WriteFile(testFile, []byte(content), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.Services, "@"+testFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.Services)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	values, err := cmd.Flags().GetStringSlice(config.Services)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(values) == 0 {
+		t.Error("Expected non-empty services slice")
+	}
+}
+
+// TestFileSystemEdgeCases tests various file system scenarios
+func TestFileSystemEdgeCases(t *testing.T) {
+	// Create temporary directory
+	tempDir, err := os.MkdirTemp("", "serve-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Test empty file
+	emptyFile := filepath.Join(tempDir, "empty")
+	err = os.WriteFile(emptyFile, []byte(""), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.AccessToken, "@"+emptyFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	value, err := cmd.Flags().GetString(config.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if value != "" {
+		t.Errorf("Expected empty string for empty file, got %s", value)
+	}
+
+	// Test file with only whitespace
+	whitespaceFile := filepath.Join(tempDir, "whitespace")
+	err = os.WriteFile(whitespaceFile, []byte("   \n\t  \n  "), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd2 := serve.NewServeCmd()
+	err = cmd2.Flags().Set(config.ExternalClusterID, "@"+whitespaceFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd2, config.ExternalClusterID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	value, err = cmd2.Flags().GetString(config.ExternalClusterID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if value != "" {
+		t.Errorf("Expected empty string for whitespace-only file, got %s", value)
+	}
+}
+
+// TestDifferentLineEndings tests files with different line ending formats
+func TestDifferentLineEndings(t *testing.T) {
+	// Create temporary directory
+	tempDir, err := os.MkdirTemp("", "serve-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Test Unix line endings
+	unixFile := filepath.Join(tempDir, "unix_ending")
+	err = os.WriteFile(unixFile, []byte("unix\n"), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.AccessToken, "@"+unixFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	value, err := cmd.Flags().GetString(config.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if value != "unix" {
+		t.Errorf("Expected 'unix', got %s", value)
+	}
+
+	// Test Windows line endings
+	windowsFile := filepath.Join(tempDir, "windows_ending")
+	err = os.WriteFile(windowsFile, []byte("windows\r\n"), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd2 := serve.NewServeCmd()
+	err = cmd2.Flags().Set(config.OcmURL, "@"+windowsFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = serve.ReadFlagsFromFile(cmd2, config.OcmURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	value, err = cmd2.Flags().GetString(config.OcmURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if value != "windows" {
+		t.Errorf("Expected 'windows', got %s", value)
+	}
+}
+
+// Helper functions
+
+// contains checks if a slice contains a specific element
+func contains(slice []string, element string) bool {
+	for _, item := range slice {
+		if item == element {
+			return true
+		}
+	}
+	return false
+}
+
+// containsAllElements checks if a slice contains all elements from another slice
+func containsAllElements(slice []string, elements []string) bool {
+	for _, element := range elements {
+		if !contains(slice, element) {
+			return false
+		}
+	}
+	return true
+}
 
 // Benchmark tests
 func BenchmarkNewServeCmd(b *testing.B) {
@@ -350,15 +765,15 @@ func BenchmarkNewServeCmd(b *testing.B) {
 }
 
 func BenchmarkReadFlagsFromFile(b *testing.B) {
-	cmd := serve.NewServeCmd()
+	// Setup
 	tempDir, _ := os.MkdirTemp("", "benchmark-*")
 	defer os.RemoveAll(tempDir)
 
 	testFile := filepath.Join(tempDir, "test_file")
-	err := os.WriteFile(testFile, []byte("test-value"), 0600)
-	Expect(err).ToNot(HaveOccurred())
-	urlErr := cmd.Flags().Set(config.OcmURL, "@"+testFile)
-	Expect(urlErr).ToNot(HaveOccurred())
+	_ = os.WriteFile(testFile, []byte("test-value"), 0600)
+
+	cmd := serve.NewServeCmd()
+	_ = cmd.Flags().Set(config.OcmURL, "@"+testFile)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/openshift/ocm-agent/pkg/cli"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var _ = Describe("ocm-agent CLI root command", func() {
@@ -124,6 +125,66 @@ var _ = Describe("CLI initialization", func() {
 			Expect(func() {
 				_ = cli.NewCmdRoot()
 			}).ToNot(Panic())
+		})
+	})
+})
+
+// Test initConfig function behavior
+var _ = Describe("initConfig function", func() {
+	var (
+		originalCommandLine interface{}
+	)
+
+	BeforeEach(func() {
+		// Save original command line for restoration
+		originalCommandLine = pflag.CommandLine
+	})
+
+	AfterEach(func() {
+		// Restore original command line
+		if originalCommandLine != nil {
+			pflag.CommandLine = originalCommandLine.(*pflag.FlagSet)
+		}
+	})
+
+	Context("Flag set initialization", func() {
+		It("should create a new flagset properly", func() {
+			// Create a new root command which triggers initConfig
+			rootCmd := cli.NewCmdRoot()
+			Expect(rootCmd).ToNot(BeNil())
+
+			// Check that pflag.CommandLine is properly initialized
+			Expect(pflag.CommandLine).ToNot(BeNil())
+			// Check that it's a valid flagset by testing it has no flags initially
+			Expect(pflag.CommandLine.NFlag()).To(Equal(0))
+		})
+
+		It("should handle empty command line parsing", func() {
+			// This test ensures the initConfig function doesn't fail with empty args
+			Expect(func() {
+				_ = cli.NewCmdRoot()
+			}).ToNot(Panic())
+		})
+
+		It("should set exit on error for the flagset", func() {
+			rootCmd := cli.NewCmdRoot()
+			Expect(rootCmd).ToNot(BeNil())
+
+			// The flagset should be configured properly
+			// We can verify the flagset exists and is properly initialized
+			Expect(pflag.CommandLine).ToNot(BeNil())
+			Expect(pflag.CommandLine.NFlag()).To(Equal(0))
+		})
+
+		It("should be idempotent when called multiple times", func() {
+			// Create multiple root commands to ensure initConfig can be called multiple times
+			rootCmd1 := cli.NewCmdRoot()
+			rootCmd2 := cli.NewCmdRoot()
+
+			Expect(rootCmd1).ToNot(BeNil())
+			Expect(rootCmd2).ToNot(BeNil())
+			Expect(pflag.CommandLine).ToNot(BeNil())
+			Expect(pflag.CommandLine.NFlag()).To(Equal(0))
 		})
 	})
 })
