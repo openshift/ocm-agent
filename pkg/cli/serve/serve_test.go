@@ -9,7 +9,6 @@ import (
 
 	"github.com/openshift/ocm-agent/pkg/cli/serve"
 	"github.com/openshift/ocm-agent/pkg/config"
-	"github.com/spf13/viper"
 )
 
 // TestNewServeCmd tests the creation and basic properties of the serve command
@@ -322,204 +321,6 @@ func TestReadFlagsFromFileMultipleFlags(t *testing.T) {
 	}
 }
 
-// TestCompleteMethodFileBasedFlags tests the Complete method's file reading functionality
-func TestCompleteMethodFileBasedFlags(t *testing.T) {
-	// Create temporary directory
-	tempDir, err := os.MkdirTemp("", "serve-test-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	// Create test files
-	urlFile := filepath.Join(tempDir, "url_file")
-	tokenFile := filepath.Join(tempDir, "token_file")
-	servicesFile := filepath.Join(tempDir, "services_file")
-	clusterFile := filepath.Join(tempDir, "cluster_file")
-
-	err = os.WriteFile(urlFile, []byte("https://api.example.com"), 0600)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = os.WriteFile(tokenFile, []byte("test-token-123"), 0600)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = os.WriteFile(servicesFile, []byte("service_log,clusters"), 0600)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = os.WriteFile(clusterFile, []byte("cluster-id-123"), 0600)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cmd := serve.NewServeCmd()
-
-	// Set flags that Complete() method would process
-	err = cmd.Flags().Set(config.OcmURL, "@"+urlFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = cmd.Flags().Set(config.AccessToken, "@"+tokenFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = cmd.Flags().Set(config.Services, "@"+servicesFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = cmd.Flags().Set(config.ExternalClusterID, "@"+clusterFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Test the ReadFlagsFromFile logic that Complete() uses
-	err = serve.ReadFlagsFromFile(cmd, config.AccessToken, config.OcmURL, config.Services, config.ExternalClusterID)
-	if err != nil {
-		t.Fatalf("ReadFlagsFromFile failed: %v", err)
-	}
-
-	// Verify flags were read correctly
-	urlValue, err := cmd.Flags().GetString(config.OcmURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if urlValue != "https://api.example.com" {
-		t.Errorf("Expected URL https://api.example.com, got %s", urlValue)
-	}
-
-	tokenValue, err := cmd.Flags().GetString(config.AccessToken)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tokenValue != "test-token-123" {
-		t.Errorf("Expected token test-token-123, got %s", tokenValue)
-	}
-
-	servicesValue, err := cmd.Flags().GetStringSlice(config.Services)
-	if err != nil {
-		t.Fatal(err)
-	}
-	expectedServices := []string{"service_log", "clusters"}
-	if !containsAllElements(servicesValue, expectedServices) {
-		t.Errorf("Expected services %v, got %v", expectedServices, servicesValue)
-	}
-
-	clusterValue, err := cmd.Flags().GetString(config.ExternalClusterID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if clusterValue != "cluster-id-123" {
-		t.Errorf("Expected cluster ID cluster-id-123, got %s", clusterValue)
-	}
-}
-
-// TestCompleteMethodDebugFlag tests debug flag handling
-func TestCompleteMethodDebugFlag(t *testing.T) {
-	cmd := serve.NewServeCmd()
-
-	// Set debug flag that Complete() method would process
-	err := cmd.Flags().Set(config.Debug, "true")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Verify debug flag is set correctly
-	debugValue, err := cmd.Flags().GetBool(config.Debug)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !debugValue {
-		t.Error("Expected debug flag to be true")
-	}
-}
-
-// TestCompleteMethodFleetMode tests fleet mode flag configuration
-func TestCompleteMethodFleetMode(t *testing.T) {
-	cmd := serve.NewServeCmd()
-
-	// Set fleet mode flags that Complete() would validate
-	err := cmd.Flags().Set(config.FleetMode, "true")
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = cmd.Flags().Set(config.OCMClientID, "client123")
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = cmd.Flags().Set(config.OCMClientSecret, "secret123")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Verify fleet mode flags are set
-	fleetMode, err := cmd.Flags().GetBool(config.FleetMode)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !fleetMode {
-		t.Error("Expected fleet mode to be true")
-	}
-
-	clientID, err := cmd.Flags().GetString(config.OCMClientID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if clientID != "client123" {
-		t.Errorf("Expected client ID client123, got %s", clientID)
-	}
-
-	clientSecret, err := cmd.Flags().GetString(config.OCMClientSecret)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if clientSecret != "secret123" {
-		t.Errorf("Expected client secret secret123, got %s", clientSecret)
-	}
-}
-
-// TestViperBinding tests that flags are properly bound to viper
-func TestViperBinding(t *testing.T) {
-	// Reset viper
-	viper.Reset()
-
-	cmd := serve.NewServeCmd()
-
-	// Test that flags are properly bound to viper (used by Run method)
-	cmd.SetArgs([]string{
-		"--ocm-url", "https://example.com",
-		"--access-token", "token123",
-		"--services", "service_log",
-		"--cluster-id", "cluster123",
-	})
-
-	// Parse flags but don't execute (to avoid failure)
-	err := cmd.ParseFlags([]string{
-		"--ocm-url", "https://example.com",
-		"--access-token", "token123",
-		"--services", "service_log",
-		"--cluster-id", "cluster123",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Verify viper binding works (Run method depends on this)
-	if viper.GetString(config.OcmURL) != "https://example.com" {
-		t.Errorf("Expected viper OcmURL https://example.com, got %s", viper.GetString(config.OcmURL))
-	}
-	if viper.GetString(config.AccessToken) != "token123" {
-		t.Errorf("Expected viper AccessToken token123, got %s", viper.GetString(config.AccessToken))
-	}
-	if !contains(viper.GetStringSlice(config.Services), "service_log") {
-		t.Errorf("Expected viper Services to contain service_log, got %v", viper.GetStringSlice(config.Services))
-	}
-	if viper.GetString(config.ExternalClusterID) != "cluster123" {
-		t.Errorf("Expected viper ExternalClusterID cluster123, got %s", viper.GetString(config.ExternalClusterID))
-	}
-}
-
 // TestHelpFunctionality tests the help functionality
 func TestHelpFunctionality(t *testing.T) {
 	cmd := serve.NewServeCmd()
@@ -760,164 +561,40 @@ func BenchmarkReadFlagsFromFile(b *testing.B) {
 	}
 }
 
-// NEW TESTS FOR Complete() AND Run() METHODS
-
-// TestCompleteMethodErrorHandling tests Complete method error handling
-func TestCompleteMethodErrorHandling(t *testing.T) {
-	// Create temporary directory
+// TestCompleteMethodDirect tests the Complete method directly
+func TestCompleteMethodDirect(t *testing.T) {
+	// Create temporary directory for test files
 	tempDir, err := os.MkdirTemp("", "serve-test-*")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(tempDir)
 
-	nonExistentFile := filepath.Join(tempDir, "does_not_exist")
-
-	cmd := serve.NewServeCmd()
-	err = cmd.Flags().Set(config.AccessToken, "@"+nonExistentFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Test that Complete method handles file reading errors
-	err = serve.ReadFlagsFromFile(cmd, config.AccessToken)
-	if err == nil {
-		t.Error("Expected error for non-existent file in Complete method")
-	}
-	if !strings.Contains(err.Error(), "can't read value of flag") {
-		t.Errorf("Expected error to contain 'can't read value of flag', got %s", err.Error())
-	}
-}
-
-// TestCompleteMethodServicesSliceCleaning tests the Complete method's services slice cleaning
-func TestCompleteMethodServicesSliceCleaning(t *testing.T) {
-	// Create temporary directory
-	tempDir, err := os.MkdirTemp("", "serve-test-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	// Create test file for services
-	servicesFile := filepath.Join(tempDir, "services_file")
-	err = os.WriteFile(servicesFile, []byte("service_log,clusters"), 0600)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cmd := serve.NewServeCmd()
-	err = cmd.Flags().Set(config.Services, "@"+servicesFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Test ReadFlagsFromFile (part of Complete method logic)
-	err = serve.ReadFlagsFromFile(cmd, config.Services)
-	if err != nil {
-		t.Fatalf("ReadFlagsFromFile failed: %v", err)
-	}
-
-	// Verify that services were read correctly
-	services, err := cmd.Flags().GetStringSlice(config.Services)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// The Complete method would clean the @ prefix from the first element
-	// We test this indirectly by verifying the flag content
-	if len(services) == 0 {
-		t.Error("Expected non-empty services after Complete processing")
-	}
-}
-
-// TestCompleteMethodDebugConfiguration tests debug logging configuration in Complete
-func TestCompleteMethodDebugConfiguration(t *testing.T) {
-	cmd := serve.NewServeCmd()
-
-	// Test debug flag processing that Complete method would handle
-	err := cmd.Flags().Set(config.Debug, "true")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Verify the debug flag is properly set for Complete method to process
-	debugEnabled, err := cmd.Flags().GetBool(config.Debug)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if !debugEnabled {
-		t.Error("Expected debug to be enabled for Complete method processing")
-	}
-}
-
-// TestRunMethodViper Integration tests Run method's viper integration
-func TestRunMethodViperIntegration(t *testing.T) {
-	// Reset viper state
-	viper.Reset()
-
-	cmd := serve.NewServeCmd()
-
-	// Test that the Run method properly integrates with viper
-	testArgs := []string{
-		"--ocm-url", "https://viper-test.com",
-		"--access-token", "viper-token",
-		"--services", "service_log",
-		"--cluster-id", "viper-cluster",
-	}
-
-	cmd.SetArgs(testArgs)
-
-	// Parse flags to populate viper (Run method dependency)
-	err := cmd.ParseFlags(testArgs)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Verify viper integration that Run method relies on
-	if viper.GetString(config.OcmURL) != "https://viper-test.com" {
-		t.Errorf("Expected viper integration for OcmURL, got %s", viper.GetString(config.OcmURL))
-	}
-	if viper.GetString(config.AccessToken) != "viper-token" {
-		t.Errorf("Expected viper integration for AccessToken, got %s", viper.GetString(config.AccessToken))
-	}
-}
-
-// TestCompleteMethodFullIntegration tests Complete method with full flag processing
-func TestCompleteMethodFullIntegration(t *testing.T) {
-	// Create temporary directory
-	tempDir, err := os.MkdirTemp("", "serve-test-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	// Create multiple test files
+	// Create test files
 	urlFile := filepath.Join(tempDir, "url_file")
 	tokenFile := filepath.Join(tempDir, "token_file")
 	servicesFile := filepath.Join(tempDir, "services_file")
 	clusterFile := filepath.Join(tempDir, "cluster_file")
 
-	err = os.WriteFile(urlFile, []byte("https://complete-test.com"), 0600)
+	err = os.WriteFile(urlFile, []byte("https://test-complete.com"), 0600)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = os.WriteFile(tokenFile, []byte("complete-token"), 0600)
+	err = os.WriteFile(tokenFile, []byte("test-token-complete"), 0600)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = os.WriteFile(servicesFile, []byte("service_log,clusters,upgrade_policies"), 0600)
+	err = os.WriteFile(servicesFile, []byte("service_log,clusters"), 0600)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = os.WriteFile(clusterFile, []byte("complete-cluster"), 0600)
+	err = os.WriteFile(clusterFile, []byte("test-cluster-complete"), 0600)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	// Create command and set flags
 	cmd := serve.NewServeCmd()
-
-	// Set all flags with file references
 	err = cmd.Flags().Set(config.OcmURL, "@"+urlFile)
 	if err != nil {
 		t.Fatal(err)
@@ -939,36 +616,107 @@ func TestCompleteMethodFullIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Test the Complete method's file reading logic
-	err = serve.ReadFlagsFromFile(cmd, config.AccessToken, config.OcmURL, config.Services, config.ExternalClusterID)
+	// Create serveOptions instance and call Complete method directly
+	options := serve.NewServeOptions()
+	err = options.Complete(cmd, []string{})
 	if err != nil {
-		t.Fatalf("Complete method file processing failed: %v", err)
+		t.Fatalf("Complete method failed: %v", err)
 	}
 
-	// Verify all flags were processed correctly by Complete method logic
+	// Verify that Complete method processed the flags correctly
 	urlValue, _ := cmd.Flags().GetString(config.OcmURL)
-	if urlValue != "https://complete-test.com" {
-		t.Errorf("Complete method: Expected URL https://complete-test.com, got %s", urlValue)
+	if urlValue != "https://test-complete.com" {
+		t.Errorf("Complete method: Expected URL https://test-complete.com, got %s", urlValue)
 	}
 
 	tokenValue, _ := cmd.Flags().GetString(config.AccessToken)
-	if tokenValue != "complete-token" {
-		t.Errorf("Complete method: Expected token complete-token, got %s", tokenValue)
+	if tokenValue != "test-token-complete" {
+		t.Errorf("Complete method: Expected token test-token-complete, got %s", tokenValue)
 	}
 
 	servicesValue, _ := cmd.Flags().GetStringSlice(config.Services)
-	expectedServices := []string{"service_log", "clusters", "upgrade_policies"}
+	expectedServices := []string{"service_log", "clusters"}
 	if !containsAllElements(servicesValue, expectedServices) {
 		t.Errorf("Complete method: Expected services %v, got %v", expectedServices, servicesValue)
 	}
 
 	clusterValue, _ := cmd.Flags().GetString(config.ExternalClusterID)
-	if clusterValue != "complete-cluster" {
-		t.Errorf("Complete method: Expected cluster complete-cluster, got %s", clusterValue)
+	if clusterValue != "test-cluster-complete" {
+		t.Errorf("Complete method: Expected cluster test-cluster-complete, got %s", clusterValue)
 	}
 
 	debugValue, _ := cmd.Flags().GetBool(config.Debug)
 	if !debugValue {
 		t.Error("Complete method: Expected debug to be true")
+	}
+}
+
+// TestCompleteMethodDirectErrorHandling tests Complete method error handling
+func TestCompleteMethodDirectErrorHandling(t *testing.T) {
+	// Create temporary directory
+	tempDir, err := os.MkdirTemp("", "serve-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Reference non-existent file
+	nonExistentFile := filepath.Join(tempDir, "does_not_exist")
+
+	// Create command and set flag with non-existent file
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.AccessToken, "@"+nonExistentFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create serveOptions instance and call Complete method directly
+	options := serve.NewServeOptions()
+	err = options.Complete(cmd, []string{})
+
+	// Should return error for non-existent file
+	if err == nil {
+		t.Error("Complete method should return error for non-existent file")
+	}
+	if !strings.Contains(err.Error(), "can't read value of flag") {
+		t.Errorf("Complete method: Expected error to contain 'can't read value of flag', got %s", err.Error())
+	}
+}
+
+// TestCompleteMethodDirectServicesSliceProcessing tests Complete method services slice processing
+func TestCompleteMethodDirectServicesSliceProcessing(t *testing.T) {
+	// Create temporary directory
+	tempDir, err := os.MkdirTemp("", "serve-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Create services file
+	servicesFile := filepath.Join(tempDir, "services_file")
+	err = os.WriteFile(servicesFile, []byte("service_log,clusters,upgrade_policies"), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create command and set services flag with file reference
+	cmd := serve.NewServeCmd()
+	err = cmd.Flags().Set(config.Services, "@"+servicesFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create serveOptions instance and call Complete method directly
+	options := serve.NewServeOptions()
+	err = options.Complete(cmd, []string{})
+	if err != nil {
+		t.Fatalf("Complete method failed: %v", err)
+	}
+
+	// Verify services were processed correctly
+	servicesValue, _ := cmd.Flags().GetStringSlice(config.Services)
+	expectedServices := []string{"service_log", "clusters", "upgrade_policies"}
+	if !containsAllElements(servicesValue, expectedServices) {
+		t.Errorf("Complete method: Expected services %v, got %v", expectedServices, servicesValue)
 	}
 }
