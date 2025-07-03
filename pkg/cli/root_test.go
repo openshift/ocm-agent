@@ -4,192 +4,352 @@ import (
 	"bytes"
 	"testing"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"github.com/openshift/ocm-agent/pkg/cli"
-	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
-var _ = Describe("ocm-agent CLI root command", func() {
-	var (
-		rootCmd *cobra.Command
-		output  *bytes.Buffer
-	)
+// TestNewCmdRoot tests the creation and basic properties of the root command
+func TestNewCmdRoot(t *testing.T) {
+	rootCmd := cli.NewCmdRoot()
 
-	BeforeEach(func() {
-		rootCmd = cli.NewCmdRoot()
-		output = &bytes.Buffer{}
-		rootCmd.SetOut(output)
-		rootCmd.SetErr(output)
-	})
+	if rootCmd == nil {
+		t.Fatal("NewCmdRoot returned nil")
+	}
 
-	Context("Root command initialization", func() {
-		It("should create root command with correct properties", func() {
-			Expect(rootCmd.Use).To(Equal("ocm-agent"))
-			Expect(rootCmd.Short).To(Equal("Command line tool for OCM Agent to talk to OCM services."))
-			Expect(rootCmd.Long).To(Equal("Command line tool for OCM Agent to talk to OCM services."))
-			Expect(rootCmd.DisableAutoGenTag).To(BeTrue())
-		})
+	if rootCmd.Use != "ocm-agent" {
+		t.Errorf("Expected command Use to be 'ocm-agent', got %s", rootCmd.Use)
+	}
 
-		It("should have exactly one subcommand (serve)", func() {
-			commands := rootCmd.Commands()
-			Expect(commands).To(HaveLen(1))
-			Expect(commands[0].Use).To(Equal("serve"))
-		})
+	expectedShort := "Command line tool for OCM Agent to talk to OCM services."
+	if rootCmd.Short != expectedShort {
+		t.Errorf("Expected command Short to be '%s', got %s", expectedShort, rootCmd.Short)
+	}
 
-		It("should not have any flags", func() {
-			flags := rootCmd.Flags()
-			Expect(flags.NFlag()).To(Equal(0))
-		})
+	expectedLong := "Command line tool for OCM Agent to talk to OCM services."
+	if rootCmd.Long != expectedLong {
+		t.Errorf("Expected command Long to be '%s', got %s", expectedLong, rootCmd.Long)
+	}
 
-		It("should not have any persistent flags", func() {
-			persistentFlags := rootCmd.PersistentFlags()
-			Expect(persistentFlags.NFlag()).To(Equal(0))
-		})
-	})
+	if !rootCmd.DisableAutoGenTag {
+		t.Error("Expected DisableAutoGenTag to be true")
+	}
+}
 
-	Context("Root command execution", func() {
-		It("should display help and exit when run without arguments", func() {
-			// Since the root command calls os.Exit(1), we need to test the Run function indirectly
-			rootCmd.SetArgs([]string{})
+// TestRootCommandSubcommands tests that the root command has the correct subcommands
+func TestRootCommandSubcommands(t *testing.T) {
+	rootCmd := cli.NewCmdRoot()
 
-			// The root command's Run function calls cmd.Help() and os.Exit(1)
-			// We can't test os.Exit directly, but we can verify the help is shown
-			err := rootCmd.Help()
-			Expect(err).To(BeNil())
-			Expect(output.String()).To(ContainSubstring("ocm-agent"))
-			Expect(output.String()).To(ContainSubstring("Command line tool for OCM Agent"))
-		})
+	commands := rootCmd.Commands()
+	if len(commands) != 1 {
+		t.Errorf("Expected exactly 1 subcommand, got %d", len(commands))
+	}
 
-		It("should show help text with usage information", func() {
-			err := rootCmd.Help()
-			Expect(err).To(BeNil())
+	if len(commands) > 0 && commands[0].Use != "serve" {
+		t.Errorf("Expected first subcommand to be 'serve', got %s", commands[0].Use)
+	}
+}
 
-			helpOutput := output.String()
-			Expect(helpOutput).To(ContainSubstring("Usage:"))
-			Expect(helpOutput).To(ContainSubstring("ocm-agent"))
-			Expect(helpOutput).To(ContainSubstring("Available Commands:"))
-			Expect(helpOutput).To(ContainSubstring("serve"))
-		})
+// TestRootCommandFlags tests that the root command has no flags
+func TestRootCommandFlags(t *testing.T) {
+	rootCmd := cli.NewCmdRoot()
 
-		It("should handle invalid subcommands gracefully", func() {
-			rootCmd.SetArgs([]string{"invalid-command"})
-			err := rootCmd.Execute()
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("unknown command"))
-		})
-	})
+	flags := rootCmd.Flags()
+	if flags.NFlag() != 0 {
+		t.Errorf("Expected root command to have 0 flags, got %d", flags.NFlag())
+	}
 
-	Context("Command structure validation", func() {
-		It("should have serve command properly configured", func() {
-			serveCmd := rootCmd.Commands()[0]
-			Expect(serveCmd).ToNot(BeNil())
-			Expect(serveCmd.Use).To(Equal("serve"))
-			Expect(serveCmd.Short).To(Equal("Starts the OCM Agent server"))
-		})
+	persistentFlags := rootCmd.PersistentFlags()
+	if persistentFlags.NFlag() != 0 {
+		t.Errorf("Expected root command to have 0 persistent flags, got %d", persistentFlags.NFlag())
+	}
+}
 
-		It("should have correct parent-child relationships", func() {
-			serveCmd := rootCmd.Commands()[0]
-			Expect(serveCmd.Parent()).To(Equal(rootCmd))
-		})
-	})
+// TestRootCommandHelp tests the help functionality
+func TestRootCommandHelp(t *testing.T) {
+	rootCmd := cli.NewCmdRoot()
+	output := &bytes.Buffer{}
+	rootCmd.SetOut(output)
+	rootCmd.SetErr(output)
 
-	Context("Help functionality", func() {
-		It("should display help when --help flag is used", func() {
-			rootCmd.SetArgs([]string{"--help"})
-			err := rootCmd.Execute()
-			Expect(err).To(BeNil())
+	err := rootCmd.Help()
+	if err != nil {
+		t.Fatalf("Help() failed: %v", err)
+	}
 
-			helpOutput := output.String()
-			Expect(helpOutput).To(ContainSubstring("Command line tool for OCM Agent"))
-		})
+	helpOutput := output.String()
+	expectedStrings := []string{
+		"ocm-agent",
+		"Command line tool for OCM Agent",
+		"Usage:",
+		"Available Commands:",
+		"serve",
+	}
 
-		It("should display help when -h flag is used", func() {
-			rootCmd.SetArgs([]string{"-h"})
-			err := rootCmd.Execute()
-			Expect(err).To(BeNil())
-
-			helpOutput := output.String()
-			Expect(helpOutput).To(ContainSubstring("Command line tool for OCM Agent"))
-		})
-	})
-})
-
-// Test the initConfig function indirectly by testing cobra initialization
-var _ = Describe("CLI initialization", func() {
-	Context("Configuration initialization", func() {
-		It("should initialize without errors", func() {
-			// Test that creating a new root command doesn't panic
-			// This indirectly tests the initConfig function which is called via cobra.OnInitialize
-			Expect(func() {
-				_ = cli.NewCmdRoot()
-			}).ToNot(Panic())
-		})
-	})
-})
-
-// Test initConfig function behavior
-var _ = Describe("initConfig function", func() {
-	var (
-		originalCommandLine interface{}
-	)
-
-	BeforeEach(func() {
-		// Save original command line for restoration
-		originalCommandLine = pflag.CommandLine
-	})
-
-	AfterEach(func() {
-		// Restore original command line
-		if originalCommandLine != nil {
-			pflag.CommandLine = originalCommandLine.(*pflag.FlagSet)
+	for _, expected := range expectedStrings {
+		if !contains(helpOutput, expected) {
+			t.Errorf("Expected help output to contain '%s'", expected)
 		}
-	})
+	}
+}
 
-	Context("Flag set initialization", func() {
-		It("should create a new flagset properly", func() {
-			// Create a new root command which triggers initConfig
-			rootCmd := cli.NewCmdRoot()
-			Expect(rootCmd).ToNot(BeNil())
+// TestRootCommandInvalidSubcommand tests handling of invalid subcommands
+func TestRootCommandInvalidSubcommand(t *testing.T) {
+	rootCmd := cli.NewCmdRoot()
+	rootCmd.SetArgs([]string{"invalid-command"})
 
-			// Check that pflag.CommandLine is properly initialized
-			Expect(pflag.CommandLine).ToNot(BeNil())
-			// Check that it's a valid flagset by testing it has no flags initially
-			Expect(pflag.CommandLine.NFlag()).To(Equal(0))
-		})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Error("Expected error for invalid subcommand")
+	}
+	if !contains(err.Error(), "unknown command") {
+		t.Errorf("Expected error to contain 'unknown command', got %s", err.Error())
+	}
+}
 
-		It("should handle empty command line parsing", func() {
-			// This test ensures the initConfig function doesn't fail with empty args
-			Expect(func() {
-				_ = cli.NewCmdRoot()
-			}).ToNot(Panic())
-		})
+// TestRootCommandStructure tests the command structure and relationships
+func TestRootCommandStructure(t *testing.T) {
+	rootCmd := cli.NewCmdRoot()
 
-		It("should set exit on error for the flagset", func() {
-			rootCmd := cli.NewCmdRoot()
-			Expect(rootCmd).ToNot(BeNil())
+	commands := rootCmd.Commands()
+	if len(commands) == 0 {
+		t.Fatal("Expected at least one subcommand")
+	}
 
-			// The flagset should be configured properly
-			// We can verify the flagset exists and is properly initialized
-			Expect(pflag.CommandLine).ToNot(BeNil())
-			Expect(pflag.CommandLine.NFlag()).To(Equal(0))
-		})
+	serveCmd := commands[0]
+	if serveCmd.Use != "serve" {
+		t.Errorf("Expected serve command, got %s", serveCmd.Use)
+	}
 
-		It("should be idempotent when called multiple times", func() {
-			// Create multiple root commands to ensure initConfig can be called multiple times
-			rootCmd1 := cli.NewCmdRoot()
-			rootCmd2 := cli.NewCmdRoot()
+	if serveCmd.Short != "Starts the OCM Agent server" {
+		t.Errorf("Expected serve command Short to be 'Starts the OCM Agent server', got %s", serveCmd.Short)
+	}
 
-			Expect(rootCmd1).ToNot(BeNil())
-			Expect(rootCmd2).ToNot(BeNil())
-			Expect(pflag.CommandLine).ToNot(BeNil())
-			Expect(pflag.CommandLine.NFlag()).To(Equal(0))
-		})
-	})
-})
+	if serveCmd.Parent() != rootCmd {
+		t.Error("Expected serve command parent to be root command")
+	}
+}
 
-// Benchmark tests for performance
+// TestRootCommandHelpFlags tests help flag functionality
+func TestRootCommandHelpFlags(t *testing.T) {
+	// Test --help flag
+	rootCmd := cli.NewCmdRoot()
+	output := &bytes.Buffer{}
+	rootCmd.SetOut(output)
+	rootCmd.SetErr(output)
+	rootCmd.SetArgs([]string{"--help"})
+
+	err := rootCmd.Execute()
+	if err != nil {
+		t.Fatalf("Execute with --help failed: %v", err)
+	}
+
+	helpOutput := output.String()
+	if !contains(helpOutput, "Command line tool for OCM Agent") {
+		t.Error("Expected help output to contain description")
+	}
+
+	// Test -h flag
+	rootCmd2 := cli.NewCmdRoot()
+	output2 := &bytes.Buffer{}
+	rootCmd2.SetOut(output2)
+	rootCmd2.SetErr(output2)
+	rootCmd2.SetArgs([]string{"-h"})
+
+	err = rootCmd2.Execute()
+	if err != nil {
+		t.Fatalf("Execute with -h failed: %v", err)
+	}
+
+	helpOutput2 := output2.String()
+	if !contains(helpOutput2, "Command line tool for OCM Agent") {
+		t.Error("Expected help output to contain description")
+	}
+}
+
+// TestInitConfig tests the initConfig function indirectly
+func TestInitConfig(t *testing.T) {
+	// Save original command line for restoration
+	originalCommandLine := pflag.CommandLine
+	defer func() {
+		pflag.CommandLine = originalCommandLine
+	}()
+
+	// Test that creating a new root command doesn't panic
+	// This indirectly tests the initConfig function which is called via cobra.OnInitialize
+	rootCmd := cli.NewCmdRoot()
+	if rootCmd == nil {
+		t.Fatal("NewCmdRoot returned nil")
+	}
+
+	// Check that pflag.CommandLine is properly initialized
+	if pflag.CommandLine == nil {
+		t.Error("Expected pflag.CommandLine to be initialized")
+	}
+
+	// Check that it's a valid flagset by testing it has no flags initially
+	if pflag.CommandLine.NFlag() != 0 {
+		t.Errorf("Expected pflag.CommandLine to have 0 flags initially, got %d", pflag.CommandLine.NFlag())
+	}
+}
+
+// TestInitConfigEmptyCommandLine tests initConfig with empty command line
+func TestInitConfigEmptyCommandLine(t *testing.T) {
+	// Save original command line for restoration
+	originalCommandLine := pflag.CommandLine
+	defer func() {
+		pflag.CommandLine = originalCommandLine
+	}()
+
+	// This test ensures the initConfig function doesn't fail with empty args
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("initConfig panicked with empty command line: %v", r)
+		}
+	}()
+
+	rootCmd := cli.NewCmdRoot()
+	if rootCmd == nil {
+		t.Fatal("NewCmdRoot returned nil")
+	}
+}
+
+// TestInitConfigFlagSetProperties tests that initConfig properly sets up the flagset
+func TestInitConfigFlagSetProperties(t *testing.T) {
+	// Save original command line for restoration
+	originalCommandLine := pflag.CommandLine
+	defer func() {
+		pflag.CommandLine = originalCommandLine
+	}()
+
+	rootCmd := cli.NewCmdRoot()
+	if rootCmd == nil {
+		t.Fatal("NewCmdRoot returned nil")
+	}
+
+	// The flagset should be configured properly
+	if pflag.CommandLine == nil {
+		t.Error("Expected pflag.CommandLine to be initialized")
+	}
+
+	// Should have no flags initially
+	if pflag.CommandLine.NFlag() != 0 {
+		t.Errorf("Expected pflag.CommandLine to have 0 flags, got %d", pflag.CommandLine.NFlag())
+	}
+}
+
+// TestInitConfigIdempotent tests that initConfig can be called multiple times
+func TestInitConfigIdempotent(t *testing.T) {
+	// Save original command line for restoration
+	originalCommandLine := pflag.CommandLine
+	defer func() {
+		pflag.CommandLine = originalCommandLine
+	}()
+
+	// Create multiple root commands to ensure initConfig can be called multiple times
+	rootCmd1 := cli.NewCmdRoot()
+	rootCmd2 := cli.NewCmdRoot()
+
+	if rootCmd1 == nil {
+		t.Fatal("First NewCmdRoot returned nil")
+	}
+	if rootCmd2 == nil {
+		t.Fatal("Second NewCmdRoot returned nil")
+	}
+
+	if pflag.CommandLine == nil {
+		t.Error("Expected pflag.CommandLine to be initialized")
+	}
+
+	if pflag.CommandLine.NFlag() != 0 {
+		t.Errorf("Expected pflag.CommandLine to have 0 flags after multiple calls, got %d", pflag.CommandLine.NFlag())
+	}
+}
+
+// TestInitConfigErrorHandling tests error handling in initConfig
+func TestInitConfigErrorHandling(t *testing.T) {
+	// Save original command line for restoration
+	originalCommandLine := pflag.CommandLine
+	defer func() {
+		pflag.CommandLine = originalCommandLine
+	}()
+
+	// Test that initConfig handles edge cases gracefully
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("initConfig panicked unexpectedly: %v", r)
+		}
+	}()
+
+	// Create root command multiple times to test stability
+	for i := 0; i < 3; i++ {
+		rootCmd := cli.NewCmdRoot()
+		if rootCmd == nil {
+			t.Fatalf("NewCmdRoot returned nil on iteration %d", i)
+		}
+	}
+}
+
+// TestInitConfigFlagSetInitialization tests the specific flag set initialization
+func TestInitConfigFlagSetInitialization(t *testing.T) {
+	// Save original command line for restoration
+	originalCommandLine := pflag.CommandLine
+	defer func() {
+		pflag.CommandLine = originalCommandLine
+	}()
+
+	// Test that the flagset is properly initialized by initConfig
+	rootCmd := cli.NewCmdRoot()
+	if rootCmd == nil {
+		t.Fatal("NewCmdRoot returned nil")
+	}
+
+	// Verify that pflag.CommandLine is a valid FlagSet
+	if pflag.CommandLine == nil {
+		t.Error("Expected pflag.CommandLine to be initialized")
+	}
+
+	// Test that we can call basic FlagSet methods without panicking
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("FlagSet methods panicked: %v", r)
+		}
+	}()
+
+	// Test basic flagset operations
+	flagCount := pflag.CommandLine.NFlag()
+	if flagCount < 0 {
+		t.Errorf("Expected non-negative flag count, got %d", flagCount)
+	}
+
+	// Test that we can parse empty args
+	err := pflag.CommandLine.Parse([]string{})
+	if err != nil {
+		t.Errorf("Expected no error parsing empty args, got %v", err)
+	}
+}
+
+// Helper function to check if a string contains a substring
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
+		(len(s) > len(substr) && containsAt(s, substr, 0)))
+}
+
+func containsAt(s, substr string, offset int) bool {
+	if offset+len(substr) > len(s) {
+		return false
+	}
+	for i := 0; i < len(substr); i++ {
+		if s[offset+i] != substr[i] {
+			if offset+1 <= len(s)-len(substr) {
+				return containsAt(s, substr, offset+1)
+			}
+			return false
+		}
+	}
+	return true
+}
+
+// Benchmark tests
 func BenchmarkNewCmdRoot(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = cli.NewCmdRoot()
