@@ -338,7 +338,7 @@ func (o *serveOptions) Run() error {
 }
 
 func deleteFirstElementIfFileName(slice []string) []string {
-	if strings.HasPrefix(slice[0], "@") {
+	if len(slice) > 0 && strings.HasPrefix(slice[0], "@") {
 		slice = slice[1:]
 	}
 	return slice
