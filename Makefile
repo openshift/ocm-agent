@@ -5,6 +5,9 @@ AT_ = @
 AT = $(AT_$(V))
 # /Verbosity
 
+include boilerplate/generated-includes.mk
+include test/e2e/project.mk
+
 GIT_HASH := $(shell git rev-parse --short=7 HEAD)
 IMAGETAG ?= ${GIT_HASH}
 
@@ -128,3 +131,6 @@ mockgen: ensure-mockgen
 ensure-mockgen:
 	go install github.com/golang/mock/mockgen@v1.6.0
 
+.PHONY: boilerplate-update
+boilerplate-update:
+	@boilerplate/update
