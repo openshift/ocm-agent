@@ -5,8 +5,6 @@ AT_ = @
 AT = $(AT_$(V))
 # /Verbosity
 
-include boilerplate/generated-includes.mk
-#include test/e2e/project.mk
 
 GIT_HASH := $(shell git rev-parse --short=7 HEAD)
 IMAGETAG ?= ${GIT_HASH}
