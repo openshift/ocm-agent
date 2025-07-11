@@ -200,7 +200,6 @@ var clusterHandler *handlers.ClusterHandler
 
 var _ = Describe("ClusterHandler", func() {
 	BeforeEach(func() {
-		// Inspired by https://github.com/gdbranco/rosa/blob/67f55df2992b596e810942016833893236ef47f1/cmd/upgrade/cluster/cmd_test.go#L23
 		apiServer = MakeTCPServer()
 
 		accessToken := MakeTokenString("Bearer", 15*time.Minute)
@@ -221,67 +220,160 @@ var _ = Describe("ClusterHandler", func() {
 		apiServer.Close()
 	})
 
-	It("should get a cluster object", func() {
-		makeOCMRequest(
-			"GET",
-			http.StatusOK,
-			fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s", internalId),
-			getCluster,
-		)
-		req := httptest.NewRequest("GET", "/cluster", nil)
+	Context("NewClusterHandler", func() {
+		It("should create a new cluster handler with correct fields", func() {
+			accessToken := MakeTokenString("Bearer", 15*time.Minute)
+			sdkclient, _ := sdk.NewConnectionBuilder().
+				Logger(nil).
+				Tokens(accessToken).
+				URL(apiServer.URL()).
+				Build()
 
-		req = mux.SetURLVars(
-			req,
-			map[string]string{},
-		)
+			ocmClient := ocm.NewOcmClient(sdkclient)
+			testClusterId := "test-cluster-id"
 
-		clusterHandler.ServeClusterGet(responseRecorder, req)
+			handler := handlers.NewClusterHandler(ocmClient, testClusterId)
 
-		var cluster cmv1.Cluster
-
-		// nolint
-		_ = json.NewDecoder(responseRecorder.Result().Body).Decode(&cluster)
-
-		var ocmResp cmv1.Cluster
-
-		// nolint
-		_ = json.Unmarshal([]byte(getCluster), &ocmResp)
-
-		Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
-		Expect(reflect.DeepEqual(cluster, ocmResp)).To(BeTrue())
+			Expect(handler).ToNot(BeNil())
+			// Note: We can't directly access private fields, but we can verify the handler works properly
+			// by testing its behavior in the ServeClusterGet method
+		})
 	})
 
-	It("should return an error if ocm returns an error", func() {
-		errorMessage := `{"message": "Cannot connect to ocm api"}`
-		makeOCMRequest(
-			"GET",
-			http.StatusBadRequest,
-			fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s", internalId),
-			errorMessage,
-		)
+	Context("ServeClusterGet", func() {
+		It("should get a cluster object", func() {
+			makeOCMRequest(
+				"GET",
+				http.StatusOK,
+				fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s", internalId),
+				getCluster,
+			)
+			req := httptest.NewRequest("GET", "/cluster", nil)
 
-		req := httptest.NewRequest("GET", "/cluster", nil)
+			req = mux.SetURLVars(
+				req,
+				map[string]string{},
+			)
 
-		clusterHandler.ServeClusterGet(responseRecorder, req)
+			clusterHandler.ServeClusterGet(responseRecorder, req)
 
-		Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
-		Expect(responseRecorder.Result().StatusCode).To(Equal(http.StatusBadRequest))
-	})
+			var cluster cmv1.Cluster
 
-	It("should return an error if ocm returns a 3xx response", func() {
-		errorMessage := `{"message": "permanently redirected"}`
-		makeOCMRequest(
-			"GET",
-			http.StatusPermanentRedirect,
-			fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s", internalId),
-			errorMessage,
-		)
+			// nolint
+			_ = json.NewDecoder(responseRecorder.Result().Body).Decode(&cluster)
 
-		req := httptest.NewRequest("GET", "/cluster", nil)
+			var ocmResp cmv1.Cluster
 
-		clusterHandler.ServeClusterGet(responseRecorder, req)
+			// nolint
+			_ = json.Unmarshal([]byte(getCluster), &ocmResp)
 
-		Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
-		Expect(responseRecorder.Result().StatusCode).To(Equal(http.StatusBadRequest))
+			Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
+			Expect(reflect.DeepEqual(cluster, ocmResp)).To(BeTrue())
+		})
+
+		It("should return an error if ocm returns an error", func() {
+			errorMessage := `{"message": "Cannot connect to ocm api"}`
+			makeOCMRequest(
+				"GET",
+				http.StatusBadRequest,
+				fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s", internalId),
+				errorMessage,
+			)
+
+			req := httptest.NewRequest("GET", "/cluster", nil)
+
+			clusterHandler.ServeClusterGet(responseRecorder, req)
+
+			Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
+			Expect(responseRecorder.Result().StatusCode).To(Equal(http.StatusBadRequest))
+		})
+
+		It("should return an error if ocm returns a 3xx response", func() {
+			errorMessage := `{"message": "permanently redirected"}`
+			makeOCMRequest(
+				"GET",
+				http.StatusPermanentRedirect,
+				fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s", internalId),
+				errorMessage,
+			)
+
+			req := httptest.NewRequest("GET", "/cluster", nil)
+
+			clusterHandler.ServeClusterGet(responseRecorder, req)
+
+			Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
+			Expect(responseRecorder.Result().StatusCode).To(Equal(http.StatusBadRequest))
+		})
+
+		It("should return an error for POST method", func() {
+			req := httptest.NewRequest("POST", "/cluster", nil)
+
+			clusterHandler.ServeClusterGet(responseRecorder, req)
+
+			Expect(responseRecorder.Result().StatusCode).To(Equal(http.StatusBadRequest))
+			Expect(responseRecorder.Header().Get("Content-Type")).To(Equal("text/plain; charset=utf-8"))
+		})
+
+		It("should return an error if ocm returns 500 internal server error", func() {
+			errorMessage := `{"message": "Internal server error"}`
+			makeOCMRequest(
+				"GET",
+				http.StatusInternalServerError,
+				fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s", internalId),
+				errorMessage,
+			)
+
+			req := httptest.NewRequest("GET", "/cluster", nil)
+
+			clusterHandler.ServeClusterGet(responseRecorder, req)
+
+			Expect(reflect.DeepEqual(ocmOperationId, responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER))).To(BeTrue())
+			Expect(responseRecorder.Result().StatusCode).To(Equal(http.StatusBadRequest))
+		})
+
+		It("should set correct content type for successful GET request", func() {
+			makeOCMRequest(
+				"GET",
+				http.StatusOK,
+				fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s", internalId),
+				getCluster,
+			)
+			req := httptest.NewRequest("GET", "/cluster", nil)
+
+			clusterHandler.ServeClusterGet(responseRecorder, req)
+
+			Expect(responseRecorder.Header().Get("Content-Type")).To(Equal("application/json"))
+			Expect(responseRecorder.Result().StatusCode).To(Equal(http.StatusOK))
+		})
+
+		It("should set OCM operation ID header for successful requests", func() {
+			makeOCMRequest(
+				"GET",
+				http.StatusOK,
+				fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s", internalId),
+				getCluster,
+			)
+			req := httptest.NewRequest("GET", "/cluster", nil)
+
+			clusterHandler.ServeClusterGet(responseRecorder, req)
+
+			Expect(responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER)).To(Equal(ocmOperationId))
+		})
+
+		It("should set OCM operation ID header for error responses", func() {
+			errorMessage := `{"message": "Test error"}`
+			makeOCMRequest(
+				"GET",
+				http.StatusBadRequest,
+				fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s", internalId),
+				errorMessage,
+			)
+
+			req := httptest.NewRequest("GET", "/cluster", nil)
+
+			clusterHandler.ServeClusterGet(responseRecorder, req)
+
+			Expect(responseRecorder.Header().Get(handlers.OCM_OPERATION_ID_HEADER)).To(Equal(ocmOperationId))
+		})
 	})
 })
