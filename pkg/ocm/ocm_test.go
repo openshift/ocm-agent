@@ -11,6 +11,7 @@ import (
 	. "github.com/onsi/gomega/ghttp"
 	sdk "github.com/openshift-online/ocm-sdk-go"
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	"github.com/openshift-online/ocm-sdk-go/logging"
 	. "github.com/openshift-online/ocm-sdk-go/testing"
 	testconst "github.com/openshift/ocm-agent/pkg/consts/test"
 	"github.com/prometheus/alertmanager/template"
@@ -28,6 +29,8 @@ var _ = Describe("OCM client Handler", func() {
 		serviceLog             *ServiceLog
 		err                    error
 		mockServer             *Server
+		mockLogger             *logging.Logger
+		transportWrapper       sdk.TransportWrapper
 		clusterUUID            string
 		clusterID              string
 		clusterResponse        string
@@ -95,10 +98,14 @@ var _ = Describe("OCM client Handler", func() {
 
 	Context("OCM Connection", func() {
 		It("OCM connection should not return an error when building a new connection", func() {
-			conn, err := NewConnection().Build(mockServer.URL(), clusterUUID, MakeTokenString("Bearer", 15*time.Minute))
+			connBuilder := NewConnection()
+			connBuilder = connBuilder.Logger(mockLogger)
+			connBuilder.TransportWrapper(transportWrapper)
+			conn, err := connBuilder.Build(mockServer.URL(), clusterUUID, MakeTokenString("Bearer", 15*time.Minute))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(conn).ShouldNot(BeNil())
 			Expect(conn.Logger()).ShouldNot(BeNil())
+
 		})
 	})
 
