@@ -634,7 +634,7 @@ var _ = Describe("WebhookRHOBSReceiverHandler Additional Tests", func() {
 				Expect(fmt.Sprintf("%v", r)).To(ContainSubstring("runtime error: invalid memory address or nil pointer dereference"))
 			}()
 
-			testHandler.processAlert(alert, nil)
+			_ = testHandler.processAlert(alert, nil)
 
 			// This line should not be reached due to panic
 			Fail("Expected panic for nil ManagedFleetNotification")
