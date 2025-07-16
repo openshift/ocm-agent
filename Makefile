@@ -1,4 +1,6 @@
 SHELL := /usr/bin/env bash
+include boilerplate/generated-includes.mk
+include test/e2e/project.mk
 
 # Verbosity
 AT_ = @
@@ -128,3 +130,6 @@ mockgen: ensure-mockgen
 ensure-mockgen:
 	go install github.com/golang/mock/mockgen@v1.6.0
 
+.PHONY: boilerplate-update
+boilerplate-update: ## Update boilerplate version
+	@boilerplate/update
