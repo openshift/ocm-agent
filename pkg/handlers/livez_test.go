@@ -28,6 +28,13 @@ var _ = Describe("Livez tests", func() {
 		server.Close()
 	})
 
+	Context("NewLivezHandler", func() {
+		It("should create a new livez handler", func() {
+			handler := NewLivezHandler()
+			Expect(handler).ToNot(BeNil())
+			Expect(handler).To(BeAssignableToTypeOf(&LivezHandler{}))
+		})
+	})
 	Context("Livez handler post", func() {
 		var resp *http.Response
 		var err error

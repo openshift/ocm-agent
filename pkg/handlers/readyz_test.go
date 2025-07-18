@@ -28,6 +28,13 @@ var _ = Describe("Readyz tests", func() {
 		server.Close()
 	})
 
+	Context("NewReadyzHandler", func() {
+		It("should create a new ready handler", func() {
+			handler := NewReadyzHandler()
+			Expect(handler).ToNot(BeNil())
+			Expect(handler).To(BeAssignableToTypeOf(&ReadyzHandler{}))
+		})
+	})
 	Context("Readyz handler post", func() {
 		var resp *http.Response
 		var err error

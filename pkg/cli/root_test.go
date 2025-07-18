@@ -14,24 +14,25 @@ func TestNewCmdRoot(t *testing.T) {
 
 	if rootCmd == nil {
 		t.Fatal("NewCmdRoot returned nil")
-	}
+	} else {
 
-	if rootCmd.Use != "ocm-agent" {
-		t.Errorf("Expected command Use to be 'ocm-agent', got %s", rootCmd.Use)
-	}
+		if rootCmd.Use != "ocm-agent" {
+			t.Errorf("Expected command Use to be 'ocm-agent', got %s", rootCmd.Use)
+		}
 
-	expectedShort := "Command line tool for OCM Agent to talk to OCM services."
-	if rootCmd.Short != expectedShort {
-		t.Errorf("Expected command Short to be '%s', got %s", expectedShort, rootCmd.Short)
-	}
+		expectedShort := "Command line tool for OCM Agent to talk to OCM services."
+		if rootCmd.Short != expectedShort {
+			t.Errorf("Expected command Short to be '%s', got %s", expectedShort, rootCmd.Short)
+		}
 
-	expectedLong := "Command line tool for OCM Agent to talk to OCM services."
-	if rootCmd.Long != expectedLong {
-		t.Errorf("Expected command Long to be '%s', got %s", expectedLong, rootCmd.Long)
-	}
+		expectedLong := "Command line tool for OCM Agent to talk to OCM services."
+		if rootCmd.Long != expectedLong {
+			t.Errorf("Expected command Long to be '%s', got %s", expectedLong, rootCmd.Long)
+		}
 
-	if !rootCmd.DisableAutoGenTag {
-		t.Error("Expected DisableAutoGenTag to be true")
+		if !rootCmd.DisableAutoGenTag {
+			t.Error("Expected DisableAutoGenTag to be true")
+		}
 	}
 }
 

@@ -1,0 +1,87 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ocm-agent-e2e-sa
+  namespace: openshift-ocm-agent-operator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ocm-agent-e2e-role
+rules:
+- apiGroups: [""]
+  resources: ["pods", "pods/log", "pods/portforward", "configmaps", "secrets", "namespaces"]
+  verbs: ["get", "list", "watch", "create", "delete", "patch", "update"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["config.openshift.io"]
+  resources: ["clusterversions", "infrastructures"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ocm-agent-e2e-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ocm-agent-e2e-role
+subjects:
+- kind: ServiceAccount
+  name: ocm-agent-e2e-sa
+  namespace: openshift-ocm-agent-operator
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ocm-agent-allow-e2e-test
+  namespace: openshift-ocm-agent-operator
+spec:
+  podSelector:
+    matchLabels:
+      app: ocm-agent
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: openshift-ocm-agent-operator
+      podSelector:
+        matchLabels:
+          app: ocm-agent-e2e
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ocm-agent-e2e-job
+  namespace: openshift-ocm-agent-operator
+spec:
+  template:
+    metadata:
+      labels:
+        app: ocm-agent-e2e
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: ip-10-0-27-206.ec2.internal
+      serviceAccountName: ocm-agent-e2e-sa
+      containers:
+      - name: ocm-agent-e2e
+        image: ${OCM_E2E_IMAGE}
+        command: ["/e2e.test", "--ginkgo.vv", "--ginkgo.trace", "--ginkgo.fail-on-empty"]
+        env:
+        - name: DISABLE_JUNIT_REPORT
+          value: "true"
+        - name: OCM_THIRDPARTY_TOKEN
+          value: ${OCM_E2E_TOKEN}
+        - name: OCM_CLIENT_ID
+          value: "your-client-id"
+        - name: OCM_CLIENT_SECRET
+          value: "your-client-secret"
+      tolerations:
+      - key: "node-role.kubernetes.io/infra"
+        operator: "Exists"
+        effect: "NoSchedule"
+      restartPolicy: Never
+  backoffLimit: 1

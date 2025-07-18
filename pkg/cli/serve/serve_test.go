@@ -17,22 +17,22 @@ func TestNewServeCmd(t *testing.T) {
 
 	if cmd == nil {
 		t.Fatal("NewServeCmd returned nil")
-	}
+	} else {
+		if cmd.Use != "serve" {
+			t.Errorf("Expected command Use to be 'serve', got %s", cmd.Use)
+		}
 
-	if cmd.Use != "serve" {
-		t.Errorf("Expected command Use to be 'serve', got %s", cmd.Use)
-	}
+		if cmd.Short != "Starts the OCM Agent server" {
+			t.Errorf("Expected command Short to be 'Starts the OCM Agent server', got %s", cmd.Short)
+		}
 
-	if cmd.Short != "Starts the OCM Agent server" {
-		t.Errorf("Expected command Short to be 'Starts the OCM Agent server', got %s", cmd.Short)
-	}
+		if !strings.Contains(cmd.Long, "Start the OCM Agent server") {
+			t.Errorf("Expected command Long to contain 'Start the OCM Agent server', got %s", cmd.Long)
+		}
 
-	if !strings.Contains(cmd.Long, "Start the OCM Agent server") {
-		t.Errorf("Expected command Long to contain 'Start the OCM Agent server', got %s", cmd.Long)
-	}
-
-	if !strings.Contains(cmd.Example, "ocm-agent serve") {
-		t.Errorf("Expected command Example to contain 'ocm-agent serve', got %s", cmd.Example)
+		if !strings.Contains(cmd.Example, "ocm-agent serve") {
+			t.Errorf("Expected command Example to contain 'ocm-agent serve', got %s", cmd.Example)
+		}
 	}
 }
 
