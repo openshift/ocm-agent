@@ -98,6 +98,15 @@ var _ = Describe("Webhook Handlers", func() {
 	AfterEach(func() {
 		server.Close()
 	})
+
+	Context("NewWebhookReceiverHandler", func() {
+		It("should create a new Webhook Receiver Handler", func() {
+			handler := NewWebhookReceiverHandler(mockClient, mockOCMClient)
+			Expect(handler).ToNot(BeNil())
+			Expect(handler).To(BeAssignableToTypeOf(&WebhookReceiverHandler{}))
+		})
+	})
+
 	Context("AMReceiver processAMReceiver", func() {
 		var r http.Request
 		BeforeEach(func() {
@@ -715,6 +724,11 @@ var _ = Describe("Webhook Handlers", func() {
 		It("will treat 201 as a successful response", func() {
 			err := responseChecker(testOperationId, http.StatusCreated, []byte(testResponseBody))
 			Expect(err).To(BeNil())
+		})
+		It("should return an error for non-JSON input", func() {
+			testResponseBody := []byte(`This is not JSON data.`)
+			err := responseChecker(testOperationId, http.StatusMovedPermanently, []byte(testResponseBody))
+			Expect(err).Should(HaveOccurred())
 		})
 		It("will treat all other responses as failures", func() {
 			var testFailedResponseCodes = []int{
