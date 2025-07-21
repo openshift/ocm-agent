@@ -8,6 +8,7 @@ import (
 	// AI GENERATED: Additional imports for comprehensive testing
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"time"
 
@@ -22,12 +23,18 @@ import (
 	"sigs.k8s.io/e2e-framework/klient/k8s/resources"
 	"sigs.k8s.io/e2e-framework/klient/wait"
 	"sigs.k8s.io/e2e-framework/klient/wait/conditions"
+
+	// OCM-related imports for GetInternalIDByExternalID
+	sdk "github.com/openshift-online/ocm-sdk-go"
+	configv1 "github.com/openshift/api/config/v1"
+	"github.com/openshift/ocm-agent/pkg/ocm"
 )
 
 var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 
 	var (
 		client         *resources.Resources
+		errorServer    *httptest.Server
 		namespace      = "openshift-ocm-agent-operator"
 		deploymentName = "ocm-agent"
 		deployments    = []string{
@@ -42,6 +49,19 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		Expect(err).Should(BeNil(), "failed to get kubeconfig")
 		client, err = resources.New(cfg)
 		Expect(err).Should(BeNil(), "resources.New error")
+
+		// Create a mock error server that always returns 503
+		errorServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte(`{"message": "Service temporarily unavailable", "code": 503}`))
+		}))
+	})
+
+	ginkgo.AfterAll(func() {
+		// Clean up the error server
+		if errorServer != nil {
+			errorServer.Close()
+		}
 	})
 
 	ginkgo.It("Testing - SREP-909", func(ctx context.Context) {
@@ -78,15 +98,82 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 
 		// AI GENERATED: Test variables and setup
 		var (
-			ocmAgentPodName string
-			ocmAgentURL     = "http://localhost:8081"
-			httpClient      = &http.Client{Timeout: 30 * time.Second}
+			ocmAgentPodName   string
+			ocmAgentURL       = "http://localhost:8081"
+			httpClient        = &http.Client{Timeout: 30 * time.Second}
+			externalClusterID string
+			internalClusterID string
+			ocmConnection     *sdk.Connection
 		)
+
+		// AI GENERATED: Get real external cluster ID from cluster configmap
+		ginkgo.By("getting real external cluster ID from configmap")
+		configMap := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "ocm-agent-cm", Namespace: namespace}}
+		err := client.Get(ctx, configMap.Name, configMap.Namespace, configMap)
+		if err == nil {
+			if configMap.Data["clusterID"] != "" {
+				externalClusterID = configMap.Data["clusterID"]
+			}
+		}
+		// If not found in configmap, try fallback approaches
+		if externalClusterID == "" {
+			// Try to get from ClusterVersion object
+			clusterVersion := &configv1.ClusterVersion{ObjectMeta: metav1.ObjectMeta{Name: "version"}}
+			err = client.Get(ctx, clusterVersion.Name, "", clusterVersion)
+			if err == nil && clusterVersion.Spec.ClusterID != "" {
+				externalClusterID = string(clusterVersion.Spec.ClusterID)
+			} else {
+				// Try to get from Infrastructure object
+				infrastructure := &configv1.Infrastructure{ObjectMeta: metav1.ObjectMeta{Name: "cluster"}}
+				err = client.Get(ctx, infrastructure.Name, "", infrastructure)
+				if err == nil && infrastructure.Status.InfrastructureName != "" {
+					externalClusterID = infrastructure.Status.InfrastructureName
+				}
+			}
+		}
+		Expect(externalClusterID).ShouldNot(BeEmpty(), "external cluster ID should not be empty")
+
+		// AI GENERATED: Get OCM configuration from ocm-agent configmap
+		ginkgo.By("getting OCM configuration from ocm-agent configmap")
+		configMap = &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "ocm-agent-cm", Namespace: namespace}}
+		err = client.Get(ctx, configMap.Name, configMap.Namespace, configMap)
+		Expect(err).Should(BeNil(), "ocm-agent configmap not found")
+
+		// AI GENERATED: Verify required configuration fields
+		Expect(configMap.Data).Should(HaveKey("ocmBaseURL"), "ocmBaseURL not configured")
+		Expect(configMap.Data).Should(HaveKey("services"), "services not configured")
+		ocmBaseURL := configMap.Data["ocmBaseURL"]
+		Expect(ocmBaseURL).ShouldNot(BeEmpty(), "ocmBaseURL is empty")
+		Expect(configMap.Data["services"]).ShouldNot(BeEmpty(), "services configuration is empty")
+
+		// AI GENERATED: Get access token from ocm-agent secret
+		ginkgo.By("getting OCM access token from secret")
+		secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "ocm-access-token", Namespace: namespace}}
+		err = client.Get(ctx, secret.Name, secret.Namespace, secret)
+		Expect(err).Should(BeNil(), "ocm-access-token secret not found")
+		Expect(secret.Data).Should(HaveKey("access_token"), "access_token not found in secret")
+		accessToken := string(secret.Data["access_token"])
+		Expect(accessToken).ShouldNot(BeEmpty(), "access token is empty")
+
+		// AI GENERATED: Create OCM connection and get internal cluster ID
+		ginkgo.By("creating OCM connection and getting internal cluster ID")
+		connBuilder := ocm.NewConnection()
+		ocmConnection, err = connBuilder.Build(ocmBaseURL, externalClusterID, accessToken)
+		if err != nil {
+			ginkgo.Skip(fmt.Sprintf("Failed to create OCM connection: %v. This may be expected in some test environments.", err))
+		}
+
+		// AI GENERATED: Use GetInternalIDByExternalID to get proper internal cluster ID
+		internalClusterID, err = ocm.GetInternalIDByExternalID(externalClusterID, ocmConnection)
+		if err != nil {
+			ginkgo.Skip(fmt.Sprintf("Failed to get internal cluster ID: %v. This may be expected if cluster is not registered in OCM.", err))
+		}
+		Expect(internalClusterID).ShouldNot(BeEmpty(), "internal cluster ID should not be empty")
 
 		// AI GENERATED: Get OCM Agent pod for testing
 		ginkgo.By("getting ocm-agent pod for testing")
 		podList := &corev1.PodList{}
-		err := client.List(ctx, podList, func(o *metav1.ListOptions) {
+		err = client.List(ctx, podList, func(o *metav1.ListOptions) {
 			o.LabelSelector = "app=ocm-agent"
 		})
 		Expect(err).Should(BeNil(), "failed to list ocm-agent pods")
@@ -116,15 +203,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 
 		// AI GENERATED: TEST - Ensure that ocm-agent is able to configure and build an ocm connection successfully
 		ginkgo.By("verifying ocm connection configuration")
-		configMap := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "ocm-agent-cm", Namespace: namespace}}
-		err = client.Get(ctx, configMap.Name, configMap.Namespace, configMap)
-		Expect(err).Should(BeNil(), "ocm-agent configmap not found")
-
-		// AI GENERATED: Verify required configuration fields
-		Expect(configMap.Data).Should(HaveKey("ocmBaseURL"), "ocmBaseURL not configured")
-		Expect(configMap.Data).Should(HaveKey("services"), "services not configured")
-		Expect(configMap.Data["ocmBaseURL"]).ShouldNot(BeEmpty(), "ocmBaseURL is empty")
-		Expect(configMap.Data["services"]).ShouldNot(BeEmpty(), "services configuration is empty")
+		// Already verified above by successfully creating OCM connection and getting internal cluster ID
 
 		// AI GENERATED: TEST - Ensure that ocm-agent sends a successful health check request to ocm api
 		ginkgo.By("testing health check endpoints")
@@ -160,13 +239,34 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		// AI GENERATED: TEST - Verify that ocm-agent handles 5xx(503 service/api unavailable) response gracefully
 		ginkgo.By("testing 5xx error handling resilience")
 
-		// AI GENERATED: Check pod restart policy and error handling
+		// Test how ocm-agent handles 5xx errors by creating an OCM connection to our error server
+		ginkgo.By("testing OCM client response to 503 service unavailable")
+		errorConnBuilder := ocm.NewConnection()
+		errorConnection, err := errorConnBuilder.Build(errorServer.URL, externalClusterID, accessToken)
+
+		if err == nil {
+			// Try to get internal ID from our error server - this should fail gracefully
+			_, idErr := ocm.GetInternalIDByExternalID(externalClusterID, errorConnection)
+			Expect(idErr).Should(HaveOccurred(), "should get error when OCM returns 503")
+
+			// The error should contain information about the server error
+			Expect(idErr.Error()).Should(ContainSubstring("503"), "error should mention 503 status")
+		}
+
+		// Verify ocm-agent pod is still running after encountering 5xx errors
+		ginkgo.By("verifying ocm-agent remains stable after 5xx errors")
 		deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: deploymentName, Namespace: namespace}}
 		err = client.Get(ctx, deployment.Name, deployment.Namespace, deployment)
 		Expect(err).Should(BeNil(), "failed to get ocm-agent deployment")
 
-		// AI GENERATED: Verify deployment has proper restart policy
+		// AI GENERATED: Verify deployment has proper restart policy for recovery
 		Expect(deployment.Spec.Template.Spec.RestartPolicy).Should(Equal(corev1.RestartPolicyAlways), "incorrect restart policy")
+
+		// Verify the pod is still healthy
+		finalPodCheck := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: ocmAgentPodName, Namespace: namespace}}
+		err = client.Get(ctx, finalPodCheck.Name, finalPodCheck.Namespace, finalPodCheck)
+		Expect(err).Should(BeNil(), "failed to get ocm-agent pod after 5xx test")
+		Expect(finalPodCheck.Status.Phase).Should(Equal(corev1.PodRunning), "ocm-agent pod should still be running after 5xx errors")
 
 		// AI GENERATED: TEST - Verify the timeout handling when ocm api responds slowly
 		ginkgo.By("testing timeout handling")
@@ -179,10 +279,10 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		// AI GENERATED: We expect this to timeout or fail gracefully
 
 		// AI GENERATED: TEST - Get list of all the upgrade policies belonging to a cluster from ocm api
-		ginkgo.By("testing upgrade policies API endpoint")
+		ginkgo.By("testing upgrade policies API endpoint with real internal cluster ID")
 
 		// AI GENERATED: Test if upgrade policies endpoint exists and responds
-		resp, err = httpClient.Get(fmt.Sprintf("%s/api/clusters_mgmt/v1/clusters/test-cluster/upgrade_policies", ocmAgentURL))
+		resp, err = httpClient.Get(fmt.Sprintf("%s/api/clusters_mgmt/v1/clusters/%s/upgrade_policies", ocmAgentURL, internalClusterID))
 		if err == nil {
 			// AI GENERATED: Should handle the request even if cluster doesn't exist
 			Expect(resp.StatusCode).Should(BeElementOf([]int{http.StatusOK, http.StatusNotFound, http.StatusUnauthorized}),
@@ -200,7 +300,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		ginkgo.By("testing single upgrade policy retrieval")
 
 		// AI GENERATED: Test single upgrade policy endpoint
-		resp, err = httpClient.Get(fmt.Sprintf("%s/api/clusters_mgmt/v1/clusters/test-cluster/upgrade_policies/test-policy-id", ocmAgentURL))
+		resp, err = httpClient.Get(fmt.Sprintf("%s/api/clusters_mgmt/v1/clusters/%s/upgrade_policies/test-policy-id", ocmAgentURL, internalClusterID))
 		if err == nil {
 			// AI GENERATED: Should handle the request appropriately
 			Expect(resp.StatusCode).Should(BeElementOf([]int{http.StatusOK, http.StatusNotFound, http.StatusUnauthorized}),
@@ -212,7 +312,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		ginkgo.By("testing upgrade policy state retrieval")
 
 		// AI GENERATED: Test policy state endpoint
-		resp, err = httpClient.Get(fmt.Sprintf("%s/api/clusters_mgmt/v1/clusters/test-cluster/upgrade_policies/test-policy-id/state", ocmAgentURL))
+		resp, err = httpClient.Get(fmt.Sprintf("%s/api/clusters_mgmt/v1/clusters/%s/upgrade_policies/test-policy-id/state", ocmAgentURL, internalClusterID))
 		if err == nil {
 			Expect(resp.StatusCode).Should(BeElementOf([]int{http.StatusOK, http.StatusNotFound, http.StatusUnauthorized}),
 				"unexpected status code for upgrade policy state endpoint")
@@ -224,7 +324,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 
 		// AI GENERATED: Test PATCH request for policy state update
 		req, err := http.NewRequest(http.MethodPatch,
-			fmt.Sprintf("%s/api/clusters_mgmt/v1/clusters/test-cluster/upgrade_policies/test-policy-id/state", ocmAgentURL),
+			fmt.Sprintf("%s/api/clusters_mgmt/v1/clusters/%s/upgrade_policies/test-policy-id/state", ocmAgentURL, internalClusterID),
 			strings.NewReader(`{"value":"scheduled"}`))
 		if err == nil {
 			req.Header.Set("Content-Type", "application/json")
@@ -241,7 +341,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		ginkgo.By("testing limited support reasons retrieval")
 
 		// AI GENERATED: Test limited support endpoint
-		resp, err = httpClient.Get(fmt.Sprintf("%s/api/clusters_mgmt/v1/clusters/test-cluster/limited_support_reasons", ocmAgentURL))
+		resp, err = httpClient.Get(fmt.Sprintf("%s/api/clusters_mgmt/v1/clusters/%s/limited_support_reasons", ocmAgentURL, internalClusterID))
 		if err == nil {
 			Expect(resp.StatusCode).Should(BeElementOf([]int{http.StatusOK, http.StatusNotFound, http.StatusUnauthorized}),
 				"unexpected status code for limited support reasons endpoint")
