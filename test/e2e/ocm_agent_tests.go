@@ -106,10 +106,15 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 			ocmConnection     *sdk.Connection
 		)
 
-		// AI GENERATED: Get real external cluster ID from cluster configmap
-		ginkgo.By("getting real external cluster ID from configmap")
+		// AI GENERATED: Get OCM configuration from ocm-agent configmap
+		ginkgo.By("getting OCM configuration from ocm-agent configmap")
 		configMap := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "ocm-agent-cm", Namespace: namespace}}
 		err := client.Get(ctx, configMap.Name, configMap.Namespace, configMap)
+		Expect(err).Should(BeNil(), "ocm-agent configmap not found")
+
+		// AI GENERATED: Get real external cluster ID from cluster configmap
+		ginkgo.By("getting real external cluster ID from configmap")
+
 		if err == nil {
 			if configMap.Data["clusterID"] != "" {
 				externalClusterID = configMap.Data["clusterID"]
@@ -132,12 +137,6 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 			}
 		}
 		Expect(externalClusterID).ShouldNot(BeEmpty(), "external cluster ID should not be empty")
-
-		// AI GENERATED: Get OCM configuration from ocm-agent configmap
-		ginkgo.By("getting OCM configuration from ocm-agent configmap")
-		configMap = &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "ocm-agent-cm", Namespace: namespace}}
-		err = client.Get(ctx, configMap.Name, configMap.Namespace, configMap)
-		Expect(err).Should(BeNil(), "ocm-agent configmap not found")
 
 		// AI GENERATED: Verify required configuration fields
 		Expect(configMap.Data).Should(HaveKey("ocmBaseURL"), "ocmBaseURL not configured")
