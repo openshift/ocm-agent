@@ -33,11 +33,27 @@ import (
 var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 
 	var (
-		client         *resources.Resources
-		errorServer    *httptest.Server
-		namespace      = "openshift-ocm-agent-operator"
-		deploymentName = "ocm-agent"
-		deployments    = []string{
+		client               *resources.Resources
+		errorServer          *httptest.Server
+		namespace            = "openshift-ocm-agent-operator"
+		deploymentName       = "ocm-agent"
+		ocmAgentConfigMap    = "ocm-agent-cm"
+		ocmAccessTokenSecret = "ocm-access-token"
+		clusterVersionName   = "version"
+		infrastructureName   = "cluster"
+
+		// ConfigMap keys
+		clusterIDKey  = "clusterID"
+		ocmBaseURLKey = "ocmBaseURL"
+		servicesKey   = "services"
+
+		// Secret keys
+		accessTokenKey = "access_token"
+
+		// Label selectors
+		ocmAgentLabelSelector = "app=ocm-agent"
+
+		deployments = []string{
 			deploymentName,
 			deploymentName + "-operator",
 		}
@@ -108,7 +124,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 
 		// AI GENERATED: Get OCM configuration from ocm-agent configmap
 		ginkgo.By("getting OCM configuration from ocm-agent configmap")
-		configMap := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "ocm-agent-cm", Namespace: namespace}}
+		configMap := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: ocmAgentConfigMap, Namespace: namespace}}
 		err := client.Get(ctx, configMap.Name, configMap.Namespace, configMap)
 		Expect(err).Should(BeNil(), "ocm-agent configmap not found")
 
@@ -116,20 +132,20 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		ginkgo.By("getting real external cluster ID from configmap")
 
 		if err == nil {
-			if configMap.Data["clusterID"] != "" {
-				externalClusterID = configMap.Data["clusterID"]
+			if configMap.Data[clusterIDKey] != "" {
+				externalClusterID = configMap.Data[clusterIDKey]
 			}
 		}
 		// If not found in configmap, try fallback approaches
 		if externalClusterID == "" {
 			// Try to get from ClusterVersion object
-			clusterVersion := &configv1.ClusterVersion{ObjectMeta: metav1.ObjectMeta{Name: "version"}}
+			clusterVersion := &configv1.ClusterVersion{ObjectMeta: metav1.ObjectMeta{Name: clusterVersionName}}
 			err = client.Get(ctx, clusterVersion.Name, "", clusterVersion)
 			if err == nil && clusterVersion.Spec.ClusterID != "" {
 				externalClusterID = string(clusterVersion.Spec.ClusterID)
 			} else {
 				// Try to get from Infrastructure object
-				infrastructure := &configv1.Infrastructure{ObjectMeta: metav1.ObjectMeta{Name: "cluster"}}
+				infrastructure := &configv1.Infrastructure{ObjectMeta: metav1.ObjectMeta{Name: infrastructureName}}
 				err = client.Get(ctx, infrastructure.Name, "", infrastructure)
 				if err == nil && infrastructure.Status.InfrastructureName != "" {
 					externalClusterID = infrastructure.Status.InfrastructureName
@@ -139,19 +155,19 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		Expect(externalClusterID).ShouldNot(BeEmpty(), "external cluster ID should not be empty")
 
 		// AI GENERATED: Verify required configuration fields
-		Expect(configMap.Data).Should(HaveKey("ocmBaseURL"), "ocmBaseURL not configured")
-		Expect(configMap.Data).Should(HaveKey("services"), "services not configured")
-		ocmBaseURL := configMap.Data["ocmBaseURL"]
+		Expect(configMap.Data).Should(HaveKey(ocmBaseURLKey), "ocmBaseURL not configured")
+		Expect(configMap.Data).Should(HaveKey(servicesKey), "services not configured")
+		ocmBaseURL := configMap.Data[ocmBaseURLKey]
 		Expect(ocmBaseURL).ShouldNot(BeEmpty(), "ocmBaseURL is empty")
-		Expect(configMap.Data["services"]).ShouldNot(BeEmpty(), "services configuration is empty")
+		Expect(configMap.Data[servicesKey]).ShouldNot(BeEmpty(), "services configuration is empty")
 
 		// AI GENERATED: Get access token from ocm-agent secret
 		ginkgo.By("getting OCM access token from secret")
-		secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "ocm-access-token", Namespace: namespace}}
+		secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: ocmAccessTokenSecret, Namespace: namespace}}
 		err = client.Get(ctx, secret.Name, secret.Namespace, secret)
 		Expect(err).Should(BeNil(), "ocm-access-token secret not found")
-		Expect(secret.Data).Should(HaveKey("access_token"), "access_token not found in secret")
-		accessToken := string(secret.Data["access_token"])
+		Expect(secret.Data).Should(HaveKey(accessTokenKey), "access_token not found in secret")
+		accessToken := string(secret.Data[accessTokenKey])
 		Expect(accessToken).ShouldNot(BeEmpty(), "access token is empty")
 
 		// AI GENERATED: Create OCM connection and get internal cluster ID
@@ -173,7 +189,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		ginkgo.By("getting ocm-agent pod for testing")
 		podList := &corev1.PodList{}
 		err = client.List(ctx, podList, func(o *metav1.ListOptions) {
-			o.LabelSelector = "app=ocm-agent"
+			o.LabelSelector = ocmAgentLabelSelector
 		})
 		Expect(err).Should(BeNil(), "failed to list ocm-agent pods")
 		Expect(len(podList.Items)).Should(BeNumerically(">", 0), "no ocm-agent pods found")
