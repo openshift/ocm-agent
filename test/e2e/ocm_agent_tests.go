@@ -99,14 +99,6 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 
 	})
 
-	// TODO: Add the following tests
-	//TEST - Verify that ocm-agent handles 5xx(503 service/api unavailable) response gracefully
-	//TEST - Get list of all the upgrade policies belonging to a cluster from ocm api
-	//TEST - Verify that ocm-agent sends a successful request to ocm api to get all upgrade policies
-	//TEST - Get single upgrade policy belonging to a cluster from ocm api
-	//TEST - Fetch state of single upgrade policy belonging to a cluster from ocm api
-	//TEST - Update state of a single upgrade policy for a given cluster
-	// Comprehensive test suite implementing SREP-910 requirements
 	ginkgo.It("Testing - common ocm-agent tests", func(ctx context.Context) {
 
 		// Test variables and setup
