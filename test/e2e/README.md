@@ -12,3 +12,17 @@ ocm get /api/clusters_mgmt/v1/clusters/(cluster-id)/credentials | jq -r .kubecon
 5. Run test suite using 
  
 DISABLE_JUNIT_REPORT=true KUBECONFIG=/(path-to)/kubeconfig  ./(path-to)/bin/ginkgo  --tags=osde2e -v test/e2e
+
+## ocm-agent e2e test environment diagram
+┌─────────────────────────────────────────┐
+│           Kubernetes Cluster            │
+│  ┌─────────────────┐  ┌───────────────┐ │
+│  │   Test Pod      │  │  ocm-agent    │ │
+│  │  (e2e.test)     │  │     Pod       │ │
+│  │                 │  │   (port 8081) │ │
+│  └─────────────────┘  └───────────────┘ │
+│           │                      │      │
+│           │ kubectl port-forward │      │
+│           │ pod/ocm-agent:8081   │      │
+│           └──────────────────────┘      │
+└─────────────────────────────────────────┘
