@@ -481,4 +481,236 @@ var _ = Describe("OCM client Handler", func() {
 
 		})
 	})
+
+	Context("500 Error Handling", func() {
+		var (
+			mockServer *Server
+			ocmClient  OCMClient
+		)
+
+		BeforeEach(func() {
+			mockServer = NewServer()
+			accessToken := MakeTokenString("Bearer", 15*time.Minute)
+			ocmConnection, err := sdk.NewConnectionBuilder().
+				URL(mockServer.URL()).
+				Tokens(accessToken).
+				Build()
+			Expect(err).NotTo(HaveOccurred())
+			ocmClient = NewOcmClient(ocmConnection)
+		})
+
+		AfterEach(func() {
+			mockServer.Close()
+		})
+
+		It("should handle 500 error when getting cluster", func() {
+			mockServer.AppendHandlers(
+				CombineHandlers(
+					VerifyRequest("GET", fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s", clusterID)),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+				CombineHandlers(
+					VerifyRequest("GET", fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s", clusterID)),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+				CombineHandlers(
+					VerifyRequest("GET", fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s", clusterID)),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+			)
+			cluster, _, err := ocmClient.GetCluster(clusterID)
+			Expect(err).Should(HaveOccurred())
+			Expect(cluster).Should(BeNil())
+			Expect(err.Error()).Should(ContainSubstring("500"))
+		})
+
+		It("should handle 500 error when getting upgrade policies", func() {
+			mockServer.AppendHandlers(
+				CombineHandlers(
+					VerifyRequest("GET", fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s/upgrade_policies", clusterID)),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+				CombineHandlers(
+					VerifyRequest("GET", fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s/upgrade_policies", clusterID)),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+				CombineHandlers(
+					VerifyRequest("GET", fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s/upgrade_policies", clusterID)),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+			)
+			upgradePolicies, _, err := ocmClient.GetUpgradePolicies(clusterID)
+			Expect(err).Should(HaveOccurred())
+			Expect(upgradePolicies).Should(BeNil())
+			Expect(err.Error()).Should(ContainSubstring("500"))
+		})
+
+		It("should handle 500 error when getting upgrade policy", func() {
+			mockServer.AppendHandlers(
+				CombineHandlers(
+					VerifyRequest("GET", fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s/upgrade_policies/%s", clusterID, upgradePolicyID)),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+				CombineHandlers(
+					VerifyRequest("GET", fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s/upgrade_policies/%s", clusterID, upgradePolicyID)),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+				CombineHandlers(
+					VerifyRequest("GET", fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s/upgrade_policies/%s", clusterID, upgradePolicyID)),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+			)
+			upgradePolicy, _, err := ocmClient.GetUpgradePolicy(clusterID, upgradePolicyID)
+			Expect(err).Should(HaveOccurred())
+			Expect(upgradePolicy).Should(BeNil())
+			Expect(err.Error()).Should(ContainSubstring("500"))
+		})
+
+		It("should handle 500 error when getting upgrade policy state", func() {
+			mockServer.AppendHandlers(
+				CombineHandlers(
+					VerifyRequest("GET", fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s/upgrade_policies/%s/state", clusterID, upgradePolicyID)),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+				CombineHandlers(
+					VerifyRequest("GET", fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s/upgrade_policies/%s/state", clusterID, upgradePolicyID)),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+				CombineHandlers(
+					VerifyRequest("GET", fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s/upgrade_policies/%s/state", clusterID, upgradePolicyID)),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+			)
+			upgradePolicyState, _, err := ocmClient.GetUpgradePolicyState(clusterID, upgradePolicyID)
+			Expect(err).Should(HaveOccurred())
+			Expect(upgradePolicyState).Should(BeNil())
+			Expect(err.Error()).Should(ContainSubstring("500"))
+		})
+
+		It("should handle 500 error when updating upgrade policy state", func() {
+			mockServer.AppendHandlers(
+				CombineHandlers(
+					VerifyRequest("PATCH", fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s/upgrade_policies/%s/state", clusterID, upgradePolicyID)),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+				CombineHandlers(
+					VerifyRequest("PATCH", fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s/upgrade_policies/%s/state", clusterID, upgradePolicyID)),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+				CombineHandlers(
+					VerifyRequest("PATCH", fmt.Sprintf("/api/clusters_mgmt/v1/clusters/%s/upgrade_policies/%s/state", clusterID, upgradePolicyID)),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+			)
+			upgradePolicyState, _, err := ocmClient.UpdateUpgradePolicyState(clusterID, upgradePolicyID, &cmv1.UpgradePolicyState{})
+			Expect(err).Should(HaveOccurred())
+			Expect(upgradePolicyState).Should(BeNil())
+			Expect(err.Error()).Should(ContainSubstring("500"))
+		})
+
+		It("should handle 500 error when sending service log", func() {
+			mockServer.AppendHandlers(
+				CombineHandlers(
+					VerifyRequest("POST", "/api/service_logs/v1/cluster_logs"),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+				CombineHandlers(
+					VerifyRequest("POST", "/api/service_logs/v1/cluster_logs"),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+				CombineHandlers(
+					VerifyRequest("POST", "/api/service_logs/v1/cluster_logs"),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+			)
+			err := ocmClient.SendServiceLog(serviceLog)
+			Expect(err).Should(HaveOccurred())
+			Expect(err.Error()).Should(ContainSubstring("500"))
+		})
+
+		It("should handle 500 error when sending limited support", func() {
+			mockServer.AppendHandlers(
+				CombineHandlers(
+					VerifyRequest("GET", "/api/clusters_mgmt/v1/clusters"),
+					RespondWith(
+						http.StatusOK,
+						`{"kind":"ClusterList","page":1,"size":1,"total":1,"items": [{"kind":"Cluster","id":"internal-id"}]}`,
+						http.Header{"Content-Type": []string{"application/json"}},
+					),
+				),
+				CombineHandlers(
+					VerifyRequest("POST", "/api/clusters_mgmt/v1/clusters/internal-id/limited_support_reasons"),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+				CombineHandlers(
+					VerifyRequest("POST", "/api/clusters_mgmt/v1/clusters/internal-id/limited_support_reasons"),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+				CombineHandlers(
+					VerifyRequest("POST", "/api/clusters_mgmt/v1/clusters/internal-id/limited_support_reasons"),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+			)
+			err := ocmClient.SendLimitedSupport(clusterUUID, limitedSupportReason)
+			Expect(err).Should(HaveOccurred())
+			Expect(err.Error()).Should(ContainSubstring("500"))
+		})
+
+		It("should handle 500 error when getting limited support reasons", func() {
+			mockServer.AppendHandlers(
+				CombineHandlers(
+					VerifyRequest("GET", "/api/clusters_mgmt/v1/clusters"),
+					RespondWith(
+						http.StatusOK,
+						`{"kind":"ClusterList","page":1,"size":1,"total":1,"items": [{"kind":"Cluster","id":"internal-id"}]}`,
+						http.Header{"Content-Type": []string{"application/json"}},
+					),
+				),
+				CombineHandlers(
+					VerifyRequest("GET", "/api/clusters_mgmt/v1/clusters/internal-id/limited_support_reasons"),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+				CombineHandlers(
+					VerifyRequest("GET", "/api/clusters_mgmt/v1/clusters/internal-id/limited_support_reasons"),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+				CombineHandlers(
+					VerifyRequest("GET", "/api/clusters_mgmt/v1/clusters/internal-id/limited_support_reasons"),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+			)
+			limitedSupportReasons, err := ocmClient.GetLimitedSupportReasons(clusterUUID)
+			Expect(err).Should(HaveOccurred())
+			Expect(limitedSupportReasons).Should(BeNil())
+			Expect(err.Error()).Should(ContainSubstring("500"))
+		})
+
+		It("should handle 500 error when removing limited support", func() {
+			mockServer.AppendHandlers(
+				CombineHandlers(
+					VerifyRequest("GET", "/api/clusters_mgmt/v1/clusters"),
+					RespondWith(
+						http.StatusOK,
+						`{"kind":"ClusterList","page":1,"size":1,"total":1,"items": [{"kind":"Cluster","id":"internal-id"}]}`,
+						http.Header{"Content-Type": []string{"application/json"}},
+					),
+				),
+				CombineHandlers(
+					VerifyRequest("DELETE", fmt.Sprintf("/api/clusters_mgmt/v1/clusters/internal-id/limited_support_reasons/%s", limitedSupportReasonID)),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+				CombineHandlers(
+					VerifyRequest("DELETE", fmt.Sprintf("/api/clusters_mgmt/v1/clusters/internal-id/limited_support_reasons/%s", limitedSupportReasonID)),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+				CombineHandlers(
+					VerifyRequest("DELETE", fmt.Sprintf("/api/clusters_mgmt/v1/clusters/internal-id/limited_support_reasons/%s", limitedSupportReasonID)),
+					RespondWith(http.StatusInternalServerError, `{"kind": "Error", "reason": "Internal server error"}`, http.Header{"Content-Type": []string{"application/json"}}),
+				),
+			)
+			err := ocmClient.RemoveLimitedSupport(clusterUUID, limitedSupportReasonID)
+			Expect(err).Should(HaveOccurred())
+			Expect(err.Error()).Should(ContainSubstring("500"))
+		})
+	})
 })
