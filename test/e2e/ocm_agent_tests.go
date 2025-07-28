@@ -5,14 +5,17 @@ package osde2etests
 
 import (
 	"context"
+	"os"
 
 	"github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"sigs.k8s.io/yaml"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	ocmagentv1alpha1 "github.com/openshift/ocm-agent-operator/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/e2e-framework/klient/k8s/resources"
 	"sigs.k8s.io/e2e-framework/klient/wait"
@@ -29,6 +32,8 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 			deploymentName,
 			deploymentName + "-operator",
 		}
+		managedNotificationName = "sre-managed-notifications"
+		yamlFilePath            = "../../manifests/sre-managed-notifications.yaml"
 	)
 
 	ginkgo.BeforeAll(func() {
@@ -37,6 +42,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		Expect(err).Should(BeNil(), "failed to get kubeconfig")
 		client, err = resources.New(cfg)
 		Expect(err).Should(BeNil(), "resources.New error")
+
 	})
 
 	ginkgo.It("Testing - SREP-909", func(ctx context.Context) {
@@ -67,5 +73,41 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		//TEST - Update state of a single upgrade policy for a given cluster
 		//TEST - Fetch Limited support reasons for cluster
 
+	})
+
+	ginkgo.It("ROSA Classic e2e tests", func(ctx context.Context) {
+
+		// replicate the tests here http://github.com/openshift/ocm-agent/blob/master/test/test-alerts.sh
+		// TEST - Verify and recreate the default ManagedNotification template
+		ginkgo.By("Verify and recreate the test ManagedNotification template")
+		var managedNotification ocmagentv1alpha1.ManagedNotification
+		err := client.Get(ctx, managedNotificationName, namespace, &managedNotification)
+		if err == nil && managedNotification.Name != "" {
+			//Delete existing ManagedNotificaiton CR
+			client.Delete(ctx, &managedNotification)
+		}
+
+		// Read YAML file and parse to ManagedNotification object
+		yamlContent, err := os.ReadFile(yamlFilePath)
+		Expect(err).Should(BeNil(), "failed to read YAML file: %s", yamlFilePath)
+
+		var testManagedNotificationObj ocmagentv1alpha1.ManagedNotification
+		err = yaml.Unmarshal(yamlContent, &testManagedNotificationObj)
+		Expect(err).Should(BeNil(), "failed to unmarshal YAML content from file: %s", yamlFilePath)
+
+		//Create new ManagedNotification CR
+		err = client.Create(ctx, &testManagedNotificationObj)
+		Expect(err).Should(BeNil(), "failed to create ManagedNotification")
+
+		// TEST - Validate that the request method is allowed
+		// TEST - Verify that the request is valid before processing the alert
+		// TEST - Validate that supplied alert is one that warrants being processed for a notification
+		// TEST - Send service log for firing alert in case of no NotificationRecords
+		// TEST - Resend service log for firing alert iff NotificationRecords exists and resendWait interval exceeded
+		// TEST - Ensure that firing and resolved alerts processed successfully
+		// TEST - Verify actual firing notification count with expected
+		// TEST - Verify actual resolved notification count with expected
+		// TEST - Verify actual service log count with expected
+		// TEST - Check for parallel execution of the alerts
 	})
 })
