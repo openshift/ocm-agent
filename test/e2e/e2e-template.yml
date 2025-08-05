@@ -39,7 +39,7 @@ objects:
     spec:
       podSelector:
         matchLabels:
-          app: ocm-agent
+          app: osde2e-ocm-agent-${IMAGE_TAG}-${JOBID}
       policyTypes:
       - Ingress
       ingress:
