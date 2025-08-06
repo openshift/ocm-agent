@@ -63,8 +63,6 @@ spec:
       labels:
         app: ocm-agent-e2e
     spec:
-      nodeSelector:
-        kubernetes.io/hostname: ip-10-0-27-206.ec2.internal
       serviceAccountName: ocm-agent-e2e-sa
       containers:
       - name: ocm-agent-e2e
