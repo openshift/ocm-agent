@@ -8,6 +8,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.19.0
 	github.com/onsi/gomega v1.33.1
 	github.com/openshift-online/ocm-sdk-go v0.1.386
+	github.com/openshift/api v3.9.1-0.20190424152011-77b8897ec79a+incompatible
 	github.com/openshift/ocm-agent-operator v0.0.0-20240920073713-1c7db7addf85
 	github.com/prometheus/alertmanager v0.25.1
 	github.com/prometheus/client_golang v1.19.1
@@ -27,6 +28,7 @@ require (
 require (
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
 	github.com/MakeNowJust/heredoc v1.0.0 // indirect
+	github.com/Masterminds/semver/v3 v3.2.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
@@ -35,6 +37,7 @@ require (
 	github.com/chai2010/gettext-go v1.0.2 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/emicklei/go-restful/v3 v3.11.2 // indirect
+	github.com/evanphx/json-patch v4.12.0+incompatible // indirect
 	github.com/evanphx/json-patch/v5 v5.9.0 // indirect
 	github.com/exponent-io/jsonpath v0.0.0-20151013193312-d6023ce2651d // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect

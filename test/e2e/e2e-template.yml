@@ -31,6 +31,25 @@ parameters:
   - name: LOG_BUCKET
     value: 'osde2e-logs'
 objects:
+  - apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: ocm-agent-allow-e2e-test
+      namespace: openshift-ocm-agent-operator
+    spec:
+      podSelector:
+        matchLabels:
+          app: osde2e-ocm-agent-${IMAGE_TAG}-${JOBID}
+      policyTypes:
+      - Ingress
+      ingress:
+      - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-ocm-agent-operator
+          podSelector:
+            matchLabels:
+              app: ocm-agent-e2e
   - apiVersion: batch/v1
     kind: Job
     metadata:
