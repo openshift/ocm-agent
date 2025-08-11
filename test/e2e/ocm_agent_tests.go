@@ -14,10 +14,10 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/openshift/ocm-agent/pkg/ocm"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/e2e-framework/klient/k8s/resources"
 	"sigs.k8s.io/e2e-framework/klient/wait"
@@ -27,7 +27,7 @@ import (
 	sdk "github.com/openshift-online/ocm-sdk-go"
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	configv1 "github.com/openshift/api/config/v1"
-	"github.com/openshift/ocm-agent/pkg/ocm"
+	ocmagentv1alpha1 "github.com/openshift/ocm-agent-operator/api/v1alpha1"
 )
 
 var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
@@ -57,6 +57,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 			deploymentName,
 			deploymentName + "-operator",
 		}
+		fleetmanagedNotificationName = "audit-webhook-error-putting-minimized-cloudwatch-log"
 	)
 
 	ginkgo.BeforeAll(func() {
@@ -399,6 +400,51 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		err = client.Get(ctx, finalPod.Name, finalPod.Namespace, finalPod)
 		Expect(err).Should(BeNil(), "failed to get ocm-agent pod after tests")
 		Expect(finalPod.Status.Phase).Should(Equal(corev1.PodRunning), "ocm-agent pod not running after tests")
+	})
+
+	ginkgo.It("Testing - ocm-agent tests for fleet mode", func(ctx context.Context) {
+		// replicate the tests here http://github.com/openshift/ocm-agent/blob/master/test/test-alerts.sh
+		// TEST - Verify and recreate the default ManagedNotification template
+		ginkgo.By("Verify and recreate the test ManagedNotification template")
+		// Create a new ManagedFleetNotification object
+		var mFleetNoti ocmagentv1alpha1.ManagedFleetNotification
+
+		// Get the existing ManagedFleetNotification object
+		err := client.Get(ctx, fleetmanagedNotificationName, namespace, &mFleetNoti)
+		if err == nil && mFleetNoti.Name != "" {
+			//Delete existing ManagedFleetNotification CR
+			client.Delete(ctx, &mFleetNoti)
+		}
+		mFleetNoti.APIVersion = "ocmagent.managed.openshift.io/v1alpha1"
+		mFleetNoti.Kind = "ManagedFleetNotification"
+		mFleetNoti.Name = "audit-webhook-error-putting-minimized-cloudwatch-log"
+		mFleetNoti.Namespace = "openshift-ocm-agent-operator"
+		mFleetNoti.Labels = map[string]string{
+			"hive.openshift.io/managed": "true",
+		}
+		fleetNotificaiton := ocmagentv1alpha1.FleetNotification{
+			Name:                "audit-webhook-error-putting-minimized-cloudwatch-log",
+			NotificationMessage: "An audit-event send to your CloudWatch failed delivery, due to the event being too large. The reduced event failed delivery as well. Please verify your CloudWatch configuration for this cluster: https://access.redhat.com/solutions/7002219",
+			ResendWait:          24,
+			Severity:            "Info",
+			Summary:             "Audit-events could not be delivered to your CloudWatch",
+		}
+		mFleetNoti.Spec.FleetNotification = fleetNotificaiton
+		//Create new FleetManagedNotification CR
+		err = client.Create(ctx, &mFleetNoti)
+		fmt.Printf("err: %v\n", err)
+		Expect(err).Should(BeNil(), "failed to create FleetManagedNotification")
+
+		// TEST - Validate that the request method is allowed
+		// TEST - Verify that the request is valid before processing the alert
+		// TEST - Validate that supplied alert is one that warrants being processed for a notification
+		// TEST - Send service log for firing alert in case of no NotificationRecords
+		// TEST - Resend service log for firing alert iff NotificationRecords exists and resendWait interval exceeded
+		// TEST - Ensure that firing and resolved alerts processed successfully
+		// TEST - Verify actual firing notification count with expected
+		// TEST - Verify actual resolved notification count with expected
+		// TEST - Verify actual service log count with expected
+		// TEST - Check for parallel execution of the alerts
 	})
 
 })
