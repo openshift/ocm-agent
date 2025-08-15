@@ -28,9 +28,10 @@ oc -n openshift-ocm-agent-operator port-forward <ocm-agent-pod-name> 8081:8081
 
 Run the tests with the `OCM_AGENT_URL` environment variable set:
 ```bash
+export OCM_THIRDPARTY_TOKEN=$(ocm token)
 OCM_AGENT_URL=http://localhost:8081 DISABLE_JUNIT_REPORT=true KUBECONFIG=/(path-to)/kubeconfig ./bin/ginkgo --tags=osde2e -v test/e2e
 ```
-
+```
                    ┌──────────────────────┐
                    │ Kubernetes Cluster   │
 ┌─────────────────┐│    ┌───────────────┐ │
@@ -44,9 +45,10 @@ OCM_AGENT_URL=http://localhost:8081 DISABLE_JUNIT_REPORT=true KUBECONFIG=/(path-
            └──────────────────────┘       │
                    │                      │
                    └──────────────────────┘
+```
 
 ## ocm-agent e2e test for personal cluster
 Should set OCM_THIRDPARTY_TOKEN in e2e-job.yaml via `ocm token`
 export OCM_E2E_IMAGE="YOUR TEST IMAGE"
 export OCM_E2E_TOKEN="UPPER ocm token"
-envsubst < ./test/e2e/e2e-job.yaml | oc apply --as backplane-cluster-admin -f -
+envsubst < ./test/e2e/e2e-personal-job.yaml | oc apply --as backplane-cluster-admin -f -
