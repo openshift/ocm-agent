@@ -120,6 +120,22 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 						Severity:     "Info",
 						Summary:      "ElasticSearch reaching disk capacity",
 					},
+					{
+						Name:         "ParallelAlert_1",
+						ResendWait:   24,
+						ResolvedDesc: `Parallel Alert1 has been resolved`,
+						ActiveDesc:   `Your cluster requires you to take action as Parallel Alert1 is firing.`,
+						Severity:     "Info",
+						Summary:      "Test Parallel Alert 1",
+					},
+					{
+						Name:         "ParallelAlert_2",
+						ResendWait:   24,
+						ResolvedDesc: `Parallel Alert2 has been resolved`,
+						ActiveDesc:   `Your cluster requires you to take action as Parallel Alert1 is firing.`,
+						Severity:     "Info",
+						Summary:      "Test Parallel Alert 2",
+					},
 				},
 			},
 		}
@@ -131,7 +147,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 	}
 
 	// createAlert creates an alert payload similar to the shell script create-alert.sh
-	createAlert := func(alertStatus, alertName, managedNotificationTemplate string) AlertPayload {
+	createSingleAlert := func(alertStatus, alertName, managedNotificationTemplate string) AlertPayload {
 		today := time.Now().UTC().Format("2006-01-02")
 
 		return AlertPayload{
@@ -148,6 +164,59 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 						"prometheus":                    "openshift-monitoring/k8s",
 						"send_managed_notification":     "true",
 						"managed_notification_template": managedNotificationTemplate,
+						"severity":                      "info",
+					},
+					Annotations: map[string]string{
+						"description": "",
+					},
+					StartsAt:     today + "T00:00:00Z",
+					EndsAt:       "0001-01-01T00:00:00Z",
+					GeneratorURL: "",
+				},
+			},
+			GroupLabels:       map[string]string{},
+			CommonLabels:      map[string]string{},
+			CommonAnnotations: map[string]string{},
+			ExternalURL:       "",
+		}
+	}
+
+	createBiAlert := func(alertStatus, alertName, managedNotificationTemplate string) AlertPayload {
+		today := time.Now().UTC().Format("2006-01-02")
+
+		return AlertPayload{
+			Receiver: "ocmagent",
+			Status:   alertStatus,
+			Alerts: []Alert{
+				{
+					Status: alertStatus,
+					Labels: map[string]string{
+						"alertname":                     alertName + "_1",
+						"alertstate":                    alertStatus,
+						"namespace":                     "openshift-monitoring",
+						"openshift_io_alert_source":     "platform",
+						"prometheus":                    "openshift-monitoring/k8s",
+						"send_managed_notification":     "true",
+						"managed_notification_template": managedNotificationTemplate + "_1",
+						"severity":                      "info",
+					},
+					Annotations: map[string]string{
+						"description": "",
+					},
+					StartsAt:     today + "T00:00:00Z",
+					EndsAt:       "0001-01-01T00:00:00Z",
+					GeneratorURL: "",
+				},
+				{
+					Status: alertStatus,
+					Labels: map[string]string{
+						"alertname":                     alertName + "_2",
+						"alertstate":                    alertStatus,
+						"namespace":                     "openshift-monitoring",
+						"openshift_io_alert_source":     "platform",
+						"prometheus":                    "openshift-monitoring/k8s",
+						"send_managed_notification":     "true",
+						"managed_notification_template": managedNotificationTemplate + "_2",
 						"severity":                      "info",
 					},
 					Annotations: map[string]string{
@@ -586,25 +655,35 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 			Expect(err).Should(BeNil(), "failed to create default ManagedNotification")
 		}
 
-		// TEST 1 - Send Service Log for a firing alert
-		ginkgo.By("TEST 1 - sending service log for a firing alert")
+		// TEST - Verify http request actions
+		ginkgo.By("TEST - http GET should not be supported")
+		resp, err := httpClient.Get(fmt.Sprintf("%s/alertmanager-receiver", ocmAgentURL))
+		Expect(resp.StatusCode).ShouldNot(Equal(http.StatusOK))
+
+		// TEST - Get servicelog count before sending alert
+		ginkgo.By("TEST - sending service log for a firing alert")
 		preServiceLogCount, err := getServiceLogCount(ctx, externalClusterID)
 		Expect(err).Should(BeNil(), "failed to get initial service log count")
 
-		firingAlert := createAlert("firing", "LoggingVolumeFillingUpNotificationSRE", testNotificationName)
+		firingAlert := createSingleAlert("firing", "LoggingVolumeFillingUpNotificationSRE", testNotificationName)
+		// TEST - Verify alert has notification template associated
+		ginkgo.By("TEST - Alert should have notification template associated")
+		Expect(firingAlert.Alerts[0].Labels["managed_notification_template"]).ShouldNot(BeNil(), "No managed notification template for alert")
+		Expect(firingAlert.Alerts[0].Labels["managed_notification_template"]).Should(Equal(testNotificationName))
+
+		// Test - Post alert
+		ginkgo.By("TEST - Post single alert, servicelog count should be increased by 1")
 		err = postAlert(ctx, firingAlert)
 		Expect(err).Should(BeNil(), "failed to post firing alert")
-
-		// Wait for processing
 		time.Sleep(3 * time.Second)
 		checkServiceLogCount(ctx, externalClusterID, preServiceLogCount, 1)
 
-		// TEST 2 - Do not send Service Log again for the same firing alert
-		ginkgo.By("TEST 2 - not sending service log again for same firing alert")
+		// TEST - Do not send Service Log again for the same firing alert
+		ginkgo.By("TEST - Not sending service log again for same firing alert within resend period")
 		preServiceLogCount, err = getServiceLogCount(ctx, externalClusterID)
 		Expect(err).Should(BeNil(), "failed to get service log count before duplicate test")
 
-		duplicateAlert := createAlert("firing", "LoggingVolumeFillingUpNotificationSRE", testNotificationName)
+		duplicateAlert := createSingleAlert("firing", "LoggingVolumeFillingUpNotificationSRE", testNotificationName)
 		err = postAlert(ctx, duplicateAlert)
 		Expect(err).Should(BeNil(), "failed to post duplicate firing alert")
 
@@ -612,12 +691,12 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		time.Sleep(3 * time.Second)
 		checkServiceLogCount(ctx, externalClusterID, preServiceLogCount, 0)
 
-		// TEST 3 - Send Service Log for resolved alert
-		ginkgo.By("TEST 3 - sending service log for resolved alert")
+		// TEST - Send Service Log for resolved alert
+		ginkgo.By("TEST - Sending service log for resolved alert")
 		preServiceLogCount, err = getServiceLogCount(ctx, externalClusterID)
 		Expect(err).Should(BeNil(), "failed to get service log count before resolved test")
 
-		resolvedAlert := createAlert("resolved", "LoggingVolumeFillingUpNotificationSRE", testNotificationName)
+		resolvedAlert := createSingleAlert("resolved", "LoggingVolumeFillingUpNotificationSRE", testNotificationName)
 		err = postAlert(ctx, resolvedAlert)
 		Expect(err).Should(BeNil(), "failed to post resolved alert")
 
@@ -625,8 +704,34 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		time.Sleep(3 * time.Second)
 		checkServiceLogCount(ctx, externalClusterID, preServiceLogCount, 1)
 
+		// TEST - Firing 2 alerts, servicelog count should be increased by 2
+		ginkgo.By("TEST - Firing 2 alerts, servicelog count should be increased by 2")
+		preServiceLogCount, err = getServiceLogCount(ctx, externalClusterID)
+		Expect(err).Should(BeNil(), "failed to get service log count before resolved test")
+
+		biAlerts := createBiAlert("firing", "TestAlert", "ParallelAlert")
+		err = postAlert(ctx, biAlerts)
+		Expect(err).Should(BeNil(), "failed to post resolved alert")
+
+		// Wait for processing
+		time.Sleep(3 * time.Second)
+		checkServiceLogCount(ctx, externalClusterID, preServiceLogCount, 2)
+
+		// TEST - Resolve 2 alerts, servicelog count should be increased by 2
+		ginkgo.By("TEST - Resolve 2 alerts, servicelog count should be increased by 2")
+		preServiceLogCount, err = getServiceLogCount(ctx, externalClusterID)
+		Expect(err).Should(BeNil(), "failed to get service log count before resolved test")
+
+		resolvedBiAlerts := createBiAlert("resolved", "TestAlert", "ParallelAlert")
+		err = postAlert(ctx, resolvedBiAlerts)
+		Expect(err).Should(BeNil(), "failed to post resolved alert")
+
+		// Wait for processing
+		time.Sleep(3 * time.Second)
+		checkServiceLogCount(ctx, externalClusterID, preServiceLogCount, 2)
+
 		ginkgo.By("verifying ocm-agent is still healthy after alert tests")
-		resp, err := httpClient.Get(fmt.Sprintf("%s/readyz", ocmAgentURL))
+		resp, err = httpClient.Get(fmt.Sprintf("%s/readyz", ocmAgentURL))
 		if err == nil {
 			Expect(resp.StatusCode).Should(Equal(http.StatusOK), "ocm agent unhealthy after alert tests")
 			resp.Body.Close()
