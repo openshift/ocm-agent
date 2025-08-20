@@ -47,7 +47,7 @@ OCM_AGENT_URL=http://localhost:8081 DISABLE_JUNIT_REPORT=true KUBECONFIG=/(path-
                    └──────────────────────┘
 
 ## ocm-agent e2e test for personal cluster
-Should set OCM_THIRDPARTY_TOKEN in e2e-job.yaml via `ocm token`
+Should set OCM_THIRDPARTY_TOKEN in e2e-personal-job.yaml via `ocm token`
 export OCM_E2E_IMAGE="YOUR TEST IMAGE"
 export OCM_E2E_TOKEN="UPPER ocm token"
-envsubst < ./test/e2e/e2e-job.yaml | oc apply --as backplane-cluster-admin -f -
+envsubst < ./test/e2e/e2e-personal-job.yaml | oc apply --as backplane-cluster-admin -f -
