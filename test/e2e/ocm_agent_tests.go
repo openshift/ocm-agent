@@ -16,11 +16,13 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/openshift/ocm-agent/pkg/k8s"
 	"github.com/openshift/ocm-agent/pkg/ocm"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	crClient "sigs.k8s.io/controller-runtime/pkg/client"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/e2e-framework/klient/k8s/resources"
@@ -33,7 +35,6 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	oav1alpha1 "github.com/openshift/ocm-agent-operator/api/v1alpha1"
 	ocmagentv1alpha1 "github.com/openshift/ocm-agent-operator/api/v1alpha1"
-	"github.com/openshift/ocm-agent/pkg/k8s"
 )
 
 // AlertPayload represents the structure of an alert sent to OCM Agent
@@ -47,19 +48,23 @@ type AlertPayload struct {
 	ExternalURL       string            `json:"externalURL"`
 }
 
-// Alert represents a single alert in the payload
+// Alert represents the structure of an alert sent to OCM Agent
 type Alert struct {
-	Status       string            `json:"status"`
-	Labels       map[string]string `json:"labels"`
-	Annotations  map[string]string `json:"annotations"`
-	StartsAt     string            `json:"startsAt"`
-	EndsAt       string            `json:"endsAt"`
-	GeneratorURL string            `json:"generatorURL"`
+	Status                           string            `json:"status"`
+	Labels                           map[string]string `json:"labels"`
+	Annotations                      map[string]string `json:"annotations"`
+	StartsAt                         string            `json:"startsAt"`
+	EndsAt                           string            `json:"endsAt"`
+	GeneratorURL                     string            `json:"generatorURL"`
+	ManagedFleetNotificationTemplate string            `json:"managedFleetNotificationTemplate"`
+	MCClusterID                      string            `json:"_mc_id"`
+	ClusterID                        string            `json:"_id"`
+	Source                           string            `json:"source"`
 }
 
-// AlertResponse represents the response from OCM Agent
+// AlertResponse represents the response from the OCM Agent
 type AlertResponse struct {
-	Status string `json:"Status"`
+	Status string `json:"status"`
 }
 
 var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
@@ -68,6 +73,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		client                      *resources.Resources
 		k8sClient                   crclient.Client
 		errorServer                 *httptest.Server
+		ocmConnection               *sdk.Connection
 		namespace                   = "openshift-ocm-agent-operator"
 		deploymentName              = "ocm-agent"
 		ocmAgentConfigMap           = "ocm-agent-cm"
@@ -78,10 +84,17 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		clusterVersionName          = "version"
 		infrastructureName          = "cluster"
 		isFleetMode                 = false
+		shortSleepInterval          = 5 * time.Second  // 3 seconds
+		longSleepInterval           = 30 * time.Second // 30 seconds
+
+		externalClusterID string
+		internalClusterID string
 
 		// ConfigMap keys
 		clusterIDKey  = "clusterID"
 		ocmBaseURLKey = "ocmBaseURL"
+		ocmAgentURL   = "http://ocm-agent.openshift-ocm-agent-operator.svc:8081"
+		httpClient    = &http.Client{Timeout: 30 * time.Second}
 		servicesKey   = "services"
 
 		// Label selectors
@@ -99,7 +112,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 			deploymentName,
 			deploymentName + "-operator",
 		}
-		fleetmanagedNotificationName = "audit-webhook-error-putting-minimized-cloudwatch-log"
+		alertName = "LoggingVolumeFillingUpNotificationSRE"
 	)
 
 	// createNetworkpolicy creates a network policy which allow all traffic to ocm-agent for testing.
@@ -333,13 +346,44 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			w.Write([]byte(`{"message": "Service temporarily unavailable", "code": 503}`))
 		}))
+		// Override the ocm-agent URL if the OCM_AGENT_URL environment variable is set
+		if os.Getenv("OCM_AGENT_URL") != "" {
+			ocmAgentURL = os.Getenv("OCM_AGENT_URL")
+		}
+	})
 
-		// If OCM_AGENT_URL is set, test is running locally, take the local ocm-agent url
-		if localOcmAgentUrl := os.Getenv("OCM_AGENT_URL"); localOcmAgentUrl != "" {
-			ocmAgentURL = localOcmAgentUrl
+	ginkgo.AfterAll(func() {
+		// Clean up the error server
+		if errorServer != nil {
+			errorServer.Close()
+		}
+	})
+
+	ginkgo.It("Testing - basic deployment", func(ctx context.Context) {
+
+		// Testing
+		ginkgo.By("checking the namespace exists")
+		err := client.Get(ctx, namespace, "", &corev1.Namespace{})
+		Expect(err).Should(BeNil(), "namespace %s not found", namespace)
+
+		ginkgo.By("checking the deployment exists")
+		for _, deploymentName := range deployments {
+			deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: deploymentName, Namespace: namespace}}
+			err = wait.For(conditions.New(client).DeploymentConditionMatch(deployment, appsv1.DeploymentAvailable, corev1.ConditionTrue))
+			Expect(err).Should(BeNil(), "deployment %s not available", deploymentName)
 		}
 
-		//Create ocm connection
+	})
+
+	ginkgo.It("Testing - common ocm-agent tests", func(ctx context.Context) {
+
+		// Test variables and setup
+		var (
+			ocmAgentPodName string
+			httpClient      = &http.Client{Timeout: 30 * time.Second}
+		)
+
+		// Get OCM configuration from ocm-agent configmap
 		ginkgo.By("getting OCM configuration from ocm-agent configmap")
 		configMap := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: ocmAgentConfigMap, Namespace: namespace}}
 		err = client.Get(ctx, configMap.Name, configMap.Namespace, configMap)
@@ -782,11 +826,18 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 	})
 
 	ginkgo.It("Testing - ocm-agent tests for fleet mode", func(ctx context.Context) {
-		// replicate the tests here http://github.com/openshift/ocm-agent/blob/master/test/test-alerts.sh
-		// TEST - Verify and recreate the default ManagedNotification template
-		ginkgo.By("Verify and recreate the test ManagedNotification template")
+
+		var (
+			// generate a random alphanumeric string for the mcClusterID in the format of 1111-2222-3333-44444
+			mcClusterID1 = "random-mc-id-1" //uuid.New().String()[:18]
+			mcClusterID2 = "random-mc-id-2" //uuid.New().String()[:18]
+			mcClusterID3 = "random-mc-id-3" //uuid.New().String()[:18]
+		)
+		k8sClient, err := k8s.NewClient()
+		Expect(err).Should(BeNil(), "Failed to create controller runtime client")
+		// replicate the tests here http://github.com/openshift/ocm-agent/blob/master/test/test-fleet-alerts.sh
 		// Create a new ManagedFleetNotification object
-		var mFleetNoti = &ocmagentv1alpha1.ManagedFleetNotification{
+		var mFleetNotificationAuditWebhookErrorTemplate = &ocmagentv1alpha1.ManagedFleetNotification{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "ocmagent.managed.openshift.io/v1alpha1",
 				Kind:       "ManagedFleetNotification",
@@ -799,34 +850,292 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 				FleetNotification: ocmagentv1alpha1.FleetNotification{
 					Name:                "audit-webhook-error-putting-minimized-cloudwatch-log",
 					NotificationMessage: "An audit-event send to your CloudWatch failed delivery, due to the event being too large. The reduced event failed delivery as well. Please verify your CloudWatch configuration for this cluster: https://access.redhat.com/solutions/7002219",
-					ResendWait:          24,
+					ResendWait:          0,
 					Severity:            "Info",
 					Summary:             "Audit-events could not be delivered to your CloudWatch",
 				},
 			},
 		}
 
-		// Get the existing ManagedFleetNotification object
-		err := client.Get(ctx, fleetmanagedNotificationName, namespace, mFleetNoti)
-		if err == nil && mFleetNoti.Name != "" {
-			//Delete existing ManagedFleetNotification CR
-			client.Delete(ctx, mFleetNoti)
+		var mFleetNotificationOidcDeletedTemplate = &ocmagentv1alpha1.ManagedFleetNotification{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "ocmagent.managed.openshift.io/v1alpha1",
+				Kind:       "ManagedFleetNotification",
+			},
+
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "oidc-deleted-notification",
+				Namespace: "openshift-ocm-agent-operator",
+			},
+			Spec: ocmagentv1alpha1.ManagedFleetNotificationSpec{
+				FleetNotification: ocmagentv1alpha1.FleetNotification{
+					Name:                "oidc-deleted-notification",
+					NotificationMessage: "Your cluster is degraded due to the deletion of the associated OpenIDConnectProvider. To restore full support, please recreate the OpenID Connect provider by executing the command: rosa create oidc-provider --mode manual --cluster $CLUSTER_ID",
+					ResendWait:          0,
+					Severity:            "Info",
+					Summary:             "Cluster is in Limited Support due to unsupported cloud provider configuration",
+				},
+			},
 		}
-		//Create new FleetManagedNotification CR
-		err = client.Create(ctx, mFleetNoti)
-		fmt.Printf("err: %v\n", err)
+
+		// create an alert payload
+		createFleetAlert := func(alertStatus, alertName, managementClusterID, managedFleetNotificationTemplate string) AlertPayload {
+			today := time.Now().UTC().Format("2006-01-02")
+
+			return AlertPayload{
+				Receiver: "ocmagent",
+				Status:   alertStatus,
+				Alerts: []Alert{
+					{
+						Status: alertStatus,
+						Labels: map[string]string{
+							"alertname":                     alertName,
+							"alertstate":                    alertStatus,
+							"namespace":                     "openshift-monitoring",
+							"openshift_io_alert_source":     "platform",
+							"prometheus":                    "openshift-monitoring/k8s",
+							"send_managed_notification":     "true",
+							"managed_notification_template": managedFleetNotificationTemplate,
+							"severity":                      "info",
+							"_mc_id":                        managementClusterID,
+							"_id":                           externalClusterID,
+							"source":                        "MC",
+						},
+						Annotations: map[string]string{
+							"description": "",
+						},
+						StartsAt:     today + "T00:00:00Z",
+						EndsAt:       "0001-01-01T00:00:00Z",
+						GeneratorURL: "",
+					},
+				},
+				GroupLabels:       map[string]string{},
+				CommonLabels:      map[string]string{},
+				CommonAnnotations: map[string]string{},
+				ExternalURL:       "",
+			}
+		}
+		// postAlert sends an alert to the OCM Agent similar to post-alert.sh
+		postAlert := func(ctx context.Context, alert AlertPayload) error {
+			alertJSON, err := json.Marshal(alert)
+			if err != nil {
+				return fmt.Errorf("failed to marshal alert: %v", err)
+			}
+
+			resp, err := httpClient.Post(
+				fmt.Sprintf("%s/alertmanager-receiver", ocmAgentURL),
+				"application/json",
+				bytes.NewBuffer(alertJSON),
+			)
+			if err != nil {
+				return fmt.Errorf("failed to post alert: %v", err)
+			}
+			defer resp.Body.Close()
+
+			var alertResponse AlertResponse
+			if err := json.NewDecoder(resp.Body).Decode(&alertResponse); err != nil {
+				return fmt.Errorf("failed to decode response: %v", err)
+			}
+
+			if alertResponse.Status != "ok" {
+				return fmt.Errorf("alert posting failed with status: %s", alertResponse.Status)
+			}
+
+			return nil
+		}
+		// getServiceLogCount gets the count of service logs for a cluster
+		getServiceLogCount := func(ctx context.Context, clusterUUID string) (int, error) {
+			serviceLogsClient := ocmConnection.ServiceLogs().V1()
+
+			response, err := serviceLogsClient.Clusters().ClusterLogs().List().
+				Parameter("cluster_uuid", clusterUUID).
+				Send()
+			if err != nil {
+				return 0, fmt.Errorf("failed to get service logs: %v", err)
+			}
+
+			return response.Total(), nil
+		}
+
+		// checkServiceLogCount verifies the service log count matches expectations
+		checkServiceLogCount := func(ctx context.Context, clusterUUID string, preCount, expectedNew int) {
+			expectedTotal := preCount + expectedNew
+			actualCount, err := getServiceLogCount(ctx, clusterUUID)
+			Expect(err).Should(BeNil(), "failed to get service log count")
+			Expect(actualCount).Should(Equal(expectedTotal),
+				fmt.Sprintf("Expected SL count: %d, Got SL count: %d", expectedTotal, actualCount))
+		}
+
+		// getLimitedSupportCount gets the count of limited support records for a cluster
+		getLimitedSupportCount := func(ctx context.Context, clusterUUID string) (int, error) {
+			limitedSupportClient := ocmConnection.ServiceLogs().V1()
+			response, err := limitedSupportClient.Clusters().ClusterLogs().List().
+				Parameter("cluster_uuid", clusterUUID).
+				Send()
+			if err != nil {
+				return 0, fmt.Errorf("failed to get limited support count: %v", err)
+			}
+			return response.Total(), nil
+		}
+
+		// checkLimitedSupportCount verifies the limited support count matches expectations
+		checkLimitedSupportCount := func(ctx context.Context, clusterUUID string, expectedTotal int) {
+			actualCount, err := getLimitedSupportCount(ctx, clusterUUID)
+			Expect(err).Should(BeNil(), "failed to get limited support count")
+			Expect(actualCount).Should(Equal(expectedTotal),
+				fmt.Sprintf("Expected limited support count: %d, Got limited support count: %d", expectedTotal, actualCount))
+		}
+		// getMfnriCount gets the count of firing notification sent for a cluster
+		getMfnriCount := func(ctx context.Context, mcClusterID string, clusterUUID string) (int, int, error) {
+			mFNRRecord := &ocmagentv1alpha1.ManagedFleetNotificationRecord{}
+			err := k8sClient.Get(ctx, crClient.ObjectKey{
+				Name:      mcClusterID,
+				Namespace: "openshift-ocm-agent-operator"},
+				mFNRRecord)
+			if err != nil {
+				return 0, 0, fmt.Errorf("failed to get managed-fleet-notification-records: %v", err)
+			}
+			return mFNRRecord.Status.NotificationRecordByName[0].NotificationRecordItems[0].FiringNotificationSentCount,
+				mFNRRecord.Status.NotificationRecordByName[0].NotificationRecordItems[0].ResolvedNotificationSentCount,
+				nil
+		}
+
+		// compare firging notificaction sent count with expected count for a cluster
+		checkMfnriCount := func(ctx context.Context, clusterUUID string, mcClusterID string, expectedFiringCount int, expectedResolvedCount int) {
+			currentFiringCount, currentResolvedCount, err := getMfnriCount(ctx, mcClusterID, clusterUUID)
+			Expect(err).Should(BeNil(), "failed to get managed-fleet-notification-record count")
+			Expect(currentFiringCount).Should(Equal(expectedFiringCount),
+				fmt.Sprintf("Expected firing notification sent count: %d, Got firing notification sent count: %d", expectedFiringCount, currentFiringCount))
+			Expect(currentResolvedCount).Should(Equal(expectedResolvedCount),
+				fmt.Sprintf("Expected resolved notification sent count: %d, Got resolved notification sent count: %d", expectedResolvedCount, currentResolvedCount))
+		}
+
+		// TEST - Verify and recreate the default ManagedNotification template
+		ginkgo.By("Check and create the test ManagedFleetNotification templates if they don't exist")
+
+		// Get the existing ManagedFleetNotification object
+		mFleetNotificationAuditWebhookError := &ocmagentv1alpha1.ManagedFleetNotification{}
+		// Check if the ManagedFleetNotification object audit-webhook-error-putting-minimized-cloudwatch-log exists
+		err = k8sClient.Get(ctx, crClient.ObjectKey{Name: mFleetNotificationAuditWebhookErrorTemplate.Name, Namespace: namespace}, mFleetNotificationAuditWebhookError)
+		if err == nil && mFleetNotificationAuditWebhookError.Name != "" {
+			err = k8sClient.Delete(ctx, mFleetNotificationAuditWebhookError)
+			Expect(err).Should(BeNil(), "failed to delete FleetManagedNotification")
+		}
+		// Create a new ManagedFleetNotification object
+		err = k8sClient.Create(ctx, mFleetNotificationAuditWebhookErrorTemplate)
+		Expect(err).Should(BeNil(), "failed to create FleetManagedNotification")
+		// Check if the ManagedFleetNotification object oidc-deleted-notification exists
+		mFleetNotificationOidcDeleted := &ocmagentv1alpha1.ManagedFleetNotification{}
+		err = k8sClient.Get(ctx, crClient.ObjectKey{Name: mFleetNotificationOidcDeletedTemplate.Name, Namespace: namespace}, mFleetNotificationOidcDeleted)
+		if err == nil && mFleetNotificationOidcDeleted.Name != "" {
+			err = k8sClient.Delete(ctx, mFleetNotificationOidcDeleted)
+			Expect(err).Should(BeNil(), "failed to delete FleetManagedNotification")
+		}
+		// Create a new ManagedFleetNotification object
+		err = k8sClient.Create(ctx, mFleetNotificationOidcDeletedTemplate)
 		Expect(err).Should(BeNil(), "failed to create FleetManagedNotification")
 
-		// TEST - Validate that the request method is allowed
-		// TEST - Verify that the request is valid before processing the alert
-		// TEST - Validate that supplied alert is one that warrants being processed for a notification
-		// TEST - Send service log for firing alert in case of no NotificationRecords
-		// TEST - Resend service log for firing alert iff NotificationRecords exists and resendWait interval exceeded
-		// TEST - Ensure that firing and resolved alerts processed successfully
-		// TEST - Verify actual firing notification count with expected
-		// TEST - Verify actual resolved notification count with expected
-		// TEST - Verify actual service log count with expected
-		// TEST - Check for parallel execution of the alerts
+		// Delete all managed-fleet-notification-record objects before the test
+		err = k8sClient.DeleteAllOf(ctx, &ocmagentv1alpha1.ManagedFleetNotificationRecord{}, crClient.InNamespace("openshift-ocm-agent-operator"))
+		Expect(err).Should(BeNil(), "failed to delete managedfleetnotificationrecord objects")
+
+		// Remove all the limited support records before the test
+		defer func() {
+			// delete all the limited support records
+			ocmClient := ocm.NewOcmClient(ocmConnection)
+			limitedSupportReasons, err := ocmClient.GetLimitedSupportReasons(externalClusterID)
+			Expect(err).Should(BeNil(), "failed to get limited support reasons")
+			for _, r := range limitedSupportReasons {
+				err := ocmClient.RemoveLimitedSupport(externalClusterID, r.ID())
+				if err != nil {
+					fmt.Printf("Failed to delete limited support record: %v\n", err)
+				}
+			}
+		}()
+
+		ginkgo.By("### TEST 1 - Send Service log for a firing alert ###")
+
+		ginkgo.By("checking the service log count before the test starts")
+		preSLCount, err := getServiceLogCount(ctx, externalClusterID)
+		ginkgo.By(fmt.Sprintf("service log count before the test starts is: %d", preSLCount))
+		Expect(err).Should(BeNil(), "failed to get service log count")
+		ginkgo.By(fmt.Sprintf("Pre service log count: %d", preSLCount))
+		// create an alert payload for the audit-webhook-error-putting-minimized-cloudwatch-log
+		alertPayloadAuditWebhook := createFleetAlert("firing", alertName, mcClusterID1, mFleetNotificationAuditWebhookErrorTemplate.ObjectMeta.Name)
+		// send the alert payload for the audit-webhook-error-putting-minimized-cloudwatch-log to the ocm-agent
+		err = postAlert(ctx, alertPayloadAuditWebhook)
+		Expect(err).Should(BeNil(), "failed to post alert")
+		// wait for shortSleepInterval
+		time.Sleep(shortSleepInterval)
+		postSLCount, err := getServiceLogCount(ctx, externalClusterID)
+		ginkgo.By(fmt.Sprintf("service log count after the audit-webhook alert is posted is: %d", postSLCount))
+		ginkgo.By("checking the service log count after the audit-webhook alert is posted")
+		checkServiceLogCount(ctx, externalClusterID, preSLCount, 1)
+		checkMfnriCount(ctx, externalClusterID, mcClusterID1, 1, 0)
+
+		// increment the preSLCount for next checks
+		preSLCount++
+
+		ginkgo.By("### TEST 2 - Send Limited Support for a firing alert")
+		// check the limited support count before the test starts
+		preLimitedSupportCount, err := getLimitedSupportCount(ctx, externalClusterID)
+		Expect(err).Should(BeNil(), "failed to get limited support count")
+		ginkgo.By(fmt.Sprintf("Pre limited support count: %d", preLimitedSupportCount))
+		expectedLimitedSupportCount := preLimitedSupportCount + 1
+		// create an alert payload for the oidc-deleted-notification
+		alertPayloadOidcDeleted := createFleetAlert("firing", alertName, mcClusterID2, mFleetNotificationOidcDeletedTemplate.ObjectMeta.Name)
+		// send the alert payload for the oidc-deleted-notification to the ocm-agent
+		err = postAlert(ctx, alertPayloadOidcDeleted)
+		Expect(err).Should(BeNil(), "failed to post alert")
+		// wait for shortSleepInterval
+		time.Sleep(shortSleepInterval)
+
+		ginkgo.By("checking the service log count after the alert oidc-deleted is posted")
+		checkLimitedSupportCount(ctx, externalClusterID, expectedLimitedSupportCount)
+		checkMfnriCount(ctx, externalClusterID, mcClusterID2, 1, 0)
+
+		ginkgo.By("### TEST 3 - Resend Limited Support for a firing alert without a resolve inbetween ###")
+
+		time.Sleep(shortSleepInterval)
+		checkLimitedSupportCount(ctx, externalClusterID, expectedLimitedSupportCount)
+		checkMfnriCount(ctx, externalClusterID, mcClusterID2, 1, 0)
+
+		ginkgo.By("### TEST 4 - Remove Limited Support for resolved alert ###")
+
+		preLimitedSupportCount, err = getLimitedSupportCount(ctx, externalClusterID)
+		Expect(err).Should(BeNil(), "failed to get limited support count")
+		ginkgo.By(fmt.Sprintf("Pre limited support count: %d", preLimitedSupportCount))
+
+		// create an alert payload for the oidc-deleted-notification
+		alertPayloadOidcDeleted = createFleetAlert("resolved", alertName, mcClusterID2, mFleetNotificationOidcDeletedTemplate.ObjectMeta.Name)
+		// send the alert payload for the oidc-deleted-notification to the ocm-agent
+		err = postAlert(ctx, alertPayloadOidcDeleted)
+		Expect(err).Should(BeNil(), "failed to post alert")
+		// wait for shortSleepInterval
+		time.Sleep(shortSleepInterval)
+		expectedLimitedSupportCount = preLimitedSupportCount - 1
+
+		checkLimitedSupportCount(ctx, externalClusterID, expectedLimitedSupportCount)
+		checkMfnriCount(ctx, externalClusterID, mcClusterID2, 1, 1)
+
+		ginkgo.By("### TEST 5 - Send Service log for a firing alert ###")
+
+		preSLCount, err = getServiceLogCount(ctx, externalClusterID)
+		Expect(err).Should(BeNil(), "failed to get service log count")
+		ginkgo.By(fmt.Sprintf("Pre service log count: %d", preSLCount))
+
+		// create an alert payload for the oidc-deleted-notification
+		alertPayloadAuditWebhook = createFleetAlert("firing", alertName, mcClusterID3, mFleetNotificationAuditWebhookErrorTemplate.ObjectMeta.Name)
+		// send the alert payload for the oidc-deleted-notification to the ocm-agent 10 times
+		for i := 0; i < 10; i++ {
+			err = postAlert(ctx, alertPayloadAuditWebhook)
+			Expect(err).Should(BeNil(), "failed to post alert")
+		}
+		// wait for 3 seconds
+		time.Sleep(longSleepInterval)
+		ginkgo.By("checking the service log count after the alert is posted")
+		checkServiceLogCount(ctx, externalClusterID, preSLCount, 10)
+		checkMfnriCount(ctx, externalClusterID, mcClusterID3, 10, 0)
 	})
 
 })
