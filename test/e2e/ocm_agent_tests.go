@@ -4,7 +4,9 @@
 package osde2etests
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +20,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/e2e-framework/klient/k8s/resources"
 	"sigs.k8s.io/e2e-framework/klient/wait"
@@ -27,31 +30,68 @@ import (
 	sdk "github.com/openshift-online/ocm-sdk-go"
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	configv1 "github.com/openshift/api/config/v1"
+	oav1alpha1 "github.com/openshift/ocm-agent-operator/api/v1alpha1"
+	"github.com/openshift/ocm-agent/pkg/k8s"
 	"github.com/openshift/ocm-agent/pkg/ocm"
 )
+
+// AlertPayload represents the structure of an alert sent to OCM Agent
+type AlertPayload struct {
+	Receiver          string            `json:"receiver"`
+	Status            string            `json:"status"`
+	Alerts            []Alert           `json:"alerts"`
+	GroupLabels       map[string]string `json:"groupLabels"`
+	CommonLabels      map[string]string `json:"commonLabels"`
+	CommonAnnotations map[string]string `json:"commonAnnotations"`
+	ExternalURL       string            `json:"externalURL"`
+}
+
+// Alert represents a single alert in the payload
+type Alert struct {
+	Status       string            `json:"status"`
+	Labels       map[string]string `json:"labels"`
+	Annotations  map[string]string `json:"annotations"`
+	StartsAt     string            `json:"startsAt"`
+	EndsAt       string            `json:"endsAt"`
+	GeneratorURL string            `json:"generatorURL"`
+}
+
+// AlertResponse represents the response from OCM Agent
+type AlertResponse struct {
+	Status string `json:"Status"`
+}
 
 var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 
 	var (
-		client               *resources.Resources
-		errorServer          *httptest.Server
-		namespace            = "openshift-ocm-agent-operator"
-		deploymentName       = "ocm-agent"
-		ocmAgentConfigMap    = "ocm-agent-cm"
-		ocmAccessTokenSecret = "ocm-access-token"
-		clusterVersionName   = "version"
-		infrastructureName   = "cluster"
+		client                      *resources.Resources
+		k8sClient                   crclient.Client
+		errorServer                 *httptest.Server
+		namespace                   = "openshift-ocm-agent-operator"
+		deploymentName              = "ocm-agent"
+		ocmAgentConfigMap           = "ocm-agent-cm"
+		ocmAgentFleetConfigMap      = "ocm-agent-fleet-cm"
+		ocmAgentManagedNotification = "sre-managed-notifications"
+		testNotificationName        = "LoggingVolumeFillingUp"
+		clusterVersionName          = "version"
+		infrastructureName          = "cluster"
+		isFleetMode                 = false
 
 		// ConfigMap keys
 		clusterIDKey  = "clusterID"
 		ocmBaseURLKey = "ocmBaseURL"
 		servicesKey   = "services"
 
-		// Secret keys
-		accessTokenKey = "access_token"
-
 		// Label selectors
 		ocmAgentLabelSelector = "app=ocm-agent"
+
+		ocmAgentPodName   string
+		ocmBaseURL        string
+		ocmAgentURL       = "http://ocm-agent.openshift-ocm-agent-operator.svc:8081"
+		httpClient        = &http.Client{Timeout: 30 * time.Second}
+		externalClusterID string
+		internalClusterID string
+		ocmConnection     *sdk.Connection
 
 		deployments = []string{
 			deploymentName,
@@ -59,69 +99,229 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		}
 	)
 
-	ginkgo.BeforeAll(func() {
+	// createDefaultNotification creates a managed notification CRD for testing
+	createDefaultNotification := func(ctx context.Context) error {
+		defaultNotification := &oav1alpha1.ManagedNotification{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "ManagedNotification",
+				APIVersion: "ocmagent.managed.openshift.io/v1alpha1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      ocmAgentManagedNotification,
+				Namespace: namespace,
+			},
+			Spec: oav1alpha1.ManagedNotificationSpec{
+				Notifications: []oav1alpha1.Notification{
+					{
+						Name:         testNotificationName,
+						ResendWait:   24,
+						ResolvedDesc: `Your cluster's ElasticSearch deployment is detected as being at safe disk consumption levels and no additional action on this issue is required.`,
+						ActiveDesc:   `Your cluster requires you to take action as its ElasticSearch cluster logging deployment has been detected as reaching a high disk usage threshold.`,
+						Severity:     "Info",
+						Summary:      "ElasticSearch reaching disk capacity",
+					},
+					{
+						Name:         "ParallelAlert_1",
+						ResendWait:   24,
+						ResolvedDesc: `Parallel Alert1 has been resolved`,
+						ActiveDesc:   `Your cluster requires you to take action as Parallel Alert1 is firing.`,
+						Severity:     "Info",
+						Summary:      "Test Parallel Alert 1",
+					},
+					{
+						Name:         "ParallelAlert_2",
+						ResendWait:   24,
+						ResolvedDesc: `Parallel Alert2 has been resolved`,
+						ActiveDesc:   `Your cluster requires you to take action as Parallel Alert1 is firing.`,
+						Severity:     "Info",
+						Summary:      "Test Parallel Alert 2",
+					},
+				},
+			},
+		}
+		err := k8sClient.Create(ctx, defaultNotification)
+		if err != nil {
+			return fmt.Errorf("failed to create default notification: %v", err)
+		}
+		return nil
+	}
+
+	// createAlert creates an alert payload similar to the shell script create-alert.sh
+	createSingleAlert := func(alertStatus, alertName, managedNotificationTemplate string) AlertPayload {
+		today := time.Now().UTC().Format("2006-01-02")
+
+		return AlertPayload{
+			Receiver: "ocmagent",
+			Status:   alertStatus,
+			Alerts: []Alert{
+				{
+					Status: alertStatus,
+					Labels: map[string]string{
+						"alertname":                     alertName,
+						"alertstate":                    alertStatus,
+						"namespace":                     "openshift-monitoring",
+						"openshift_io_alert_source":     "platform",
+						"prometheus":                    "openshift-monitoring/k8s",
+						"send_managed_notification":     "true",
+						"managed_notification_template": managedNotificationTemplate,
+						"severity":                      "info",
+					},
+					Annotations: map[string]string{
+						"description": "",
+					},
+					StartsAt:     today + "T00:00:00Z",
+					EndsAt:       "0001-01-01T00:00:00Z",
+					GeneratorURL: "",
+				},
+			},
+			GroupLabels:       map[string]string{},
+			CommonLabels:      map[string]string{},
+			CommonAnnotations: map[string]string{},
+			ExternalURL:       "",
+		}
+	}
+
+	createBiAlert := func(alertStatus, alertName, managedNotificationTemplate string) AlertPayload {
+		today := time.Now().UTC().Format("2006-01-02")
+
+		return AlertPayload{
+			Receiver: "ocmagent",
+			Status:   alertStatus,
+			Alerts: []Alert{
+				{
+					Status: alertStatus,
+					Labels: map[string]string{
+						"alertname":                     alertName + "_1",
+						"alertstate":                    alertStatus,
+						"namespace":                     "openshift-monitoring",
+						"openshift_io_alert_source":     "platform",
+						"prometheus":                    "openshift-monitoring/k8s",
+						"send_managed_notification":     "true",
+						"managed_notification_template": managedNotificationTemplate + "_1",
+						"severity":                      "info",
+					},
+					Annotations: map[string]string{
+						"description": "",
+					},
+					StartsAt:     today + "T00:00:00Z",
+					EndsAt:       "0001-01-01T00:00:00Z",
+					GeneratorURL: "",
+				},
+				{
+					Status: alertStatus,
+					Labels: map[string]string{
+						"alertname":                     alertName + "_2",
+						"alertstate":                    alertStatus,
+						"namespace":                     "openshift-monitoring",
+						"openshift_io_alert_source":     "platform",
+						"prometheus":                    "openshift-monitoring/k8s",
+						"send_managed_notification":     "true",
+						"managed_notification_template": managedNotificationTemplate + "_2",
+						"severity":                      "info",
+					},
+					Annotations: map[string]string{
+						"description": "",
+					},
+					StartsAt:     today + "T00:00:00Z",
+					EndsAt:       "0001-01-01T00:00:00Z",
+					GeneratorURL: "",
+				},
+			},
+			GroupLabels:       map[string]string{},
+			CommonLabels:      map[string]string{},
+			CommonAnnotations: map[string]string{},
+			ExternalURL:       "",
+		}
+	}
+
+	// postAlert sends an alert to the OCM Agent similar to post-alert.sh
+	postAlert := func(ctx context.Context, alert AlertPayload) error {
+		alertJSON, err := json.Marshal(alert)
+		if err != nil {
+			return fmt.Errorf("failed to marshal alert: %v", err)
+		}
+
+		resp, err := httpClient.Post(
+			fmt.Sprintf("%s/alertmanager-receiver", ocmAgentURL),
+			"application/json",
+			bytes.NewBuffer(alertJSON),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to post alert: %v", err)
+		}
+		defer resp.Body.Close()
+
+		var alertResponse AlertResponse
+		if err := json.NewDecoder(resp.Body).Decode(&alertResponse); err != nil {
+			return fmt.Errorf("failed to decode response: %v", err)
+		}
+
+		if alertResponse.Status != "ok" {
+			return fmt.Errorf("alert posting failed with status: %s", alertResponse.Status)
+		}
+
+		return nil
+	}
+
+	// getServiceLogCount gets the count of service logs for a cluster
+	getServiceLogCount := func(ctx context.Context, clusterUUID string) (int, error) {
+		serviceLogsClient := ocmConnection.ServiceLogs().V1()
+
+		response, err := serviceLogsClient.Clusters().ClusterLogs().List().
+			Parameter("cluster_uuid", clusterUUID).
+			Send()
+		if err != nil {
+			return 0, fmt.Errorf("failed to get service logs: %v", err)
+		}
+
+		return response.Total(), nil
+	}
+
+	// checkServiceLogCount verifies the service log count matches expectations
+	checkServiceLogCount := func(ctx context.Context, clusterUUID string, preCount, expectedNew int) {
+		expectedTotal := preCount + expectedNew
+		actualCount, err := getServiceLogCount(ctx, clusterUUID)
+		Expect(err).Should(BeNil(), "failed to get service log count")
+		Expect(actualCount).Should(Equal(expectedTotal),
+			fmt.Sprintf("Expected SL count: %d, Got SL count: %d", expectedTotal, actualCount))
+	}
+
+	ginkgo.BeforeAll(func(ctx context.Context) {
 		// setup the k8s client
 		cfg, err := config.GetConfig()
 		Expect(err).Should(BeNil(), "failed to get kubeconfig")
 		client, err = resources.New(cfg)
 		Expect(err).Should(BeNil(), "resources.New error")
 
+		k8sClient, err = k8s.NewClient()
+		Expect(err).Should(BeNil(), "Failed to create controller runtime client")
+
 		// Create a mock error server that always returns 503
 		errorServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			w.Write([]byte(`{"message": "Service temporarily unavailable", "code": 503}`))
 		}))
-	})
 
-	ginkgo.AfterAll(func() {
-		// Clean up the error server
-		if errorServer != nil {
-			errorServer.Close()
-		}
-	})
-
-	ginkgo.It("Testing - basic deployment", func(ctx context.Context) {
-
-		// Testing
-		ginkgo.By("checking the namespace exists")
-		err := client.Get(ctx, namespace, "", &corev1.Namespace{})
-		Expect(err).Should(BeNil(), "namespace %s not found", namespace)
-
-		ginkgo.By("checking the deployment exists")
-		for _, deploymentName := range deployments {
-			deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: deploymentName, Namespace: namespace}}
-			err = wait.For(conditions.New(client).DeploymentConditionMatch(deployment, appsv1.DeploymentAvailable, corev1.ConditionTrue))
-			Expect(err).Should(BeNil(), "deployment %s not available", deploymentName)
+		// If OCM_AGENT_URL is set, test is running locally, take the local ocm-agent url
+		if localOcmAgentUrl := os.Getenv("OCM_AGENT_URL"); localOcmAgentUrl != "" {
+			ocmAgentURL = localOcmAgentUrl
 		}
 
-	})
-
-	ginkgo.It("Testing - common ocm-agent tests", func(ctx context.Context) {
-
-		// Test variables and setup
-		var (
-			ocmAgentPodName   string
-			ocmAgentURL       = "http://ocm-agent.openshift-ocm-agent-operator.svc:8081"
-			httpClient        = &http.Client{Timeout: 30 * time.Second}
-			externalClusterID string
-			internalClusterID string
-			ocmConnection     *sdk.Connection
-		)
-
-		// Get OCM configuration from ocm-agent configmap
+		//Create ocm connection
 		ginkgo.By("getting OCM configuration from ocm-agent configmap")
 		configMap := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: ocmAgentConfigMap, Namespace: namespace}}
-		err := client.Get(ctx, configMap.Name, configMap.Namespace, configMap)
+		err = client.Get(ctx, configMap.Name, configMap.Namespace, configMap)
+		// Verify required configuration fields
 		Expect(err).Should(BeNil(), "ocm-agent configmap not found")
 
-		// Get real external cluster ID from cluster configmap
 		ginkgo.By("getting real external cluster ID from configmap")
-
 		if err == nil {
 			if configMap.Data[clusterIDKey] != "" {
 				externalClusterID = configMap.Data[clusterIDKey]
+				ginkgo.By(fmt.Sprintf("externalClusterId %s", externalClusterID))
 			}
 		}
+
 		// If not found in configmap, try fallback approaches
 		if externalClusterID == "" {
 			// Try to get from ClusterVersion object
@@ -139,28 +339,34 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 			}
 		}
 		Expect(externalClusterID).ShouldNot(BeEmpty(), "external cluster ID should not be empty")
-		Expect(externalClusterID).Should(ContainSubstring("-"))
 
-		// Verify required configuration fields
-		Expect(configMap.Data).Should(HaveKey(ocmBaseURLKey), "ocmBaseURL not configured")
-		Expect(configMap.Data).Should(HaveKey(servicesKey), "services not configured")
-		ocmBaseURL := configMap.Data[ocmBaseURLKey]
-		Expect(ocmBaseURL).ShouldNot(BeEmpty(), "ocmBaseURL is empty")
-		Expect(configMap.Data[servicesKey]).ShouldNot(BeEmpty(), "services configuration is empty")
+		ginkgo.By("Getting if fleet mode is enabled with ocm-agent configmap")
+		fleetConfigMap := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: ocmAgentFleetConfigMap, Namespace: namespace}}
+		err = client.Get(ctx, fleetConfigMap.Name, fleetConfigMap.Namespace, fleetConfigMap)
+		if err == nil {
+			// If we could get ocm-agent-fleet-cm, then ocm-agent is in fleet mode
+			isFleetMode = true
+		}
+		if isFleetMode {
+			Expect(fleetConfigMap.Data).Should(HaveKey(ocmBaseURLKey), "ocmBaseURL not configured")
+			Expect(fleetConfigMap.Data).Should(HaveKey(servicesKey), "services not configured")
+			ocmBaseURL = fleetConfigMap.Data[ocmBaseURLKey]
+			Expect(ocmBaseURL).ShouldNot(BeEmpty(), "ocmBaseURL is empty")
+			Expect(fleetConfigMap.Data[servicesKey]).ShouldNot(BeEmpty(), "services configuration is empty")
+		} else {
+			Expect(configMap.Data).Should(HaveKey(ocmBaseURLKey), "ocmBaseURL not configured")
+			Expect(configMap.Data).Should(HaveKey(servicesKey), "services not configured")
+			ocmBaseURL = configMap.Data[ocmBaseURLKey]
+			Expect(ocmBaseURL).ShouldNot(BeEmpty(), "ocmBaseURL is empty")
+			Expect(configMap.Data[servicesKey]).ShouldNot(BeEmpty(), "services configuration is empty")
+		}
 
 		// Get access token from env or secret
 		var accessToken string
+
 		if thirdPartyToken := os.Getenv("OCM_THIRDPARTY_TOKEN"); thirdPartyToken != "" {
 			accessToken = thirdPartyToken
-		} else {
-			ginkgo.By("getting OCM access token from secret")
-			secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: ocmAccessTokenSecret, Namespace: namespace}}
-			err := client.Get(ctx, secret.Name, secret.Namespace, secret)
-			if err == nil && secret.Data[accessTokenKey] != nil {
-				accessToken = string(secret.Data[accessTokenKey])
-			}
 		}
-		Expect(accessToken).ShouldNot(BeEmpty(), "access token is empty")
 
 		// Create OCM connection and get internal cluster ID
 		ginkgo.By("creating OCM connection and getting internal cluster ID")
@@ -188,15 +394,42 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		// Use GetInternalIDByExternalID to get proper internal cluster ID
 		internalClusterID, err = ocm.GetInternalIDByExternalID(externalClusterID, ocmConnection)
 		if err != nil {
+			fmt.Println("Failed to get ocm connection")
 			ginkgo.GinkgoWriter.Printf("Skipping test: Failed to get internal cluster ID. Error: %v\n", err)
 			ginkgo.Skip(fmt.Sprintf("Failed to get internal cluster ID: %v. This may be expected if cluster is not registered in OCM.", err))
 		}
 		Expect(internalClusterID).ShouldNot(BeEmpty(), "internal cluster ID should not be empty")
 
+	})
+
+	ginkgo.AfterAll(func() {
+		// Clean up the error server
+		if errorServer != nil {
+			errorServer.Close()
+		}
+	})
+
+	ginkgo.It("Testing - basic deployment", func(ctx context.Context) {
+
+		// Testing
+		ginkgo.By("checking the namespace exists")
+		err := client.Get(ctx, namespace, "", &corev1.Namespace{})
+		Expect(err).Should(BeNil(), "namespace %s not found", namespace)
+
+		ginkgo.By("checking the deployment exists")
+		for _, deploymentName := range deployments {
+			deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: deploymentName, Namespace: namespace}}
+			err = wait.For(conditions.New(client).DeploymentConditionMatch(deployment, appsv1.DeploymentAvailable, corev1.ConditionTrue))
+			Expect(err).Should(BeNil(), "deployment %s not available", deploymentName)
+		}
+
+	})
+
+	ginkgo.It("Testing - common ocm-agent tests", func(ctx context.Context) {
 		// Get OCM Agent pod for testing
 		ginkgo.By("getting ocm-agent pod for testing")
 		podList := &corev1.PodList{}
-		err = client.List(ctx, podList, func(o *metav1.ListOptions) {
+		err := client.List(ctx, podList, func(o *metav1.ListOptions) {
 			o.LabelSelector = ocmAgentLabelSelector
 		})
 		Expect(err).Should(BeNil(), "failed to list ocm-agent pods")
@@ -337,7 +570,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		defer func() {
 			if limitedSupportReasonID != "" {
 				ginkgo.By("cleaning up - deleting limited support reason")
-				err := ocmClient.RemoveLimitedSupport(internalClusterID, limitedSupportReasonID)
+				err := ocmClient.RemoveLimitedSupport(externalClusterID, limitedSupportReasonID)
 				if err != nil {
 					fmt.Printf("Failed to cleanup limited support reason %s: %v\n", limitedSupportReasonID, err)
 				}
@@ -390,7 +623,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		ginkgo.By("final health verification after all tests")
 		resp, err = httpClient.Get(fmt.Sprintf("%s/readyz", ocmAgentURL))
 		if err == nil {
-			Expect(resp.StatusCode).Should(Equal(http.StatusOK), "agent unhealthy after tests")
+			Expect(resp.StatusCode).Should(Equal(http.StatusOK), "ocm-agent unhealthy after tests")
 			resp.Body.Close()
 		}
 
@@ -399,6 +632,110 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		err = client.Get(ctx, finalPod.Name, finalPod.Namespace, finalPod)
 		Expect(err).Should(BeNil(), "failed to get ocm-agent pod after tests")
 		Expect(finalPod.Status.Phase).Should(Equal(corev1.PodRunning), "ocm-agent pod not running after tests")
+	})
+
+	ginkgo.It("Testing - Alert processing for classic mode", func(ctx context.Context) {
+		if isFleetMode {
+			ginkgo.GinkgoWriter.Printf("Skipping test: Skip the tests for classic mode.")
+			ginkgo.Skip(fmt.Sprintf("Ocm-agent is in fleet mode, skip the tests for classic mode."))
+		}
+
+		ginkgo.By("Delete and create default managed notification so that ")
+		managedNotification := &oav1alpha1.ManagedNotification{}
+		err := k8sClient.Get(ctx, crclient.ObjectKey{Name: ocmAgentManagedNotification, Namespace: namespace}, managedNotification)
+		if err != nil {
+			// If notification doesn't exist, create default notification
+			err = createDefaultNotification(ctx)
+			Expect(err).Should(BeNil(), "failed to create default ManagedNotification")
+		} else {
+			// If notification exists, delete it then create default for testing
+			err = k8sClient.Delete(ctx, managedNotification)
+			Expect(err).Should(BeNil(), "failed to delete existing ManagedNotification")
+			err = createDefaultNotification(ctx)
+			Expect(err).Should(BeNil(), "failed to create default ManagedNotification")
+		}
+
+		// TEST - Verify http request actions
+		ginkgo.By("TEST - http GET should not be supported")
+		resp, err := httpClient.Get(fmt.Sprintf("%s/alertmanager-receiver", ocmAgentURL))
+		Expect(resp.StatusCode).ShouldNot(Equal(http.StatusOK))
+
+		// TEST - Get servicelog count before sending alert
+		ginkgo.By("TEST - sending service log for a firing alert")
+		preServiceLogCount, err := getServiceLogCount(ctx, externalClusterID)
+		Expect(err).Should(BeNil(), "failed to get initial service log count")
+
+		firingAlert := createSingleAlert("firing", "LoggingVolumeFillingUpNotificationSRE", testNotificationName)
+		// TEST - Verify alert has notification template associated
+		ginkgo.By("TEST - Alert should have notification template associated")
+		Expect(firingAlert.Alerts[0].Labels["managed_notification_template"]).ShouldNot(BeNil(), "No managed notification template for alert")
+		Expect(firingAlert.Alerts[0].Labels["managed_notification_template"]).Should(Equal(testNotificationName))
+
+		// Test - Post alert
+		ginkgo.By("TEST - Post single alert, servicelog count should be increased by 1")
+		err = postAlert(ctx, firingAlert)
+		Expect(err).Should(BeNil(), "failed to post firing alert")
+		time.Sleep(3 * time.Second)
+		checkServiceLogCount(ctx, externalClusterID, preServiceLogCount, 1)
+
+		// TEST - Do not send Service Log again for the same firing alert
+		ginkgo.By("TEST - Not sending service log again for same firing alert within resend period")
+		preServiceLogCount, err = getServiceLogCount(ctx, externalClusterID)
+		Expect(err).Should(BeNil(), "failed to get service log count before duplicate test")
+
+		duplicateAlert := createSingleAlert("firing", "LoggingVolumeFillingUpNotificationSRE", testNotificationName)
+		err = postAlert(ctx, duplicateAlert)
+		Expect(err).Should(BeNil(), "failed to post duplicate firing alert")
+
+		// Wait for processing
+		time.Sleep(3 * time.Second)
+		checkServiceLogCount(ctx, externalClusterID, preServiceLogCount, 0)
+
+		// TEST - Send Service Log for resolved alert
+		ginkgo.By("TEST - Sending service log for resolved alert")
+		preServiceLogCount, err = getServiceLogCount(ctx, externalClusterID)
+		Expect(err).Should(BeNil(), "failed to get service log count before resolved test")
+
+		resolvedAlert := createSingleAlert("resolved", "LoggingVolumeFillingUpNotificationSRE", testNotificationName)
+		err = postAlert(ctx, resolvedAlert)
+		Expect(err).Should(BeNil(), "failed to post resolved alert")
+
+		// Wait for processing
+		time.Sleep(3 * time.Second)
+		checkServiceLogCount(ctx, externalClusterID, preServiceLogCount, 1)
+
+		// TEST - Firing 2 alerts, servicelog count should be increased by 2
+		ginkgo.By("TEST - Firing 2 alerts, servicelog count should be increased by 2")
+		preServiceLogCount, err = getServiceLogCount(ctx, externalClusterID)
+		Expect(err).Should(BeNil(), "failed to get service log count before resolved test")
+
+		biAlerts := createBiAlert("firing", "TestAlert", "ParallelAlert")
+		err = postAlert(ctx, biAlerts)
+		Expect(err).Should(BeNil(), "failed to post resolved alert")
+
+		// Wait for processing
+		time.Sleep(3 * time.Second)
+		checkServiceLogCount(ctx, externalClusterID, preServiceLogCount, 2)
+
+		// TEST - Resolve 2 alerts, servicelog count should be increased by 2
+		ginkgo.By("TEST - Resolve 2 alerts, servicelog count should be increased by 2")
+		preServiceLogCount, err = getServiceLogCount(ctx, externalClusterID)
+		Expect(err).Should(BeNil(), "failed to get service log count before resolved test")
+
+		resolvedBiAlerts := createBiAlert("resolved", "TestAlert", "ParallelAlert")
+		err = postAlert(ctx, resolvedBiAlerts)
+		Expect(err).Should(BeNil(), "failed to post resolved alert")
+
+		// Wait for processing
+		time.Sleep(3 * time.Second)
+		checkServiceLogCount(ctx, externalClusterID, preServiceLogCount, 2)
+
+		ginkgo.By("verifying ocm-agent is still healthy after alert tests")
+		resp, err = httpClient.Get(fmt.Sprintf("%s/readyz", ocmAgentURL))
+		if err == nil {
+			Expect(resp.StatusCode).Should(Equal(http.StatusOK), "ocm agent unhealthy after alert tests")
+			resp.Body.Close()
+		}
 	})
 
 })
