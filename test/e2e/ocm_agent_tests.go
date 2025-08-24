@@ -18,6 +18,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -72,6 +73,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		ocmAgentConfigMap           = "ocm-agent-cm"
 		ocmAgentFleetConfigMap      = "ocm-agent-fleet-cm"
 		ocmAgentManagedNotification = "sre-managed-notifications"
+		networkPolicyName           = "ocm-agent-allow-all-ingress"
 		testNotificationName        = "LoggingVolumeFillingUp"
 		clusterVersionName          = "version"
 		infrastructureName          = "cluster"
@@ -98,6 +100,35 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 			deploymentName + "-operator",
 		}
 	)
+
+	// createNetworkpolicy creates a network policy which allow all traffic to ocm-agent for testing.
+	createNetworkPolicy := func(ctx context.Context) error {
+		networkPolicy := &networkingv1.NetworkPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      networkPolicyName,
+				Namespace: namespace,
+			},
+			Spec: networkingv1.NetworkPolicySpec{
+				PodSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"app": "ocm-agent",
+					},
+				},
+				PolicyTypes: []networkingv1.PolicyType{
+					networkingv1.PolicyTypeIngress,
+				},
+				Ingress: []networkingv1.NetworkPolicyIngressRule{
+					{},
+				},
+			},
+		}
+		err := client.Create(ctx, networkPolicy)
+		if err != nil {
+			return fmt.Errorf("failed to create network policy: %v", err)
+		}
+
+		return nil
+	}
 
 	// createDefaultNotification creates a managed notification CRD for testing
 	createDefaultNotification := func(ctx context.Context) error {
@@ -400,13 +431,24 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		}
 		Expect(internalClusterID).ShouldNot(BeEmpty(), "internal cluster ID should not be empty")
 
+		ginkgo.By("creating networkpolicy to allow traffic from all namespace")
+		err = createNetworkPolicy(ctx)
+		Expect(err).To(BeNil(), fmt.Sprintf("Failed to create networkpolicy %v", err))
+
 	})
 
-	ginkgo.AfterAll(func() {
+	ginkgo.AfterAll(func(ctx context.Context) {
 		// Clean up the error server
 		if errorServer != nil {
 			errorServer.Close()
 		}
+		networkPolicy := &networkingv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: networkPolicyName, Namespace: namespace}}
+		err := client.Get(ctx, networkPolicy.Name, networkPolicy.Namespace, networkPolicy)
+		if err == nil {
+			// If networkpolicy exist, delete it
+			client.Delete(ctx, networkPolicy)
+		}
+
 	})
 
 	ginkgo.It("Testing - basic deployment", func(ctx context.Context) {
