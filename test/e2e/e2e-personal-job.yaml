@@ -21,6 +21,9 @@ rules:
 - apiGroups: ["ocmagent.managed.openshift.io"]
   resources: ["managednotifications", "managedfleetnotifications", "managedfleetnotificationrecords"]
   verbs: ["get", "list", "create", "delete"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["networkpolicies"]
+  verbs: ["get", "list", "create", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -34,26 +37,6 @@ subjects:
 - kind: ServiceAccount
   name: ocm-agent-e2e-sa
   namespace: openshift-ocm-agent-operator
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: ocm-agent-allow-e2e-test
-  namespace: openshift-ocm-agent-operator
-spec:
-  podSelector:
-    matchLabels:
-      app: ocm-agent
-  policyTypes:
-  - Ingress
-  ingress:
-  - from:
-    - namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: openshift-ocm-agent-operator
-      podSelector:
-        matchLabels:
-          app: ocm-agent-e2e
 ---
 apiVersion: batch/v1
 kind: Job
