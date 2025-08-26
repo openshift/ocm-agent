@@ -874,6 +874,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 					ResendWait:          0,
 					Severity:            "Info",
 					Summary:             "Cluster is in Limited Support due to unsupported cloud provider configuration",
+					LimitedSupport:      true,
 				},
 			},
 		}
@@ -968,9 +969,8 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 
 		// getLimitedSupportCount gets the count of limited support records for a cluster
 		getLimitedSupportCount := func(ctx context.Context, clusterUUID string) (int, error) {
-			limitedSupportClient := ocmConnection.ServiceLogs().V1()
-			response, err := limitedSupportClient.Clusters().ClusterLogs().List().
-				Parameter("cluster_uuid", clusterUUID).
+			limitedSupportClient := ocmConnection.ClustersMgmt().V1()
+			response, err := limitedSupportClient.Clusters().Cluster(internalClusterID).LimitedSupportReasons().List().
 				Send()
 			if err != nil {
 				return 0, fmt.Errorf("failed to get limited support count: %v", err)
@@ -1039,7 +1039,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		err = k8sClient.DeleteAllOf(ctx, &ocmagentv1alpha1.ManagedFleetNotificationRecord{}, crClient.InNamespace("openshift-ocm-agent-operator"))
 		Expect(err).Should(BeNil(), "failed to delete managedfleetnotificationrecord objects")
 
-		// Remove all the limited support records before the test
+		// Remove all the limited support records and resolve firing alerts before the test
 		defer func() {
 			// delete all the limited support records
 			ocmClient := ocm.NewOcmClient(ocmConnection)
@@ -1051,15 +1051,23 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 					fmt.Printf("Failed to delete limited support record: %v\n", err)
 				}
 			}
+			// resolve firing alerts
+			alertPayloadAuditWebhook := createFleetAlert("resolved", alertName, mcClusterID1, mFleetNotificationAuditWebhookErrorTemplate.ObjectMeta.Name)
+			err = postAlert(ctx, alertPayloadAuditWebhook)
+			Expect(err).Should(BeNil(), "failed to post alert")
+			postAlert(ctx, alertPayloadAuditWebhook)
+			alertPayloadOidcDeleted := createFleetAlert("resolved", alertName, mcClusterID2, mFleetNotificationOidcDeletedTemplate.ObjectMeta.Name)
+			err = postAlert(ctx, alertPayloadOidcDeleted)
+			Expect(err).Should(BeNil(), "failed to post alert")
+			alertPayloadAuditWebhook = createFleetAlert("resolved", alertName, mcClusterID3, mFleetNotificationAuditWebhookErrorTemplate.ObjectMeta.Name)
+			err = postAlert(ctx, alertPayloadAuditWebhook)
+			Expect(err).Should(BeNil(), "failed to post alert")
 		}()
 
 		ginkgo.By("### TEST 1 - Send Service log for a firing alert ###")
 
-		ginkgo.By("checking the service log count before the test starts")
 		preSLCount, err := getServiceLogCount(ctx, externalClusterID)
-		ginkgo.By(fmt.Sprintf("service log count before the test starts is: %d", preSLCount))
 		Expect(err).Should(BeNil(), "failed to get service log count")
-		ginkgo.By(fmt.Sprintf("Pre service log count: %d", preSLCount))
 		// create an alert payload for the audit-webhook-error-putting-minimized-cloudwatch-log
 		alertPayloadAuditWebhook := createFleetAlert("firing", alertName, mcClusterID1, mFleetNotificationAuditWebhookErrorTemplate.ObjectMeta.Name)
 		// send the alert payload for the audit-webhook-error-putting-minimized-cloudwatch-log to the ocm-agent
@@ -1067,9 +1075,6 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		Expect(err).Should(BeNil(), "failed to post alert")
 		// wait for shortSleepInterval
 		time.Sleep(shortSleepInterval)
-		postSLCount, err := getServiceLogCount(ctx, externalClusterID)
-		ginkgo.By(fmt.Sprintf("service log count after the audit-webhook alert is posted is: %d", postSLCount))
-		ginkgo.By("checking the service log count after the audit-webhook alert is posted")
 		checkServiceLogCount(ctx, externalClusterID, preSLCount, 1)
 		checkMfnriCount(ctx, externalClusterID, mcClusterID1, 1, 0)
 
@@ -1080,7 +1085,6 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		// check the limited support count before the test starts
 		preLimitedSupportCount, err := getLimitedSupportCount(ctx, externalClusterID)
 		Expect(err).Should(BeNil(), "failed to get limited support count")
-		ginkgo.By(fmt.Sprintf("Pre limited support count: %d", preLimitedSupportCount))
 		expectedLimitedSupportCount := preLimitedSupportCount + 1
 		// create an alert payload for the oidc-deleted-notification
 		alertPayloadOidcDeleted := createFleetAlert("firing", alertName, mcClusterID2, mFleetNotificationOidcDeletedTemplate.ObjectMeta.Name)
@@ -1090,7 +1094,6 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		// wait for shortSleepInterval
 		time.Sleep(shortSleepInterval)
 
-		ginkgo.By("checking the service log count after the alert oidc-deleted is posted")
 		checkLimitedSupportCount(ctx, externalClusterID, expectedLimitedSupportCount)
 		checkMfnriCount(ctx, externalClusterID, mcClusterID2, 1, 0)
 
@@ -1103,18 +1106,14 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		ginkgo.By("### TEST 4 - Remove Limited Support for resolved alert ###")
 
 		preLimitedSupportCount, err = getLimitedSupportCount(ctx, externalClusterID)
-		Expect(err).Should(BeNil(), "failed to get limited support count")
-		ginkgo.By(fmt.Sprintf("Pre limited support count: %d", preLimitedSupportCount))
-
 		// create an alert payload for the oidc-deleted-notification
 		alertPayloadOidcDeleted = createFleetAlert("resolved", alertName, mcClusterID2, mFleetNotificationOidcDeletedTemplate.ObjectMeta.Name)
 		// send the alert payload for the oidc-deleted-notification to the ocm-agent
 		err = postAlert(ctx, alertPayloadOidcDeleted)
 		Expect(err).Should(BeNil(), "failed to post alert")
-		// wait for shortSleepInterval
 		time.Sleep(shortSleepInterval)
 		expectedLimitedSupportCount = preLimitedSupportCount - 1
-
+		Expect(err).Should(BeNil(), "failed to get limited support count")
 		checkLimitedSupportCount(ctx, externalClusterID, expectedLimitedSupportCount)
 		checkMfnriCount(ctx, externalClusterID, mcClusterID2, 1, 1)
 
@@ -1122,7 +1121,6 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 
 		preSLCount, err = getServiceLogCount(ctx, externalClusterID)
 		Expect(err).Should(BeNil(), "failed to get service log count")
-		ginkgo.By(fmt.Sprintf("Pre service log count: %d", preSLCount))
 
 		// create an alert payload for the oidc-deleted-notification
 		alertPayloadAuditWebhook = createFleetAlert("firing", alertName, mcClusterID3, mFleetNotificationAuditWebhookErrorTemplate.ObjectMeta.Name)
@@ -1133,7 +1131,6 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		}
 		// wait for 3 seconds
 		time.Sleep(longSleepInterval)
-		ginkgo.By("checking the service log count after the alert is posted")
 		checkServiceLogCount(ctx, externalClusterID, preSLCount, 10)
 		checkMfnriCount(ctx, externalClusterID, mcClusterID3, 10, 0)
 	})
