@@ -28,8 +28,7 @@ oc -n openshift-ocm-agent-operator port-forward <ocm-agent-pod-name> 8081:8081
 
 Run the tests with the `OCM_AGENT_URL` environment variable set:
 ```bash
-export OCM_TOKEN=$(ocm token)
-OCM_AGENT_URL=http://localhost:8081 DISABLE_JUNIT_REPORT=true KUBECONFIG=/(path-to)/kubeconfig ./bin/ginkgo --tags=osde2e -v test/e2e
+OCM_TOKEN=$(ocm token) OCM_AGENT_URL=http://localhost:8081 DISABLE_JUNIT_REPORT=true KUBECONFIG=/(path-to)/kubeconfig ./bin/ginkgo --tags=osde2e -v test/e2e
 ```
 
                    ┌──────────────────────┐
@@ -96,6 +95,6 @@ In this example, all the test are skipped. To figure more details, debug into th
 
 Run the following command to build ocm-agent in fleet mode and run to be available at `http://localhost:8081`
 
-```
+```bash
  ./test/build-and-run.sh ${CLUSTERNAME} --fleet-mode
  ```

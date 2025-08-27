@@ -87,14 +87,9 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		shortSleepInterval          = 5 * time.Second  // 3 seconds
 		longSleepInterval           = 30 * time.Second // 30 seconds
 
-		externalClusterID string
-		internalClusterID string
-
 		// ConfigMap keys
 		clusterIDKey  = "clusterID"
 		ocmBaseURLKey = "ocmBaseURL"
-		ocmAgentURL   = "http://ocm-agent.openshift-ocm-agent-operator.svc:8081"
-		httpClient    = &http.Client{Timeout: 30 * time.Second}
 		servicesKey   = "services"
 
 		// Label selectors
@@ -106,7 +101,6 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		httpClient        = &http.Client{Timeout: 30 * time.Second}
 		externalClusterID string
 		internalClusterID string
-		ocmConnection     *sdk.Connection
 
 		deployments = []string{
 			deploymentName,
@@ -346,44 +340,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			w.Write([]byte(`{"message": "Service temporarily unavailable", "code": 503}`))
 		}))
-		// Override the ocm-agent URL if the OCM_AGENT_URL environment variable is set
-		if os.Getenv("OCM_AGENT_URL") != "" {
-			ocmAgentURL = os.Getenv("OCM_AGENT_URL")
-		}
-	})
 
-	ginkgo.AfterAll(func() {
-		// Clean up the error server
-		if errorServer != nil {
-			errorServer.Close()
-		}
-	})
-
-	ginkgo.It("Testing - basic deployment", func(ctx context.Context) {
-
-		// Testing
-		ginkgo.By("checking the namespace exists")
-		err := client.Get(ctx, namespace, "", &corev1.Namespace{})
-		Expect(err).Should(BeNil(), "namespace %s not found", namespace)
-
-		ginkgo.By("checking the deployment exists")
-		for _, deploymentName := range deployments {
-			deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: deploymentName, Namespace: namespace}}
-			err = wait.For(conditions.New(client).DeploymentConditionMatch(deployment, appsv1.DeploymentAvailable, corev1.ConditionTrue))
-			Expect(err).Should(BeNil(), "deployment %s not available", deploymentName)
-		}
-
-	})
-
-	ginkgo.It("Testing - common ocm-agent tests", func(ctx context.Context) {
-
-		// Test variables and setup
-		var (
-			ocmAgentPodName string
-			httpClient      = &http.Client{Timeout: 30 * time.Second}
-		)
-
-		// Get OCM configuration from ocm-agent configmap
 		ginkgo.By("getting OCM configuration from ocm-agent configmap")
 		configMap := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: ocmAgentConfigMap, Namespace: namespace}}
 		err = client.Get(ctx, configMap.Name, configMap.Namespace, configMap)
@@ -435,6 +392,14 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 			ocmBaseURL = configMap.Data[ocmBaseURLKey]
 			Expect(ocmBaseURL).ShouldNot(BeEmpty(), "ocmBaseURL is empty")
 			Expect(configMap.Data[servicesKey]).ShouldNot(BeEmpty(), "services configuration is empty")
+		}
+		// Override the ocm-agent URL if the OCM_AGENT_URL environment variable is set
+		if os.Getenv("OCM_AGENT_URL") != "" {
+			ocmAgentURL = os.Getenv("OCM_AGENT_URL")
+		}
+		// Override fleetMode if the OCM_FLEET_MODE environment variable is set
+		if os.Getenv("OCM_FLEET_MODE") != "" {
+			isFleetMode = os.Getenv("OCM_FLEET_MODE") == "true"
 		}
 
 		// Get access token from env or secret
@@ -762,7 +727,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		ginkgo.By("TEST - Post single alert, servicelog count should be increased by 1")
 		err = postAlert(ctx, firingAlert)
 		Expect(err).Should(BeNil(), "failed to post firing alert")
-		time.Sleep(3 * time.Second)
+		time.Sleep(shortSleepInterval)
 		checkServiceLogCount(ctx, externalClusterID, preServiceLogCount, 1)
 
 		// TEST - Do not send Service Log again for the same firing alert
@@ -775,7 +740,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		Expect(err).Should(BeNil(), "failed to post duplicate firing alert")
 
 		// Wait for processing
-		time.Sleep(3 * time.Second)
+		time.Sleep(shortSleepInterval)
 		checkServiceLogCount(ctx, externalClusterID, preServiceLogCount, 0)
 
 		// TEST - Send Service Log for resolved alert
@@ -788,7 +753,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		Expect(err).Should(BeNil(), "failed to post resolved alert")
 
 		// Wait for processing
-		time.Sleep(3 * time.Second)
+		time.Sleep(shortSleepInterval)
 		checkServiceLogCount(ctx, externalClusterID, preServiceLogCount, 1)
 
 		// TEST - Firing 2 alerts, servicelog count should be increased by 2
@@ -801,7 +766,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		Expect(err).Should(BeNil(), "failed to post resolved alert")
 
 		// Wait for processing
-		time.Sleep(3 * time.Second)
+		time.Sleep(shortSleepInterval)
 		checkServiceLogCount(ctx, externalClusterID, preServiceLogCount, 2)
 
 		// TEST - Resolve 2 alerts, servicelog count should be increased by 2
@@ -814,7 +779,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		Expect(err).Should(BeNil(), "failed to post resolved alert")
 
 		// Wait for processing
-		time.Sleep(3 * time.Second)
+		time.Sleep(shortSleepInterval)
 		checkServiceLogCount(ctx, externalClusterID, preServiceLogCount, 2)
 
 		ginkgo.By("verifying ocm-agent is still healthy after alert tests")
@@ -826,7 +791,10 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 	})
 
 	ginkgo.It("Testing - ocm-agent tests for fleet mode", func(ctx context.Context) {
-
+		if !isFleetMode {
+			ginkgo.GinkgoWriter.Printf("Skipping test: Skip the tests for fleet mode.")
+			ginkgo.Skip(fmt.Sprintf("Ocm-agent is not in fleet mode, skip the tests for fleet mode."))
+		}
 		var (
 			// generate a random alphanumeric string for the mcClusterID in the format of 1111-2222-3333-44444
 			mcClusterID1 = "random-mc-id-1" //uuid.New().String()[:18]
