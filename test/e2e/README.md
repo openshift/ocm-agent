@@ -28,7 +28,7 @@ oc -n openshift-ocm-agent-operator port-forward <ocm-agent-pod-name> 8081:8081
 
 Run the tests with the `OCM_AGENT_URL` environment variable set:
 ```bash
-export OCM_THIRDPARTY_TOKEN=$(ocm token)
+export OCM_TOKEN=$(ocm token)
 OCM_AGENT_URL=http://localhost:8081 DISABLE_JUNIT_REPORT=true KUBECONFIG=/(path-to)/kubeconfig ./bin/ginkgo --tags=osde2e -v test/e2e
 ```
 
@@ -46,8 +46,49 @@ OCM_AGENT_URL=http://localhost:8081 DISABLE_JUNIT_REPORT=true KUBECONFIG=/(path-
                    │                      │
                    └──────────────────────┘
 
-## ocm-agent e2e test for personal cluster
-Should set OCM_THIRDPARTY_TOKEN in e2e-personal-job.yaml via `ocm token`
-export OCM_E2E_IMAGE="YOUR TEST IMAGE"
-export OCM_E2E_TOKEN="UPPER ocm token"
-envsubst < ./test/e2e/e2e-personal-job.yaml | oc apply --as backplane-cluster-admin -f -
+## ocm-agent e2e image test for personal cluster
+
+The e2e image can be executed in existing cluster. This will be similar to CI environment except provisioning a new cluster and ocm connection setup.
+Several environment varibles should be set before run the e2e image test.
+```
+export TEST_IMAGE="YOUR TEST IMAGE in quay.io, eg quay.io/tkong-ocm/ocm-agent-e2e"
+export IMAGE_TAG="tag of the image, eg latest"
+export OCM_E2E_TOKEN=$(ocm token)
+export AWS_ACCESS_KEY_ID="aws access key id"
+export AWS_SECRET_ACCESS_KEY="aws access key"
+export REGION="Same region as testing cluster"
+export CLUSTER_ID="Testing cluster ID"
+export OSD_ENV="stage or int"
+envsubst < ./test/e2e/e2e-image-job.yaml | oc apply --as backplane-cluster-admin -f -
+```
+
+### Debugging ocm-agent e2e image test
+The workflow for e2e test image is
+
+```mermaid
+flowchart LR
+subgraph N[osde2e-executor-* ns]
+C[ocm-agent e2e test job (executor-*)] --> D[ocm-agent e2e test pod (executor-*-*)]
+
+A[osde2e image job] --> B[osd e2e image pod] --> subgraph N
+```
+
+So the actual e2e test is executed in ocm-agent e2e test pod.
+Using command `oc get namespace | grep osde2e` to find the executor namespace. The pod log can be inspected to see the test results. eg
+```
+oc -n osde2e-executor-0409i logs executor-cqf92-f7w5p --as backplane-cluster-admin
+
+Running Suite: Ocm Agent - /
+============================
+Random Seed: 1756259203
+
+Will run 3 of 3 specs
+SSS
+
+Ran 0 of 3 Specs in 0.024 seconds
+SUCCESS! -- 0 Passed | 0 Failed | 0 Pending | 3 Skipped
+PASS
+```
+In this example, all the test are skipped. To figure more details, debug into the pod and execute command `/e2e.test --ginkgo.vv --ginkgo.trace --ginkgo.fail-on-empty` to run the tests again and check the detailed log.
+
+

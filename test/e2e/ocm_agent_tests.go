@@ -394,8 +394,8 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 
 		// Get access token from env or secret
 		var accessToken string
-
-		if thirdPartyToken := os.Getenv("OCM_THIRDPARTY_TOKEN"); thirdPartyToken != "" {
+		// OCM_TOKEN env is set in the test image, other name will cause token not found failure
+		if thirdPartyToken := os.Getenv("OCM_TOKEN"); thirdPartyToken != "" {
 			accessToken = thirdPartyToken
 		}
 
