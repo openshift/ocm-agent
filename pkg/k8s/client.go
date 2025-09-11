@@ -31,6 +31,8 @@ func NewClient() (client.Client, error) {
 
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
+		&oav1alpha1.OcmAgent{},
+		&oav1alpha1.OcmAgentList{},
 		&oav1alpha1.ManagedNotification{},
 		&oav1alpha1.ManagedNotificationList{},
 		&oav1alpha1.ManagedFleetNotification{},

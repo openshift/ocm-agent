@@ -1050,7 +1050,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		err = k8sClient.DeleteAllOf(ctx, &ocmagentv1alpha1.ManagedFleetNotificationRecord{}, crClient.InNamespace("openshift-ocm-agent-operator"))
 		Expect(err).Should(BeNil(), "failed to delete managedfleetnotificationrecord objects")
 
-		// Remove all the limited support records and resolve firing alerts before the test
+		// Remove all the limited support records after the test
 		defer func() {
 			// delete all the limited support records
 			ocmClient := ocm.NewOcmClient(ocmConnection)
