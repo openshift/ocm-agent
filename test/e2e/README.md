@@ -97,4 +97,8 @@ Run the following command to build ocm-agent in fleet mode and run to be availab
 
 ```bash
  ./test/build-and-run.sh ${CLUSTERNAME} --fleet-mode
- ```
+```
+Then run the test on a different terminal window:
+```bash
+OCM_TOKEN=$(ocm token) TESTING_MODE="FLEET" OCM_AGENT_URL=http://localhost:8081 DISABLE_JUNIT_REPORT=true KUBECONFIG=/(path-to)/kubeconfig ./bin/ginkgo --tags=osde2e -v test/e2e
+```

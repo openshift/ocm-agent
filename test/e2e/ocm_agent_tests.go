@@ -23,7 +23,6 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	crClient "sigs.k8s.io/controller-runtime/pkg/client"
-	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/e2e-framework/klient/k8s/resources"
 	"sigs.k8s.io/e2e-framework/klient/wait"
@@ -71,7 +70,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 
 	var (
 		client                      *resources.Resources
-		k8sClient                   crclient.Client
+		k8sClient                   crClient.Client
 		errorServer                 *httptest.Server
 		ocmConnection               *sdk.Connection
 		namespace                   = "openshift-ocm-agent-operator"
@@ -83,7 +82,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		testNotificationName        = "LoggingVolumeFillingUp"
 		clusterVersionName          = "version"
 		infrastructureName          = "cluster"
-		isFleetMode                 = false
+		testingMode                 = "BOTH"           // BOTH, FLEET, CLASSIC
 		shortSleepInterval          = 5 * time.Second  // 3 seconds
 		longSleepInterval           = 30 * time.Second // 30 seconds
 
@@ -98,6 +97,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		ocmAgentPodName   string
 		ocmBaseURL        string
 		ocmAgentURL       = "http://ocm-agent.openshift-ocm-agent-operator.svc:8081"
+		ocmAgentFleetURL  = "http://ocm-agent-fleet.openshift-ocm-agent-operator.svc:8081"
 		httpClient        = &http.Client{Timeout: 30 * time.Second}
 		externalClusterID string
 		internalClusterID string
@@ -137,6 +137,47 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 
 		return nil
 	}
+
+	// Create ocm-agent-fleet cr
+	// createOCMAgentFleet := func(ctx context.Context) error {
+	// 	ocmAgentCR := &oav1alpha1.OcmAgent{
+	// 		TypeMeta: metav1.TypeMeta{
+	// 			Kind:       "OcmAgent",
+	// 			APIVersion: "ocmagent.managed.openshift.io/v1alpha1",
+	// 		},
+	// 		ObjectMeta: metav1.ObjectMeta{
+	// 			Name:      "ocm-agent",
+	// 			Namespace: namespace,
+	// 		},
+	// 	}
+	// 	// ocmAgentFleetCR := &oav1alpha1.OcmAgent{}
+	// 	// err := k8sClient.Get(ctx, crClient.ObjectKey{Name: "ocm-agent-fleet", Namespace: namespace}, ocmAgentFleetCR)
+	// 	// if err != nil {
+	// 	err := k8sClient.Get(ctx, crClient.ObjectKey{Name: "ocm-agent", Namespace: namespace}, ocmAgentCR)
+	// 	if err != nil {
+	// 		return fmt.Errorf("failed to fetch OCM agent CR: %v", err)
+	// 	}
+
+	// 	ocmAgentFleet := &oav1alpha1.OcmAgent{
+	// 		Spec: oav1alpha1.OcmAgentSpec{
+	// 			FleetMode:     true,
+	// 			TokenSecret:   "ocm-access-token",
+	// 			Replicas:      2,
+	// 			OcmAgentImage: ocmAgentCR.Spec.OcmAgentImage,
+	// 			AgentConfig: oav1alpha1.AgentConfig{
+	// 				OcmBaseUrl: ocmBaseURL,
+	// 				Services:   []string{"service_logs"},
+	// 			},
+	// 		},
+	// 	}
+	// 	err = client.Create(ctx, ocmAgentFleet)
+	// 	if err != nil {
+	// 		return fmt.Errorf("failed to create OCM agent Fleet object: %v", err)
+	// 	}
+	// 	return nil
+	// 	// }
+	// 	// return nil
+	// }
 
 	// createDefaultNotification creates a managed notification CRD for testing
 	createDefaultNotification := func(ctx context.Context) error {
@@ -376,30 +417,23 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		ginkgo.By("Getting if fleet mode is enabled with ocm-agent configmap")
 		fleetConfigMap := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: ocmAgentFleetConfigMap, Namespace: namespace}}
 		err = client.Get(ctx, fleetConfigMap.Name, fleetConfigMap.Namespace, fleetConfigMap)
-		if err == nil {
-			// If we could get ocm-agent-fleet-cm, then ocm-agent is in fleet mode
-			isFleetMode = true
-		}
-		if isFleetMode {
-			Expect(fleetConfigMap.Data).Should(HaveKey(ocmBaseURLKey), "ocmBaseURL not configured")
-			Expect(fleetConfigMap.Data).Should(HaveKey(servicesKey), "services not configured")
-			ocmBaseURL = fleetConfigMap.Data[ocmBaseURLKey]
-			Expect(ocmBaseURL).ShouldNot(BeEmpty(), "ocmBaseURL is empty")
-			Expect(fleetConfigMap.Data[servicesKey]).ShouldNot(BeEmpty(), "services configuration is empty")
-		} else {
-			Expect(configMap.Data).Should(HaveKey(ocmBaseURLKey), "ocmBaseURL not configured")
-			Expect(configMap.Data).Should(HaveKey(servicesKey), "services not configured")
-			ocmBaseURL = configMap.Data[ocmBaseURLKey]
-			Expect(ocmBaseURL).ShouldNot(BeEmpty(), "ocmBaseURL is empty")
-			Expect(configMap.Data[servicesKey]).ShouldNot(BeEmpty(), "services configuration is empty")
+
+		Expect(configMap.Data).Should(HaveKey(ocmBaseURLKey), "ocmBaseURL not configured")
+		Expect(configMap.Data).Should(HaveKey(servicesKey), "services not configured")
+		ocmBaseURL = configMap.Data[ocmBaseURLKey]
+		Expect(ocmBaseURL).ShouldNot(BeEmpty(), "ocmBaseURL is empty")
+		Expect(configMap.Data[servicesKey]).ShouldNot(BeEmpty(), "services configuration is empty")
+		// override when OCM_URL is set
+		if os.Getenv("OCM_URL") != "" {
+			ocmBaseURL = os.Getenv("OCM_URL")
 		}
 		// Override the ocm-agent URL if the OCM_AGENT_URL environment variable is set
 		if os.Getenv("OCM_AGENT_URL") != "" {
 			ocmAgentURL = os.Getenv("OCM_AGENT_URL")
 		}
 		// Override fleetMode if the OCM_FLEET_MODE environment variable is set
-		if os.Getenv("OCM_FLEET_MODE") != "" {
-			isFleetMode = os.Getenv("OCM_FLEET_MODE") == "true"
+		if os.Getenv("TESTING_MODE") != "" {
+			testingMode = os.Getenv("TESTING_MODE")
 		}
 
 		// Get access token from env or secret
@@ -444,7 +478,9 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		ginkgo.By("creating networkpolicy to allow traffic from all namespace")
 		err = createNetworkPolicy(ctx)
 		Expect(err).To(BeNil(), fmt.Sprintf("Failed to create networkpolicy %v", err))
-
+		// ginkgo.By("creating ocm-agent-fleet cr")
+		// err = createOCMAgentFleet(ctx)
+		// Expect(err).To(BeNil(), fmt.Sprintf("Failed to create ocm-agent-fleet cr %v", err))
 	})
 
 	ginkgo.AfterAll(func(ctx context.Context) {
@@ -687,14 +723,15 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 	})
 
 	ginkgo.It("Testing - Alert processing for classic mode", func(ctx context.Context) {
-		if isFleetMode {
+		fmt.Println("testingMode", testingMode)
+		if testingMode == "FLEET" {
 			ginkgo.GinkgoWriter.Printf("Skipping test: Skip the tests for classic mode.")
-			ginkgo.Skip(fmt.Sprintf("Ocm-agent is in fleet mode, skip the tests for classic mode."))
+			ginkgo.Skip(fmt.Sprintf("Ocm-agent is not in classic mode, skip the tests for classic mode."))
 		}
 
 		ginkgo.By("Delete and create default managed notification so that ")
 		managedNotification := &oav1alpha1.ManagedNotification{}
-		err := k8sClient.Get(ctx, crclient.ObjectKey{Name: ocmAgentManagedNotification, Namespace: namespace}, managedNotification)
+		err := k8sClient.Get(ctx, crClient.ObjectKey{Name: ocmAgentManagedNotification, Namespace: namespace}, managedNotification)
 		if err != nil {
 			// If notification doesn't exist, create default notification
 			err = createDefaultNotification(ctx)
@@ -791,10 +828,16 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 	})
 
 	ginkgo.It("Testing - ocm-agent tests for fleet mode", func(ctx context.Context) {
-		if !isFleetMode {
-			ginkgo.GinkgoWriter.Printf("Skipping test: Skip the tests for fleet mode.")
-			ginkgo.Skip(fmt.Sprintf("Ocm-agent is not in fleet mode, skip the tests for fleet mode."))
+
+		if testingMode == "CLASSIC" {
+			ginkgo.GinkgoWriter.Printf("Skipping test: Skip the tests for classic mode.")
+			ginkgo.Skip(fmt.Sprintf("Ocm-agent is in classic mode, skip the tests for classic mode."))
 		}
+		// set ocm agent url to fleet url when overriding OCM_AGENT_URL environment variable is not set
+		if os.Getenv("OCM_AGENT_URL") == "" {
+			ocmAgentURL = ocmAgentFleetURL
+		}
+
 		var (
 			// generate a random alphanumeric string for the mcClusterID in the format of 1111-2222-3333-44444
 			mcClusterID1 = "random-mc-id-1" //uuid.New().String()[:18]
@@ -1097,7 +1140,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 			err = postAlert(ctx, alertPayloadAuditWebhook)
 			Expect(err).Should(BeNil(), "failed to post alert")
 		}
-		// wait for 3 seconds
+		// wait for longSleepInterval
 		time.Sleep(longSleepInterval)
 		checkServiceLogCount(ctx, externalClusterID, preSLCount, 10)
 		checkMfnriCount(ctx, externalClusterID, mcClusterID3, 10, 0)
