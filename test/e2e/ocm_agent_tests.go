@@ -723,7 +723,6 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 	})
 
 	ginkgo.It("Testing - Alert processing for classic mode", func(ctx context.Context) {
-		fmt.Println("testingMode", testingMode)
 		if testingMode == "FLEET" {
 			ginkgo.GinkgoWriter.Printf("Skipping test: Skip the tests for classic mode.")
 			ginkgo.Skip(fmt.Sprintf("Ocm-agent is not in classic mode, skip the tests for classic mode."))
@@ -754,7 +753,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		preServiceLogCount, err := getServiceLogCount(ctx, externalClusterID)
 		Expect(err).Should(BeNil(), "failed to get initial service log count")
 
-		firingAlert := createSingleAlert("firing", "LoggingVolumeFillingUpNotificationSRE", testNotificationName)
+		firingAlert := createSingleAlert("firing", alertName, testNotificationName)
 		// TEST - Verify alert has notification template associated
 		ginkgo.By("TEST - Alert should have notification template associated")
 		Expect(firingAlert.Alerts[0].Labels["managed_notification_template"]).ShouldNot(BeNil(), "No managed notification template for alert")
@@ -772,7 +771,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		preServiceLogCount, err = getServiceLogCount(ctx, externalClusterID)
 		Expect(err).Should(BeNil(), "failed to get service log count before duplicate test")
 
-		duplicateAlert := createSingleAlert("firing", "LoggingVolumeFillingUpNotificationSRE", testNotificationName)
+		duplicateAlert := createSingleAlert("firing", alertName, testNotificationName)
 		err = postAlert(ctx, duplicateAlert)
 		Expect(err).Should(BeNil(), "failed to post duplicate firing alert")
 
@@ -785,7 +784,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		preServiceLogCount, err = getServiceLogCount(ctx, externalClusterID)
 		Expect(err).Should(BeNil(), "failed to get service log count before resolved test")
 
-		resolvedAlert := createSingleAlert("resolved", "LoggingVolumeFillingUpNotificationSRE", testNotificationName)
+		resolvedAlert := createSingleAlert("resolved", alertName, testNotificationName)
 		err = postAlert(ctx, resolvedAlert)
 		Expect(err).Should(BeNil(), "failed to post resolved alert")
 
@@ -844,8 +843,6 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 			mcClusterID2 = "random-mc-id-2" //uuid.New().String()[:18]
 			mcClusterID3 = "random-mc-id-3" //uuid.New().String()[:18]
 		)
-		k8sClient, err := k8s.NewClient()
-		Expect(err).Should(BeNil(), "Failed to create controller runtime client")
 		// replicate the tests here http://github.com/openshift/ocm-agent/blob/master/test/test-fleet-alerts.sh
 		// Create a new ManagedFleetNotification object
 		var mFleetNotificationAuditWebhookErrorTemplate = &ocmagentv1alpha1.ManagedFleetNotification{
@@ -927,56 +924,6 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 				ExternalURL:       "",
 			}
 		}
-		// postAlert sends an alert to the OCM Agent similar to post-alert.sh
-		postAlert := func(ctx context.Context, alert AlertPayload) error {
-			alertJSON, err := json.Marshal(alert)
-			if err != nil {
-				return fmt.Errorf("failed to marshal alert: %v", err)
-			}
-
-			resp, err := httpClient.Post(
-				fmt.Sprintf("%s/alertmanager-receiver", ocmAgentURL),
-				"application/json",
-				bytes.NewBuffer(alertJSON),
-			)
-			if err != nil {
-				return fmt.Errorf("failed to post alert: %v", err)
-			}
-			defer resp.Body.Close()
-
-			var alertResponse AlertResponse
-			if err := json.NewDecoder(resp.Body).Decode(&alertResponse); err != nil {
-				return fmt.Errorf("failed to decode response: %v", err)
-			}
-
-			if alertResponse.Status != "ok" {
-				return fmt.Errorf("alert posting failed with status: %s", alertResponse.Status)
-			}
-
-			return nil
-		}
-		// getServiceLogCount gets the count of service logs for a cluster
-		getServiceLogCount := func(ctx context.Context, clusterUUID string) (int, error) {
-			serviceLogsClient := ocmConnection.ServiceLogs().V1()
-
-			response, err := serviceLogsClient.Clusters().ClusterLogs().List().
-				Parameter("cluster_uuid", clusterUUID).
-				Send()
-			if err != nil {
-				return 0, fmt.Errorf("failed to get service logs: %v", err)
-			}
-
-			return response.Total(), nil
-		}
-
-		// checkServiceLogCount verifies the service log count matches expectations
-		checkServiceLogCount := func(ctx context.Context, clusterUUID string, preCount, expectedNew int) {
-			expectedTotal := preCount + expectedNew
-			actualCount, err := getServiceLogCount(ctx, clusterUUID)
-			Expect(err).Should(BeNil(), "failed to get service log count")
-			Expect(actualCount).Should(Equal(expectedTotal),
-				fmt.Sprintf("Expected SL count: %d, Got SL count: %d", expectedTotal, actualCount))
-		}
 
 		// getLimitedSupportCount gets the count of limited support records for a cluster
 		getLimitedSupportCount := func(ctx context.Context, clusterUUID string) (int, error) {
@@ -1027,7 +974,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		// Get the existing ManagedFleetNotification object
 		mFleetNotificationAuditWebhookError := &ocmagentv1alpha1.ManagedFleetNotification{}
 		// Check if the ManagedFleetNotification object audit-webhook-error-putting-minimized-cloudwatch-log exists
-		err = k8sClient.Get(ctx, crClient.ObjectKey{Name: mFleetNotificationAuditWebhookErrorTemplate.Name, Namespace: namespace}, mFleetNotificationAuditWebhookError)
+		err := k8sClient.Get(ctx, crClient.ObjectKey{Name: mFleetNotificationAuditWebhookErrorTemplate.Name, Namespace: namespace}, mFleetNotificationAuditWebhookError)
 		if err == nil && mFleetNotificationAuditWebhookError.Name != "" {
 			err = k8sClient.Delete(ctx, mFleetNotificationAuditWebhookError)
 			Expect(err).Should(BeNil(), "failed to delete FleetManagedNotification")
@@ -1088,9 +1035,6 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		time.Sleep(shortSleepInterval)
 		checkServiceLogCount(ctx, externalClusterID, preSLCount, 1)
 		checkMfnriCount(ctx, externalClusterID, mcClusterID1, 1, 0)
-
-		// increment the preSLCount for next checks
-		preSLCount++
 
 		ginkgo.By("### TEST 2 - Send Limited Support for a firing alert")
 		// check the limited support count before the test starts
