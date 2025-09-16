@@ -2,6 +2,7 @@ package ocm
 
 import (
 	"fmt"
+
 	sdk "github.com/openshift-online/ocm-sdk-go"
 	log "github.com/sirupsen/logrus"
 )
