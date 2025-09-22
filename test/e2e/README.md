@@ -84,17 +84,21 @@ DISABLE_JUNIT_REPORT=true KUBECONFIG=/path/to/kubeconfig ginkgo run --tags=osde2
 
 When testing against a remote cluster, use port forwarding to access the OCM Agent service:
 
-1. **Find the OCM Agent pod**:
+1. **In one terminal session use the existing `build-and-run.sh` script:**
+   - Run `ocm-agent` in classic mode (uses accesstoken)
    ```bash
-   oc get pods -n openshift-ocm-agent-operator -l app=ocm-agent
+   ${REPO_ROOT_DIR}/test/build-and-run.sh $CLUSTERNAME
+   ```
+   - Run `ocm-agent` in fleet mode (uses client ID and secret)
+   ```bash
+   ${REPOROOT_DIR}/test/build-and-run.sh $CLUSTERNAME --fleet-mode
+   ```
+   - Run `ocm-agent` in test mode (fleet mode with accesstoken)
+   ```bash
+   ${REPO_ROOT_DIR}/test/build-and-run.sh $CLUSTERNAME --fleet-mode --test-mode
    ```
 
-2. **Set up port forwarding**:
-   ```bash
-   oc -n openshift-ocm-agent-operator port-forward <ocm-agent-pod-name> 8081:8081
-   ```
-
-3. **Run tests with local URL**:
+3. **In another terminal run tests with local URL**:
    ```bash
    OCM_TOKEN=$(ocm token) OCM_AGENT_URL=http://localhost:8081 DISABLE_JUNIT_REPORT=true KUBECONFIG=/path/to/kubeconfig ./bin/ginkgo --tags=osde2e -v test/e2e
    ```
@@ -128,7 +132,7 @@ When testing against a remote cluster, use port forwarding to access the OCM Age
 
 2. **Run fleet mode tests**:
    ```bash
-   OCM_TOKEN=$(ocm token) TESTING_MODE="FLEET" OCM_AGENT_URL=http://localhost:8081 DISABLE_JUNIT_REPORT=true KUBECONFIG=/path/to/kubeconfig ./bin/ginkgo --tags=osde2e -v test/e2e
+   OCM_TOKEN=$(ocm token) OCM_AGENT_URL=http://localhost:8081 DISABLE_JUNIT_REPORT=true KUBECONFIG=/path/to/kubeconfig ./bin/ginkgo --tags=osde2e -vv test/e2e
    ```
 
 ## E2E Image Testing

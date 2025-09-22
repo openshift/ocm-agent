@@ -141,9 +141,6 @@ func NewServeCmd() *cobra.Command {
 	cmd.MarkFlagsRequiredTogether(config.AccessToken, config.ExternalClusterID)
 	// OCM Client ID and Secret required together in fleet mode
 	cmd.MarkFlagsRequiredTogether(config.OCMClientID, config.OCMClientSecret)
-	// Can't pass combination of fleet mode and default mode flags together
-	// cmd.MarkFlagsMutuallyExclusive(config.FleetMode, config.AccessToken)
-	// cmd.MarkFlagsMutuallyExclusive(config.FleetMode, config.ExternalClusterID)
 	// Can't pass OCM Client and default mode flags together
 	cmd.MarkFlagsMutuallyExclusive(config.AccessToken, config.OCMClientID)
 	cmd.MarkFlagsMutuallyExclusive(config.AccessToken, config.OCMClientSecret)
