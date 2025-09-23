@@ -12,9 +12,9 @@ import (
 	"time"
 
 	oav1alpha1 "github.com/openshift/ocm-agent-operator/api/v1alpha1"
+	testconst "github.com/openshift/ocm-agent/pkg/consts/test"
 	"github.com/openshift/ocm-agent/pkg/k8s"
 	"github.com/openshift/ocm-agent/pkg/ocm"
-	testconst "github.com/openshift/ocm-agent/pkg/consts/test"
 
 	"github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/ginkgo/v2"
@@ -490,8 +490,6 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 			oadeployfleet.Labels = deployLabels
 			oadeployfleet.Spec.Selector.MatchLabels = deployLabels
 			oadeployfleet.Spec.Template.ObjectMeta.Labels = deployLabels
-			// TODO: Remove the image override after testing
-			oadeployfleet.Spec.Template.Spec.Containers[0].Image = "quay.io/travi/ocm-agent@sha256:789386cdd992788f4656dc8c030373bea0347d1d313551123b2430875abed27d"
 			oadeployfleet.Spec.Template.Spec.Containers[0].Command = append(oadeployfleet.Spec.Template.Spec.Containers[0].Command, "--fleet-mode")
 			oadeployfleet.Spec.Template.Spec.Containers[0].Command = append(oadeployfleet.Spec.Template.Spec.Containers[0].Command, "--test-mode")
 
