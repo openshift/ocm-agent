@@ -2,6 +2,110 @@
 
 This directory contains the end-to-end (E2E) test suite for the OCM Agent service. The test suite has been recently refactored for better organization, maintainability, and readability.
 
+## Test Suite Overview
+
+The E2E test suite in `ocm_agent_tests.go` contains **4 main test categories** with **26 individual test steps**, providing comprehensive coverage of OCM Agent functionality.
+
+### Test Categories Summary
+
+#### 1. **OcmAgentCommon - Basic Deployment Tests** (2 tests)
+
+**Test 1: "Testing basic deployment"**
+- Step 1: Verifying that the namespace exists
+- Step 2: Verifying that the deployment exists (both `ocm-agent` and `ocm-agent-operator`)
+
+**Test 2: "Testing common ocm-agent tests"**
+- Step 1: Listing ocm-agent pods for testing
+- Step 2: Verifying ocm-agent service is ready
+- Step 3: Testing health check endpoints (`/livez` and `/readyz`)
+- Step 4: Verifying invalid endpoint returns 4xx error
+- Step 5: Testing limited support reasons full workflow
+  - Step 5a: Creating limited support reason via OCM client
+  - Step 5b: Finding the created limited support reason to get its ID
+  - Step 5c: Testing limited support reasons retrieval through ocm-agent
+  - Step 5d: Testing specific limited support reason retrieval
+
+#### 2. **OcmAgentClassic - Alert Processing Tests** (1 test)
+
+**Test: "Testing alert processing for classic mode"**
+- Step 1: Creating and managing default ManagedNotification
+- Step 2: Verifying HTTP GET is not supported on alertmanager-receiver
+- Step 3: Sending service log for a firing alert
+- Step 4: Verifying alert has notification template associated
+- Step 5: Posting single alert, service log count should increase by 1
+- Step 6: Verifying no duplicate service log for same firing alert within resend period
+- Step 7: Sending service log for resolved alert
+- Step 8: Firing 2 alerts, service log count should increase by 2
+- Step 9: Resolving 2 alerts, service log count should increase by 2
+- Step 10: Verifying ocm-agent is still healthy after alert tests
+
+#### 3. **OcmAgentHCP - Fleet Mode Tests** (1 test)
+
+**Test: "Testing ocm-agent tests in fleet mode"**
+- Step 1: Creating test ManagedFleetNotification templates
+- Step 2: Sending service log for a firing alert
+- Step 3: Sending Limited Support for a firing alert
+- Step 4: Resending Limited Support for a firing alert without resolve
+- Step 5: Removing Limited Support for resolved alert
+- Step 6: Sending service log for a firing alert (multiple times)
+
+### Key Test Features
+
+#### **Setup and Configuration**
+- Kubernetes client initialization
+- OCM connection establishment
+- Network policy creation for testing
+- Mock error server setup
+- Cluster ID resolution (external and internal)
+
+#### **Health and Connectivity Testing**
+- Pod availability verification
+- Service readiness checks
+- Health endpoint testing (`/livez`, `/readyz`)
+- Error handling for invalid endpoints
+
+#### **Alert Processing Testing**
+- Single alert processing (firing/resolved)
+- Multiple alert processing
+- Duplicate alert prevention
+- Service log generation and counting
+- Notification template validation
+
+#### **Fleet Mode Testing**
+- Multi-cluster management
+- Fleet notification templates
+- Limited support reason management
+- Management cluster ID handling
+- Fleet-specific alert processing
+
+#### **OCM Integration Testing**
+- Service log creation and retrieval
+- Limited support reason management
+- Cluster management API testing
+- OCM client functionality
+
+### Test Utilities
+
+The tests leverage common utilities from `pkg/consts/test/test.go`:
+
+- `CreateNetworkPolicy()` - Network policy creation
+- `CreateDefaultNotification()` - Managed notification setup
+- `CreateSingleAlert()` / `CreateBiAlert()` - Alert payload creation
+- `PostAlert()` - Alert submission
+- `GetServiceLogCount()` / `CheckServiceLogCount()` - Service log verification
+- `CreateFleetAlert()` - Fleet mode alert creation
+- `GetLimitedSupportCount()` / `CheckLimitedSupportCount()` - Limited support verification
+- `GetMfnriCount()` / `CheckMfnriCount()` - Fleet notification record verification
+
+### Test Labels
+
+Tests are categorized with labels for selective execution:
+- `OcmAgentCommon` - Basic functionality tests
+- `OcmAgentClassic` - Traditional alert processing
+- `OcmAgentHCP` - Fleet mode functionality
+
+This comprehensive test suite ensures the OCM Agent service functions correctly across different deployment modes and scenarios, providing confidence in both basic operations and advanced fleet management capabilities.
+
 ## Test Structure Improvements
 
 ### Recent Refactoring
@@ -14,14 +118,6 @@ The test suite has been significantly improved with the following changes:
   - `Step X:` for test execution steps  
   - `Cleanup:` for teardown operations
 - **Improved Readability**: Test files are now more readable with consistent formatting and better organization
-
-### Test Categories
-
-The E2E test suite includes three main test categories:
-
-1. **OcmAgentCommon** - Basic deployment and health check tests
-2. **OcmAgentClassic** - Traditional OCM Agent functionality testing
-3. **OcmAgentHCP** - Fleet mode testing for multi-cluster management
 
 ## Prerequisites
 
