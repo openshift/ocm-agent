@@ -100,16 +100,12 @@ func NewServeCmd() *cobra.Command {
 			mode, _ := cmd.Flags().GetBool(config.FleetMode)
 			test, _ := cmd.Flags().GetBool(config.TestMode)
 
-			// Mark AccessToken and ClusterID as required only in Classic mode
-			if !mode && clientID == "" && clientSecret == "" {
-				_ = cmd.MarkFlagRequired(config.AccessToken)
-				_ = cmd.MarkFlagRequired(config.ExternalClusterID)
-			}
-
-			// Mark AccessToken and ClusterID as required in Fleet mode only for testing
-			if mode && test && clientID == "" && clientSecret == "" {
-				_ = cmd.MarkFlagRequired(config.AccessToken)
-				_ = cmd.MarkFlagRequired(config.ExternalClusterID)
+			// Mark AccessToken and ClusterID as required only in Classic mode or in Fleet mode only if test mode is enabled
+			if clientID == "" && clientSecret == "" {
+				if !mode || (mode && test) {
+					_ = cmd.MarkFlagRequired(config.AccessToken)
+					_ = cmd.MarkFlagRequired(config.ExternalClusterID)
+				}
 			}
 
 			// If any of the OCM Client flags is set, it will require Fleet mode (testing or production)
@@ -188,7 +184,7 @@ func (o *serveOptions) Run() error {
 	}
 
 	if o.testMode {
-		o.logger.WithField("TestMode", o.fleetMode).Info("Test mode configured")
+		o.logger.WithField("TestMode", o.testMode).Info("Test mode configured")
 	} else {
 		o.logger.WithField("TestMode", o.testMode).Info("Test mode not configured")
 	}

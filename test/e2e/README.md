@@ -176,7 +176,7 @@ DISABLE_JUNIT_REPORT=true KUBECONFIG=/path/to/kubeconfig ginkgo run --tags=osde2
 DISABLE_JUNIT_REPORT=true KUBECONFIG=/path/to/kubeconfig ginkgo run --tags=osde2e -vv --label-filter="OcmAgentHCP" test/e2e/
 ```
 
-### Running with Port Forwarding
+### Running and testing ocm-agent in different modes against a staging cluster
 
 When testing against a remote cluster, use port forwarding to access the OCM Agent service:
 
@@ -228,7 +228,7 @@ When testing against a remote cluster, use port forwarding to access the OCM Age
 
 2. **Run fleet mode tests**:
    ```bash
-   OCM_TOKEN=$(ocm token) OCM_AGENT_URL=http://localhost:8081 DISABLE_JUNIT_REPORT=true KUBECONFIG=/path/to/kubeconfig ./bin/ginkgo --tags=osde2e -vv test/e2e
+   OCM_TOKEN=$(ocm token) OCM_AGENT_URL=http://localhost:8081 DISABLE_JUNIT_REPORT=true KUBECONFIG=/path/to/kubeconfig ./bin/ginkgo --tags=osde2e -vv --label-filter="OcmAgentHCP" test/e2e
    ```
 
 ## E2E Image Testing
