@@ -156,7 +156,7 @@ make e2e-binary-build
 
 3. **Run the complete test suite**:
    ```bash
-   DISABLE_JUNIT_REPORT=true KUBECONFIG=/path/to/kubeconfig ./bin/ginkgo --tags=osde2e -v test/e2e
+   DISABLE_JUNIT_REPORT=true KUBECONFIG=/path/to/kubeconfig ginkgo --tags=osde2e -v test/e2e
    ```
 
 ### Running Specific Test Categories
@@ -196,7 +196,7 @@ When testing against a remote cluster, use port forwarding to access the OCM Age
 
 3. **In another terminal run tests with local URL**:
    ```bash
-   OCM_TOKEN=$(ocm token) OCM_AGENT_URL=http://localhost:8081 DISABLE_JUNIT_REPORT=true KUBECONFIG=/path/to/kubeconfig ./bin/ginkgo --tags=osde2e -v test/e2e
+   OCM_TOKEN=$(ocm token) OCM_AGENT_URL=http://localhost:8081 DISABLE_JUNIT_REPORT=true KUBECONFIG=/path/to/kubeconfig ginkgo --tags=osde2e -v test/e2e
    ```
 
 ### Architecture Diagram
@@ -228,7 +228,7 @@ When testing against a remote cluster, use port forwarding to access the OCM Age
 
 2. **Run fleet mode tests**:
    ```bash
-   OCM_TOKEN=$(ocm token) OCM_AGENT_URL=http://localhost:8081 DISABLE_JUNIT_REPORT=true KUBECONFIG=/path/to/kubeconfig ./bin/ginkgo --tags=osde2e -vv --label-filter="OcmAgentHCP" test/e2e
+   OCM_TOKEN=$(ocm token) OCM_AGENT_URL=http://localhost:8081 DISABLE_JUNIT_REPORT=true KUBECONFIG=/path/to/kubeconfig ginkgo --tags=osde2e -vv --label-filter="OcmAgentHCP" test/e2e
    ```
 
 ## E2E Image Testing
