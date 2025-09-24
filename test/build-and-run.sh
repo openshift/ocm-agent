@@ -38,6 +38,13 @@ else
     FLEET_MODE=""
 fi
 
+# Check for --test-mode parameter
+if [[ $3 == "--test-mode" ]]; then
+    TEST_MODE="--test-mode"
+else
+    TEST_MODE=""
+fi
+
 OCM_STATUS=$(ocm account status)
 echo ${OCM_STATUS} | grep -q "https://api.stage.openshift.com"
 
@@ -68,8 +75,13 @@ echo
 
 SERVICE=$(oc -n openshift-ocm-agent-operator exec -ti deployment/ocm-agent -- cat /configs/${OCM_AGENT_CONFIGMAP}/services)
 OCM_BASE_URL=$(oc -n openshift-ocm-agent-operator exec -ti deployment/ocm-agent -- cat /configs/${OCM_AGENT_CONFIGMAP}/ocmBaseURL)
+ACCESS_TOKEN=$(oc -n openshift-ocm-agent-operator exec -ti deployment/ocm-agent -- cat /secrets/ocm-access-token/access_token)
 
 if [[ -n $FLEET_MODE ]]; then
+    if [[ -n $TEST_MODE ]]; then
+        echo "Starting: ocm-agent serve --access-token \"ACCESS_TOKEN\" --services \"$SERVICE\" --cluster-id \"$EXT_CLUSTERID\" --ocm-url \"$OCM_BASE_URL\" $FLEET_MODE $TEST_MODE"
+        ${GIT_ROOT}/build/_output/ocm-agent serve --access-token "$ACCESS_TOKEN" --services "$SERVICE" --cluster-id "$EXT_CLUSTERID" --ocm-url "$OCM_BASE_URL" $FLEET_MODE $TEST_MODE
+    else
 	# Load fleet mode credentials for staging from vault
 	export VAULT_ADDR="https://vault.devshift.net"
 	export VAULT_TOKEN="$(vault login -method=oidc -token-only)"
@@ -77,10 +89,10 @@ if [[ -n $FLEET_MODE ]]; then
 	for v in $(vault kv get  -format=json osd-sre/ocm-agent/ocm/ocm-agent-staging | jq -r ".data.data|to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]"); do export $v; done
 	
 	unset VAULT_ADDR VAULT_TOKEN
-    ${GIT_ROOT}/build/_output/ocm-agent serve --services "$SERVICE" --ocm-url "$OCM_BASE_URL" $FLEET_MODE --ocm-client-id "$OA_OCM_CLIENT_ID" --ocm-client-secret "$OA_OCM_CLIENT_SECRET"
+        echo "Starting: ocm-agent serve --services \"$SERVICE\" --ocm-url \"$OCM_BASE_URL\" $FLEET_MODE --ocm-client-id \"OA_OCM_CLIENT_ID\" --ocm-client-secret \"OA_OCM_CLIENT_SECRET\""
+        ${GIT_ROOT}/build/_output/ocm-agent serve --services "$SERVICE" --ocm-url "$OCM_BASE_URL" $FLEET_MODE --ocm-client-id "$OA_OCM_CLIENT_ID" --ocm-client-secret "$OA_OCM_CLIENT_SECRET"
+   fi
 else
-	# Load access token from the cluster for non fleet-mode
-	ACCESS_TOKEN=$(oc -n openshift-ocm-agent-operator exec -ti deployment/ocm-agent -- cat /secrets/ocm-access-token/access_token)
-
+    echo "Starting: ocm-agent serve --access-token \"ACCESS_TOKEN\" --services \"$SERVICE\" --cluster-id \"$EXT_CLUSTERID\" --ocm-url \"$OCM_BASE_URL\""
     ${GIT_ROOT}/build/_output/ocm-agent serve --access-token "$ACCESS_TOKEN" --services "$SERVICE" --cluster-id "$EXT_CLUSTERID" --ocm-url "$OCM_BASE_URL"
 fi
