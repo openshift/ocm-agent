@@ -21,18 +21,8 @@ const (
 func TestOcmAgent(t *testing.T) {
 	RegisterFailHandler(Fail)
 	suiteConfig, reporterConfig := GinkgoConfiguration()
-
-	labelFilter := os.Getenv("GINKGO_LABEL_FILTER")
-	if labelFilter != "" {
-		suiteConfig.LabelFilter = labelFilter
-	}
-
-	if suiteConfig.LabelFilter == "" {
-		suiteConfig.LabelFilter = "OcmAgentCommon || OcmAgentClassic || OcmAgentHCP"
-	}
-
 	if _, ok := os.LookupEnv("DISABLE_JUNIT_REPORT"); !ok {
 		reporterConfig.JUnitReport = filepath.Join(testResultsDirectory, jUnitOutputFilename)
 	}
-	RunSpecs(t, "Ocm Agent Suite", suiteConfig, reporterConfig)
+	RunSpecs(t, "Ocm Agent", suiteConfig, reporterConfig)
 }

@@ -17,7 +17,6 @@ import (
 	"github.com/openshift/ocm-agent/pkg/ocm"
 
 	"github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	configv1 "github.com/openshift/api/config/v1"
@@ -200,7 +199,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		err = testconst.CreateNetworkPolicy(ctx, client, networkPolicyName, namespace)
 		Expect(err).To(BeNil(), fmt.Sprintf("Failed to create networkpolicy %v", err))
 	})
-	ginkgo.It("OcmAgentCommon - Testing basic deployment", Label("OcmAgentCommon"), func(ctx context.Context) {
+	ginkgo.It("OcmAgentCommon - Testing basic deployment", func(ctx context.Context) {
 		ginkgo.By("Step 1: Verifying that the namespace exists")
 		err := client.Get(ctx, namespace, "", &corev1.Namespace{})
 		Expect(err).Should(BeNil(), "namespace %s not found", namespace)
@@ -213,7 +212,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 		}
 	})
 
-	ginkgo.It("OcmAgentCommon - Testing common ocm-agent tests", Label("OcmAgentCommon"), func(ctx context.Context) {
+	ginkgo.It("OcmAgentCommon - Testing common ocm-agent tests", func(ctx context.Context) {
 		ginkgo.By("Step 1: Listing ocm-agent pods for testing")
 		podList := &corev1.PodList{}
 		err := client.List(ctx, podList, func(o *metav1.ListOptions) {
@@ -353,7 +352,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 			defer resp.Body.Close()
 		}
 	})
-	ginkgo.It("OcmAgentClassic - Testing alert processing for classic mode", Label("OcmAgentClassic"), func(ctx context.Context) {
+	ginkgo.It("OcmAgentClassic - Testing alert processing for classic mode", func(ctx context.Context) {
 
 		ginkgo.By("Step 1: Creating and managing default ManagedNotification")
 		managedNotification := &oav1alpha1.ManagedNotification{}
@@ -452,7 +451,7 @@ var _ = ginkgo.Describe("ocm-agent", ginkgo.Ordered, func() {
 			resp.Body.Close()
 		}
 	})
-	ginkgo.It("OcmAgentHCP - Testing ocm-agent tests in fleet mode", Label("OcmAgentHCP"), func(ctx context.Context) {
+	ginkgo.It("OcmAgentHCP - Testing ocm-agent tests in fleet mode", func(ctx context.Context) {
 
 		// set ocm agent url to fleet url when overriding OCM_AGENT_URL environment variable is not set
 		if os.Getenv("OCM_AGENT_URL") == "" {
