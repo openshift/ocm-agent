@@ -49,7 +49,7 @@ var _ = Describe("ocm-agent", Ordered, func() {
 		testNotificationName        = "LoggingVolumeFillingUp"
 		clusterVersionName          = "version"
 		infrastructureName          = "cluster"
-		shortSleepInterval          = 5 * time.Second // 3 seconds
+		shortSleepInterval          = 5 * time.Second // 5 seconds
 
 		// ConfigMap keys
 		clusterIDKey  = "clusterID"
