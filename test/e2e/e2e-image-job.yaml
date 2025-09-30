@@ -33,6 +33,10 @@ spec:
               value: ${TEST_IMAGE}:${IMAGE_TAG}
             - name: OCM_TOKEN
               value: ${OCM_E2E_TOKEN}
+            - name: OCM_CLIENT_ID
+              value: ${OCM_CLIENT_ID}
+            - name: OCM_CLIENT_SECRET
+              value: ${OCM_CLIENT_SECRET}
             - name: AWS_ACCESS_KEY_ID
               value: ${AWS_ACCESS_KEY_ID}
             - name: AWS_SECRET_ACCESS_KEY
@@ -44,4 +48,4 @@ spec:
             - name: LOG_BUCKET
               value: 'osde2e-logs'
             - name: CLUSTER_ID
-              value: ${CLUSTER_ID}    
+              value: ${CLUSTER_ID}
