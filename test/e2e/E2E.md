@@ -42,12 +42,9 @@ The E2E test suite in `ocm_agent_tests.go` contains **4 main test categories** w
 #### 3. **OcmAgentHCP - Fleet Mode Tests** (1 test)
 
 **Test: "Testing ocm-agent tests in fleet mode"**
-- Step 1: Creating test ManagedFleetNotification templates
-- Step 2: Sending service log for a firing alert
-- Step 3: Sending Limited Support for a firing alert
-- Step 4: Resending Limited Support for a firing alert without resolve
-- Step 5: Removing Limited Support for resolved alert
-- Step 6: Sending service log for a firing alert (multiple times)
+- Step 1: Testing ocm-agent-fleet healthcheck endpoints
+- Step 2: Creating test ManagedFleetNotification templates
+- Step 3: Sending service log for a firing alert
 
 ### Key Test Features
 
@@ -72,10 +69,7 @@ The E2E test suite in `ocm_agent_tests.go` contains **4 main test categories** w
 - Notification template validation
 
 #### **Fleet Mode Testing**
-- Multi-cluster management
 - Fleet notification templates
-- Limited support reason management
-- Management cluster ID handling
 - Fleet-specific alert processing
 
 #### **OCM Integration Testing**
@@ -123,7 +117,7 @@ The test suite has been significantly improved with the following changes:
 
 Before running the E2E tests, ensure you have:
 
-- Go 1.19+ installed
+- Go 1.23+ installed
 - Access to a Kubernetes cluster with OCM Agent deployed
 - OCM credentials (token or client ID/secret)
 - `ginkgo` test runner installed
@@ -163,17 +157,17 @@ make e2e-binary-build
 
 #### Common Tests (Basic Deployment)
 ```bash
-DISABLE_JUNIT_REPORT=true KUBECONFIG=/path/to/kubeconfig ginkgo run --tags=osde2e -vv --label-filter="OcmAgentCommon" test/e2e/
+DISABLE_JUNIT_REPORT=true KUBECONFIG=/path/to/kubeconfig ginkgo run --tags=osde2e -vv --focus="OcmAgentCommon*" test/e2e/
 ```
 
 #### Classic Mode Tests
 ```bash
-DISABLE_JUNIT_REPORT=true KUBECONFIG=/path/to/kubeconfig ginkgo run --tags=osde2e -vv --label-filter="OcmAgentClassic" test/e2e/
+DISABLE_JUNIT_REPORT=true KUBECONFIG=/path/to/kubeconfig ginkgo run --tags=osde2e -vv --focus="OcmAgentClassic*" test/e2e/
 ```
 
 #### Fleet Mode Tests
 ```bash
-DISABLE_JUNIT_REPORT=true KUBECONFIG=/path/to/kubeconfig ginkgo run --tags=osde2e -vv --label-filter="OcmAgentHCP" test/e2e/
+DISABLE_JUNIT_REPORT=true KUBECONFIG=/path/to/kubeconfig ginkgo run --tags=osde2e -vv --focus="OcmAgentHCP*" test/e2e/
 ```
 
 ### Running and testing ocm-agent in different modes against a staging cluster
@@ -228,7 +222,7 @@ When testing against a remote cluster, use port forwarding to access the OCM Age
 
 2. **Run fleet mode tests**:
    ```bash
-   OCM_TOKEN=$(ocm token) OCM_AGENT_URL=http://localhost:8081 DISABLE_JUNIT_REPORT=true KUBECONFIG=/path/to/kubeconfig ginkgo --tags=osde2e -vv --label-filter="OcmAgentHCP" test/e2e
+   OCM_TOKEN=$(ocm token) OCM_AGENT_URL=http://localhost:8081 DISABLE_JUNIT_REPORT=true KUBECONFIG=/path/to/kubeconfig ginkgo --tags=osde2e -vv --focus="OcmAgentHCP*" test/e2e
    ```
 
 ## E2E Image Testing
@@ -293,7 +287,6 @@ When adding new E2E tests:
 1. **Use common utilities**: Leverage functions from `pkg/consts/test/test.go`
 2. **Follow naming conventions**: Use descriptive test names and labels
 3. **Use standardized descriptions**: Follow the `Setup:`, `Step X:`, `Cleanup:` format
-4. **Add appropriate labels**: Use `OcmAgentCommon`, `OcmAgentClassic`, or `OcmAgentHCP` labels
 
 ### Test Organization
 
@@ -315,9 +308,6 @@ When adding new E2E tests:
 ```bash
 # Validate test structure
 ginkgo outline test/e2e/ocm_agent_tests.go
-
-# List available test labels
-ginkgo labels test/e2e/
 
 # Run with maximum verbosity
 ginkgo run --tags=osde2e -vv --trace test/e2e/
