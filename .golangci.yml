@@ -1,6 +1,6 @@
-version: "2"
+version: "1"
 run:
-  timeout: 30m
+  deadline: 30m
   concurrency: 1
   modules-download-mode: readonly
 linters:
