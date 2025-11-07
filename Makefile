@@ -122,7 +122,8 @@ getlint:
 
 .PHONY: lint
 lint: getlint
-	$(GOPATH)/bin/golangci-lint run --timeout=5m
+	@mkdir -p /tmp/go-cache
+	@export GOCACHE=/tmp/go-cache && $(GOPATH)/bin/golangci-lint run --timeout=5m
 
 mockgen: ensure-mockgen
 	go generate $(GOBUILDFLAGS) ./...
