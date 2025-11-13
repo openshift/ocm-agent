@@ -129,7 +129,7 @@ mockgen: ensure-mockgen
 	go generate $(GOBUILDFLAGS) ./...
 
 ensure-mockgen:
-	go install github.com/golang/mock/mockgen@v1.6.0
+	go install go.uber.org/mock/mockgen@v0.6.0
 
 .PHONY: boilerplate-update
 boilerplate-update: ## Update boilerplate version
