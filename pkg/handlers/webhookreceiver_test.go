@@ -15,10 +15,10 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/ghttp"
 	"github.com/spf13/viper"
+	"go.uber.org/mock/gomock"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/golang/mock/gomock"
 	"github.com/prometheus/alertmanager/template"
 
 	corev1 "k8s.io/api/core/v1"

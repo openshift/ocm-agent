@@ -11,7 +11,7 @@ import (
 
 	"github.com/openshift/ocm-agent/pkg/ocm"
 
-	_ "github.com/golang/mock/mockgen/model"
+	_ "go.uber.org/mock/mockgen/model"
 )
 
 const (
