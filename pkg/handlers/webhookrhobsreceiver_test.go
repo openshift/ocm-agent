@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"go.uber.org/mock/gomock"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/golang/mock/gomock"
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	oav1alpha1 "github.com/openshift/ocm-agent-operator/api/v1alpha1"
 	"github.com/prometheus/alertmanager/template"
