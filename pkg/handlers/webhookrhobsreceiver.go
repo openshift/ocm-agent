@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/prometheus/alertmanager/template"
-	"github.com/prometheus/common/model"
 	log "github.com/sirupsen/logrus"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
@@ -92,182 +91,361 @@ func (h *WebhookRHOBSReceiverHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 func (h *WebhookRHOBSReceiverHandler) processAMReceiver(d AMReceiverData, ctx context.Context) *AMReceiverResponse {
 	log.WithField("AMReceiverData", fmt.Sprintf("%+v", d)).Info("Process alert data")
 
-	for _, alert := range d.Alerts {
-		// Can we find a notification template for this alert?
-		templateName := alert.Labels[AMLabelTemplateName]
-		mfn := &oav1alpha1.ManagedFleetNotification{}
-		err := h.c.Get(ctx, client.ObjectKey{
-			Namespace: OCMAgentNamespaceName,
-			Name:      templateName,
-		}, mfn)
+	// Handle each firing alert
+	for _, alert := range d.Alerts.Firing() {
+		err := h.processAlert(alert, true)
 		if err != nil {
-			log.WithError(err).Error("unable to locate corresponding notification template")
-			return &AMReceiverResponse{Error: err,
-				Status: fmt.Sprintf("unable to find ManagedFleetNotification %s", templateName),
-				Code:   http.StatusInternalServerError}
+			log.WithError(err).Error("a firing alert could not be successfully processed")
 		}
+	}
 
-		// Filter actionable alert based on Label
-		if !isValidAlert(alert, true) {
-			log.WithField(LogFieldAlert, fmt.Sprintf("%+v", alert)).Info("alert does not meet valid criteria")
-			continue
-		}
-
-		err = h.processAlert(alert, mfn)
+	// Handle resolved alerts
+	for _, alert := range d.Alerts.Resolved() {
+		err := h.processAlert(alert, false)
 		if err != nil {
-			log.WithError(err).Error("failed processing alert")
+			log.WithError(err).Error("a resolved alert could not be successfully processed")
 		}
 	}
 
 	return &AMReceiverResponse{Error: nil, Status: "ok", Code: http.StatusOK}
 }
 
-func (h *WebhookRHOBSReceiverHandler) processAlert(alert template.Alert, mfn *oav1alpha1.ManagedFleetNotification) error {
-	// Handle firing alerts
-	if alert.Status == string(model.AlertFiring) {
-		err := h.processFiringAlert(alert, mfn)
-		if err != nil {
-			return fmt.Errorf("a firing alert could not be successfully processed %w", err)
-		}
-		return nil
-	}
-
-	// Handle resolving alerts
-	if alert.Status == string(model.AlertResolved) {
-		err := h.processResolvedAlert(alert, mfn)
-		if err != nil {
-			return fmt.Errorf("a resolving alert could not be successfully processed %w", err)
-		}
-		return nil
-	}
-
-	return fmt.Errorf("unable to process alert: unexpected status %s", alert.Status)
+type fleetNotificationRetriever struct {
+	ctx                 context.Context
+	kubeCli             client.Client
+	fleetNotification   *oav1alpha1.FleetNotification
+	managementClusterID string
+	hostedClusterID     string
 }
 
-// processResolvedAlert handles resolve notifications for a particular alert
-// currently only handles removing limited support
-func (h *WebhookRHOBSReceiverHandler) processResolvedAlert(alert template.Alert, mfn *oav1alpha1.ManagedFleetNotification) error {
-	// MFN is not for limited support, thus we don't have an implementation for the alert resolving state yet
-	if !mfn.Spec.FleetNotification.LimitedSupport {
-		return nil
-	}
-
-	hcID := alert.Labels[AMLabelAlertHCID]
-	fn := mfn.Spec.FleetNotification
-	fnLimitedSupportReason := fn.NotificationMessage
-
-	activeLSReasons, err := h.ocm.GetLimitedSupportReasons(hcID)
-	if err != nil {
-		return fmt.Errorf("unable to get limited support reasons for cluster %s:, %w", hcID, err)
-	}
-
-	for _, reason := range activeLSReasons {
-		// If the reason matches the fleet notification LS reason, remove it
-		// TODO(Claudio): Find a way to make sure the removed LS was also posted by OA
-		if strings.Contains(reason.Details(), fnLimitedSupportReason) {
-			log.WithFields(log.Fields{LogFieldNotificationName: fn.Name}).Infof("will remove limited support reason '%s' for notification", reason.ID())
-			err := h.ocm.RemoveLimitedSupport(hcID, reason.ID())
-			if err != nil {
-				metrics.IncrementFailedLimitedSupportRemoved(fn.Name)
-				// Set the metric for failed limited support response from OCM
-				metrics.SetResponseMetricFailure(config.ClustersService, fn.Name, alert.Labels["alertname"])
-				return fmt.Errorf("limited support reason with ID '%s' couldn't be removed for cluster %s, err: %w", reason.ID(), hcID, err)
-			}
-			metrics.IncrementLimitedSupportRemovedCount(fn.Name)
-		}
-	}
-	// Reset the metric for correct limited support response from OCM
-	metrics.ResetResponseMetricFailure(config.ClustersService, fn.Name, alert.Labels["alertname"])
-
-	return h.updateManagedFleetNotificationRecord(alert, mfn)
-}
-
-// processFiringAlert handles the pre-check verification and sending of a notification for a particular alert
-// and returns an error if that process completed successfully or false otherwise
-func (h *WebhookRHOBSReceiverHandler) processFiringAlert(alert template.Alert, mfn *oav1alpha1.ManagedFleetNotification) error {
-	fn := mfn.Spec.FleetNotification
-	hcID := alert.Labels[AMLabelAlertHCID]
-
-	canBeSent := h.firingCanBeSent(alert, mfn)
-	// There's no need to send a notification so just return
-	if !canBeSent {
-		log.WithFields(log.Fields{"notification": fn.Name,
-			LogFieldResendInterval: fn.ResendWait,
-		}).Info("not sending a notification as one was already sent recently")
-		// Reset the metric for correct service log response from OCM
-		metrics.ResetResponseMetricFailure(config.ServiceLogService, fn.Name, alert.Labels["alertname"])
-		return nil
-	}
-
-	if mfn.Spec.FleetNotification.LimitedSupport {
-		// Send the limited support for the alert
-		log.WithFields(log.Fields{LogFieldNotificationName: fn.Name}).Info("will send limited support for notification")
-		builder := &cmv1.LimitedSupportReasonBuilder{}
-		builder.Summary(fn.Summary)
-		builder.Details(fn.NotificationMessage)
-		builder.DetectionType(cmv1.DetectionTypeManual)
-		reason, err := builder.Build()
-		if err != nil {
-			return fmt.Errorf("unable to build limited support for fleetnotification '%s' reason: %w", fn.Name, err)
-		}
-		err = h.ocm.SendLimitedSupport(hcID, reason)
-		if err != nil {
-			// Set the metric for failed limited support response from OCM
-			metrics.SetResponseMetricFailure("clusters_mgmt", fn.Name, alert.Labels["alertname"])
-			metrics.IncrementFailedLimitedSupportSend(fn.Name)
-			return fmt.Errorf("limited support reason for fleetnotification '%s' could not be set for cluster %s, err: %w", fn.Name, hcID, err)
-		}
-		metrics.IncrementLimitedSupportSentCount(fn.Name)
-		// Reset the metric for correct limited support response from OCM
-		metrics.ResetResponseMetricFailure(config.ClustersService, fn.Name, alert.Labels["alertname"])
-	} else { // Notification is for a service log
-		log.WithFields(log.Fields{LogFieldNotificationName: fn.Name}).Info("will send servicelog for notification")
-		err := ocm.BuildAndSendServiceLog(
-			ocm.NewServiceLogBuilder(fn.Summary, fn.NotificationMessage, "", hcID, fn.Severity, fn.LogType, fn.References),
-			true, &alert, h.ocm)
-		if err != nil {
-			log.WithError(err).WithFields(log.Fields{LogFieldNotificationName: fn.Name, LogFieldIsFiring: true}).Error("unable to send service log for notification")
-			// Set the metric for failed service log response from OCM
-			metrics.SetResponseMetricFailure(config.ServiceLogService, fn.Name, alert.Labels["alertname"])
-			metrics.CountFailedServiceLogs(fn.Name)
-			return err
-		}
-		// Count the service log sent by the template name
-		metrics.CountServiceLogSent(fn.Name, "firing")
-		// Reset the metric for correct service log response from OCM
-		metrics.ResetResponseMetricFailure(config.ServiceLogService, fn.Name, alert.Labels["alertname"])
-	}
-
-	return h.updateManagedFleetNotificationRecord(alert, mfn)
-}
-
-// Get or create ManagedFleetNotificationRecord
-func (h *WebhookRHOBSReceiverHandler) getOrCreateManagedFleetNotificationRecord(mcID string, hcID string, mfn *oav1alpha1.ManagedFleetNotification) (*oav1alpha1.ManagedFleetNotificationRecord, error) {
-	mfnr := &oav1alpha1.ManagedFleetNotificationRecord{}
-
-	err := h.c.Get(context.Background(), client.ObjectKey{
+func newFleetNotificationRetriever(kubeCli client.Client, ctx context.Context, alert template.Alert) (*fleetNotificationRetriever, error) {
+	managedFleetNotificationName := alert.Labels[AMLabelTemplateName]
+	managedFleetNotification := &oav1alpha1.ManagedFleetNotification{}
+	err := kubeCli.Get(ctx, client.ObjectKey{
 		Namespace: OCMAgentNamespaceName,
-		Name:      mcID,
-	}, mfnr)
+		Name:      managedFleetNotificationName,
+	}, managedFleetNotification)
+	if err != nil {
+		log.WithError(err).Error("unable to locate corresponding notification template")
+		return nil, err
+	}
+
+	return &fleetNotificationRetriever{
+		ctx:                 ctx,
+		kubeCli:             kubeCli,
+		fleetNotification:   &managedFleetNotification.Spec.FleetNotification,
+		managementClusterID: alert.Labels[AMLabelAlertMCID],
+		hostedClusterID:     alert.Labels[AMLabelAlertHCID],
+	}, nil
+}
+
+func (r *fleetNotificationRetriever) retrieveFleetNotificationContext() (*fleetNotificationContext, error) {
+	managedFleetNotificationRecord := &oav1alpha1.ManagedFleetNotificationRecord{}
+	err := r.kubeCli.Get(r.ctx, client.ObjectKey{
+		Namespace: OCMAgentNamespaceName,
+		Name:      r.managementClusterID,
+	}, managedFleetNotificationRecord)
 
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Record does not exist, attempt to create it
-			mfnr = &oav1alpha1.ManagedFleetNotificationRecord{
+			managedFleetNotificationRecord = &oav1alpha1.ManagedFleetNotificationRecord{
 				ObjectMeta: v1.ObjectMeta{
-					Name:      mcID,
+					Name:      r.managementClusterID,
 					Namespace: OCMAgentNamespaceName,
 				},
 			}
-			if err := h.c.Create(context.Background(), mfnr); err != nil {
-				return nil, err
-			}
-		} else {
+			err = r.kubeCli.Create(r.ctx, managedFleetNotificationRecord)
+		}
+		if err != nil {
 			return nil, err
 		}
 	}
 
-	return mfnr, nil
+	// Ideally, this field should have probably been part of the ManagedFleetNotificationRecord
+	// definition, not the status.
+	if managedFleetNotificationRecord.Status.ManagementCluster == "" {
+		managedFleetNotificationRecord.Status.ManagementCluster = r.managementClusterID
+	}
+
+	notificationRecordItem, err := managedFleetNotificationRecord.GetNotificationRecordItem(r.managementClusterID, r.fleetNotification.Name, r.hostedClusterID)
+	if err != nil {
+		// Add the item it doesn't exist
+
+		notificationRecordByName, err := managedFleetNotificationRecord.GetNotificationRecordByName(r.managementClusterID, r.fleetNotification.Name)
+		if err != nil {
+			notificationRecordByName = &oav1alpha1.NotificationRecordByName{
+				NotificationName:        r.fleetNotification.Name,
+				ResendWait:              r.fleetNotification.ResendWait,
+				NotificationRecordItems: nil,
+			}
+			managedFleetNotificationRecord.Status.NotificationRecordByName = append(managedFleetNotificationRecord.Status.NotificationRecordByName, *notificationRecordByName)
+		}
+
+		notificationRecordItem, err = managedFleetNotificationRecord.AddNotificationRecordItem(r.hostedClusterID, notificationRecordByName)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	wasClusterInLimitedSupport :=
+		r.fleetNotification.LimitedSupport && // Sending limited support notifications in place of service logs
+			notificationRecordItem.FiringNotificationSentCount > notificationRecordItem.ResolvedNotificationSentCount
+		// Counters are identical when no limited support is active
+		// Sent counter is higher than resolved counter by 1 when limited support is active
+		// TODO(ngrauss): record the limited support reason ID in the NotificationRecordItem object to be able to
+		// precisely track if limited support is active or not.
+
+	return &fleetNotificationContext{
+		retriever:                      r,
+		managedFleetNotificationRecord: managedFleetNotificationRecord,
+		notificationRecordItem:         notificationRecordItem,
+		notificationRecordInitialValue: *notificationRecordItem,
+		wasClusterInLimitedSupport:     wasClusterInLimitedSupport,
+	}, nil
+}
+
+type fleetNotificationContext struct {
+	retriever                          *fleetNotificationRetriever
+	managedFleetNotificationRecord     *oav1alpha1.ManagedFleetNotificationRecord
+	notificationRecordItem             *oav1alpha1.NotificationRecordItem
+	notificationRecordInitialValue     oav1alpha1.NotificationRecordItem
+	notificationRecordValueAfterUpdate oav1alpha1.NotificationRecordItem
+	wasClusterInLimitedSupport         bool
+}
+
+func (c *fleetNotificationContext) canSendNotification() bool {
+	nowTime := time.Now()
+
+	// Cluster already in limited support -> nothing to do
+	if c.wasClusterInLimitedSupport {
+		log.WithFields(log.Fields{"notification": c.retriever.fleetNotification.Name}).Info("not sending a limited support notification as the previous one didn't resolve yet")
+		return false
+	}
+
+	// No last transition time -> send a notification
+	if c.notificationRecordItem.LastTransitionTime == nil {
+		return true
+	}
+
+	var dontResendDuration time.Duration
+	if c.retriever.fleetNotification.ResendWait > 0 {
+		dontResendDuration = time.Duration(c.retriever.fleetNotification.ResendWait) * time.Hour
+	} else {
+		dontResendDuration = time.Duration(3) * time.Minute
+	}
+
+	// Check if we are within the "don't resend" time window; if so -> nothing to do
+	nextAllowedSendTime := c.notificationRecordItem.LastTransitionTime.Add(dontResendDuration)
+	return nowTime.After(nextAllowedSendTime)
+}
+
+func (c *fleetNotificationContext) inPlaceStatusUpdate() error {
+	// c.notificationRecordItem is a pointer but it is not part of the managedFleetNotificationRecord object
+	// Below code makes sure to update the oav1alpha1.NotificationRecordItem inside the managedFleetNotificationRecord object with the latest values.
+	// TODO(ngrauss): refactor GetNotificationRecordItem method to return a reference to the object inside the managedFleetNotificationRecord
+	for i, notificationRecordByName := range c.managedFleetNotificationRecord.Status.NotificationRecordByName {
+		if notificationRecordByName.NotificationName != c.retriever.fleetNotification.Name {
+			continue
+		}
+		for j, notificationRecordItem := range notificationRecordByName.NotificationRecordItems {
+			if notificationRecordItem.HostedClusterID == c.retriever.hostedClusterID {
+				c.managedFleetNotificationRecord.Status.NotificationRecordByName[i].NotificationRecordItems[j] = *c.notificationRecordItem
+			}
+		}
+	}
+
+	err := c.retriever.kubeCli.Status().Update(c.retriever.ctx, c.managedFleetNotificationRecord)
+	if err != nil {
+		log.WithFields(log.Fields{LogFieldNotificationRecordName: c.managedFleetNotificationRecord.Name}).Infof("update of managedfleetnotificationrecord failed: %s", err.Error())
+		return err
+	}
+	return nil
+}
+
+func (c *fleetNotificationContext) updateNotificationStatus(isCurrentlyFiring, canSendNotification bool) error {
+	if isCurrentlyFiring {
+		if canSendNotification {
+			c.notificationRecordItem.FiringNotificationSentCount++
+			c.notificationRecordItem.LastTransitionTime = &v1.Time{Time: time.Now()}
+		}
+	} else if c.retriever.fleetNotification.LimitedSupport {
+		c.notificationRecordItem.ResolvedNotificationSentCount = c.notificationRecordItem.FiringNotificationSentCount
+	}
+
+	c.notificationRecordValueAfterUpdate = *c.notificationRecordItem
+
+	return c.inPlaceStatusUpdate()
+}
+
+// TODO(ngrauss): to be removed
+// ManagedFleetNotificationRecord record item counters are currently updated before the notification is sent.
+// This is because:
+// - Those counters are also used to determine if the cluster is already in limitied support or not.
+// - Determining this state needs to be done in an atomic way to avoid race conditions
+// A new field about whether the alert is firing or not will be added to the NotificationRecordItem object
+// to avoid this workaround.
+func (c *fleetNotificationContext) restoreNotificationStatus() error {
+	// Critical section: notification record item is read and set/updated in an atomic way
+
+	fleetNotificationContext, err := c.retriever.retrieveFleetNotificationContext()
+	if err != nil {
+		return err
+	}
+
+	if *c.notificationRecordItem == c.notificationRecordValueAfterUpdate {
+		*fleetNotificationContext.notificationRecordItem = c.notificationRecordInitialValue
+
+		return fleetNotificationContext.inPlaceStatusUpdate()
+	}
+
+	return nil
+}
+
+func (c *fleetNotificationContext) sendNotification(ocmCli ocm.OCMClient, alert template.Alert) error {
+	fleetNotification := c.retriever.fleetNotification
+	hostedClusterID := c.retriever.hostedClusterID
+
+	if fleetNotification.LimitedSupport { // Limited support case
+		log.WithFields(log.Fields{LogFieldNotificationName: fleetNotification.Name}).Info("will send limited support for notification")
+		builder := &cmv1.LimitedSupportReasonBuilder{}
+		builder.Summary(fleetNotification.Summary)
+		builder.Details(fleetNotification.NotificationMessage)
+		builder.DetectionType(cmv1.DetectionTypeManual)
+		reason, err := builder.Build()
+		if err != nil {
+			return fmt.Errorf("unable to build limited support for fleetnotification '%s' reason: %w", fleetNotification.Name, err)
+		}
+		err = ocmCli.SendLimitedSupport(hostedClusterID, reason)
+		if err != nil {
+			// Set the metric for failed limited support response from OCM
+			return fmt.Errorf("limited support reason for fleetnotification '%s' could not be set for cluster %s, err: %w", fleetNotification.Name, hostedClusterID, err)
+		}
+	} else { // Service log case
+		log.WithFields(log.Fields{LogFieldNotificationName: fleetNotification.Name}).Info("will send servicelog for notification")
+		err := ocm.BuildAndSendServiceLog(
+			ocm.NewServiceLogBuilder(fleetNotification.Summary, fleetNotification.NotificationMessage, "", hostedClusterID, fleetNotification.Severity, fleetNotification.LogType, fleetNotification.References),
+			true, &alert, ocmCli)
+		if err != nil {
+			log.WithError(err).WithFields(log.Fields{LogFieldNotificationName: fleetNotification.Name, LogFieldIsFiring: true}).Error("unable to send service log for notification")
+
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (c *fleetNotificationContext) removeLimitedSupport(ocmCli ocm.OCMClient) error {
+	hostedClusterID := c.retriever.hostedClusterID
+
+	limitedSupportReasons, err := ocmCli.GetLimitedSupportReasons(hostedClusterID)
+	if err != nil {
+		return fmt.Errorf("unable to get limited support reasons for cluster %s:, %w", hostedClusterID, err)
+	}
+
+	fleetNotification := c.retriever.fleetNotification
+
+	for _, limitedSupportReason := range limitedSupportReasons {
+		// If the reason matches the fleet notification LS reason, remove it
+		// TODO(ngrauss): The limitedSupportReason.ID() should be stored in the ManagedFleetNotificationRecord record item object
+		// and be given to this method; this would avoid:
+		// 1. removing limited support reasons potentially not created by OCM Agent.
+		// 2. do some kind of string matching which is prone to errors if the message format changes.
+		if strings.Contains(limitedSupportReason.Details(), fleetNotification.NotificationMessage) {
+			log.WithFields(log.Fields{LogFieldNotificationName: fleetNotification.Name}).Infof("will remove limited support reason '%s' for notification", limitedSupportReason.ID())
+			err := ocmCli.RemoveLimitedSupport(hostedClusterID, limitedSupportReason.ID())
+			if err != nil {
+				return fmt.Errorf("limited support reason with ID '%s' couldn't be removed for cluster %s, err: %w", limitedSupportReason.ID(), hostedClusterID, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (h *WebhookRHOBSReceiverHandler) processAlert(alert template.Alert, isCurrentlyFiring bool) error {
+	// Filter actionable alert based on Label
+	if !isValidAlert(alert, true) {
+		log.WithField(LogFieldAlert, fmt.Sprintf("%+v", alert)).Info("alert does not meet valid criteria")
+		return fmt.Errorf("alert does not meet valid criteria")
+	}
+
+	fleetNotificationRetriever, err := newFleetNotificationRetriever(h.c, context.Background(), alert)
+	if err != nil {
+		return fmt.Errorf("unable to find ManagedFleetNotification %s", alert.Labels[AMLabelTemplateName])
+	}
+
+	if !fleetNotificationRetriever.fleetNotification.LimitedSupport && !isCurrentlyFiring {
+		return nil
+	}
+
+	var c *fleetNotificationContext
+	canSend := false
+	err = retryOnConflictOrAlreadyExists(retryConfig, func() error {
+		c, err = fleetNotificationRetriever.retrieveFleetNotificationContext()
+		if err != nil {
+			return err
+		}
+
+		if isCurrentlyFiring {
+			canSend = c.canSendNotification()
+		}
+
+		return c.updateNotificationStatus(isCurrentlyFiring, canSend)
+	})
+	if err != nil {
+		return err
+	}
+
+	fleetNotification := c.retriever.fleetNotification
+	alertName := alert.Labels[AMLabelAlertName]
+
+	if isCurrentlyFiring {
+		if canSend {
+			err := c.sendNotification(h.ocm, alert)
+
+			var logService string
+			if fleetNotification.LimitedSupport { // Limited support case
+				logService = config.ClustersService
+			} else { // Service log case
+				logService = config.ServiceLogService
+			}
+
+			if err != nil {
+				if fleetNotification.LimitedSupport { // Limited support case
+					metrics.IncrementFailedLimitedSupportSend(fleetNotification.Name)
+				} else { // Service log case
+					metrics.CountFailedServiceLogs(fleetNotification.Name)
+				}
+				metrics.SetResponseMetricFailure(logService, fleetNotification.Name, alertName)
+				_ = c.restoreNotificationStatus()
+				return err
+			}
+
+			if fleetNotification.LimitedSupport { // Limited support case
+				metrics.IncrementLimitedSupportSentCount(fleetNotification.Name)
+			} else { // Service log case
+				metrics.CountServiceLogSent(fleetNotification.Name, "firing")
+			}
+			metrics.ResetResponseMetricFailure(logService, fleetNotification.Name, alertName)
+		}
+	} else {
+		if c.wasClusterInLimitedSupport {
+			err := c.removeLimitedSupport(h.ocm)
+
+			if err != nil {
+				metrics.IncrementFailedLimitedSupportRemoved(fleetNotification.Name)
+				metrics.SetResponseMetricFailure(config.ClustersService, fleetNotification.Name, alertName)
+				_ = c.restoreNotificationStatus()
+				return err
+			}
+			metrics.IncrementLimitedSupportRemovedCount(fleetNotification.Name)
+			metrics.ResetResponseMetricFailure(config.ClustersService, fleetNotification.Name, alertName)
+		}
+	}
+
+	return nil
 }
 
 // The upstream implementation of `RetryOnConflict`
@@ -278,116 +456,4 @@ func (h *WebhookRHOBSReceiverHandler) getOrCreateManagedFleetNotificationRecord(
 // - alreadyexists errors are triggered when failing to Create() a resource
 func retryOnConflictOrAlreadyExists(backoff wait.Backoff, fn func() error) error {
 	return retry.OnError(backoff, customIs409, fn)
-}
-
-// Updates the managedfleetnotificationrecord with the alert's data
-// This function creates the notificationrecordbyname as well as the notificationrecorditem in case they don't exist yet
-// Increments the sent/resolved notification state based on the alert
-func (h *WebhookRHOBSReceiverHandler) updateManagedFleetNotificationRecord(alert template.Alert, mfn *oav1alpha1.ManagedFleetNotification) error {
-	fn := mfn.Spec.FleetNotification
-	mcID := alert.Labels[AMLabelAlertMCID]
-	hcID := alert.Labels[AMLabelAlertHCID]
-	firing := alert.Status == string(model.AlertFiring)
-
-	err := retryOnConflictOrAlreadyExists(retryConfig, func() error {
-		// Fetch the ManagedFleetNotificationRecord, or create it if it does not already exist
-		mfnr, err := h.getOrCreateManagedFleetNotificationRecord(mcID, hcID, mfn)
-		if err != nil {
-			log.WithFields(log.Fields{LogFieldNotificationRecordName: mcID}).Infof("getOrCreate of managedfleetnotificationrecord failed: %s. Retrying in case of conflict error", err.Error())
-			return err
-		}
-
-		// Update the status for the notification record item
-
-		// Ideally, this field should have probably been part of the ManagedFleetNotificationRecord
-		// definition, not the status.
-		if mfnr.Status.ManagementCluster == "" {
-			mfnr.Status.ManagementCluster = mcID
-		}
-
-		// Fetch notificationRecordByName
-		recordByName, err := mfnr.GetNotificationRecordByName(mcID, fn.Name)
-		if err != nil {
-			// add it to our patch if it doesn't exist
-			recordByName = &oav1alpha1.NotificationRecordByName{
-				NotificationName:        fn.Name,
-				ResendWait:              fn.ResendWait,
-				NotificationRecordItems: nil,
-			}
-			mfnr.Status.NotificationRecordByName = append(mfnr.Status.NotificationRecordByName, *recordByName)
-		}
-
-		// Fetch notificationRecordItem
-		_, err = mfnr.GetNotificationRecordItem(mcID, fn.Name, hcID)
-		if err != nil {
-			// add it to our patch if it doesn't exist
-			_, err = mfnr.AddNotificationRecordItem(hcID, recordByName)
-			if err != nil {
-				return err
-			}
-		}
-
-		_, err = mfnr.UpdateNotificationRecordItem(fn.Name, hcID, firing)
-		if err != nil {
-			return err
-		}
-
-		err = h.c.Status().Update(context.TODO(), mfnr)
-		if err != nil {
-			log.WithFields(log.Fields{LogFieldNotificationRecordName: mfnr.Name}).Infof("update of managedfleetnotificationrecord failed: %s. Retrying in case of conflict error", err.Error())
-			return err
-		}
-		return nil
-	})
-
-	return err
-}
-
-// Firing can be sent if:
-// - there's no fleetnotificationrecord for the MC
-// - there's no fleetnotificationrecorditem for the hosted cluster
-// - for limited support type notification specifically, we only resent if the previous one resolved
-// - if the recorditem exists and we don't run in the above limited support case, firingCanBeSent is true if we exceeded the resendWait interval
-func (h *WebhookRHOBSReceiverHandler) firingCanBeSent(alert template.Alert, mfn *oav1alpha1.ManagedFleetNotification) bool {
-	fn := mfn.Spec.FleetNotification
-	mcID := alert.Labels[AMLabelAlertMCID]
-	hcID := alert.Labels[AMLabelAlertHCID]
-
-	mfnr := &oav1alpha1.ManagedFleetNotificationRecord{}
-	err := h.c.Get(context.Background(), client.ObjectKey{
-		Namespace: OCMAgentNamespaceName,
-		Name:      mcID,
-	}, mfnr)
-
-	if err != nil {
-		// there's no fleetnotificationrecord for the MC
-		return true
-	}
-
-	recordItem, err := mfnr.GetNotificationRecordItem(mcID, fn.Name, hcID)
-	if err != nil {
-		// there's no fleetnotificationrecorditem for the hosted cluster
-		return true
-	}
-
-	if recordItem.LastTransitionTime == nil {
-		// We have no last transition time
-		return true
-	}
-
-	// Check if a limited support notification can be sent:
-	// if it was already sent but never resolved, we don't want to resent it.
-	// This happens when e.g. alertmanager restarts and loses its state.
-	if mfn.Spec.FleetNotification.LimitedSupport {
-		// Make sure we didn't already send limited support - this happens in cases
-		// where alertmanager restarts.
-		if recordItem.FiringNotificationSentCount > recordItem.ResolvedNotificationSentCount {
-			log.WithFields(log.Fields{"notification": fn.Name}).Info("not sending a limited support notification as the previous one didn't resolve yet")
-			return false
-		}
-	}
-
-	nextSend := recordItem.LastTransitionTime.Time.Add(time.Duration(fn.ResendWait) * time.Hour)
-
-	return time.Now().After(nextSend)
 }
