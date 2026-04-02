@@ -3,7 +3,7 @@ module github.com/openshift/ocm-agent
 go 1.24.0
 
 require (
-	github.com/gorilla/mux v1.8.0
+	github.com/gorilla/mux v1.8.1
 	github.com/onsi/ginkgo/v2 v2.22.0
 	github.com/onsi/gomega v1.36.1
 	github.com/openshift-online/ocm-sdk-go v0.1.386
