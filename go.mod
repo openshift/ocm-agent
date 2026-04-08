@@ -7,7 +7,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.22.0
 	github.com/onsi/gomega v1.36.1
 	github.com/openshift-online/ocm-sdk-go v0.1.386
-	github.com/openshift/api v3.9.1-0.20190424152011-77b8897ec79a+incompatible
+	github.com/openshift/api d87d63a5dc82
 	github.com/openshift/ocm-agent-operator v0.0.0-20240920073713-1c7db7addf85
 	github.com/prometheus/alertmanager v0.25.1
 	github.com/prometheus/client_golang v1.22.0
