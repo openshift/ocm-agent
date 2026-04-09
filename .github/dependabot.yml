@@ -10,3 +10,18 @@ updates:
     ignore:
       - dependency-name: "openshift/release"
         # don't automatically upgrade golang version here
+  - package-ecosystem: "gomod"
+    directory: "/"
+    labels:
+      - "area/dependency"
+      - "ok-to-test"
+    schedule:
+      interval: "weekly"
+    groups:
+      k8s-dependencies:
+        patterns:
+          - "k8s.io/*"
+          - "sigs.k8s.io/*"
+      ocm-dependencies:
+        patterns:
+          - "github.com/openshift-online/ocm-sdk-go"
