@@ -30,10 +30,36 @@ jobs:
         run: |
           echo "has-required-labels=true" >> $GITHUB_OUTPUT
           echo "✅ Dependabot PR detected - auto-merge enabled for safe updates"
+      
+      - name: Check Critical package updates
+        id: check-critical
+        if: |
+          contains(steps.metadata.outputs.dependency-names, 'github.com/openshift-online/ocm-sdk-go') ||
+          contains(steps.metadata.outputs.dependency-names, 'github.com/openshift/api') ||
+          contains(steps.metadata.outputs.dependency-names, 'k8s.io/api')
+        run: |
+          DEPENDENCY="${{ steps.metadata.outputs.dependency-names }}"
+          CRITICAL_PACKAGES=(
+            "github.com/openshift-online/ocm-sdk-go"
+            "k8s.io/client-go"
+            "k8s.io/api"
+            "github.com/openshift/api"
+          )
+          
+          for pkg in "${CRITICAL_PACKAGES[@]}"; do
+            if [[ "$DEPENDENCY" == *"$pkg"* ]]; then
+              echo "is_critical_update=true" >> $GITHUB_OUTPUT
+              echo "⚠️ Critical package detected: $pkg"
+              exit 0
+            fi
+          done
+
+          echo "is_critical_update=false" >> $GITHUB_OUTPUT
 
       - name: Enable Auto-Merge for Safe Updates
         if: |
-          steps.check-labels.outputs.has-required-labels == 'true' && (
+          steps.check-labels.outputs.has-required-labels == 'true' && 
+          steps.check-critical.outputs.is_critical_update == 'false' && (
             steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
             steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
             steps.metadata.outputs.update-type == 'version-update:semver-digest'
@@ -88,6 +114,7 @@ jobs:
       - name: Comment on Major Version Updates
         if: |
           steps.check-labels.outputs.has-required-labels == 'true' &&
+          steps.check-critical.outputs.is_critical_update == 'true' &&
           steps.metadata.outputs.update-type == 'version-update:semver-major'
         run: |
           GH_TOKEN="${{ secrets.GITHUB_TOKEN }}"
@@ -97,23 +124,25 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer $GH_TOKEN" \
             "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
-            -d '{"body":"🚨 **Major Version Update Detected** 🚨\n\nThis PR contains a major version update that requires manual review:\n- **Dependency:** ${{ steps.metadata.outputs.dependency-names }}\n- **Previous version:** ${{ steps.metadata.outputs.previous-version }}\n- **New version:** ${{ steps.metadata.outputs.new-version }}\n\nPlease review the changelog and breaking changes before merging.\n\nAuto-merge has been **disabled** for this PR."}'
+            -d '{"body":"🚨 **Major Version Update Detected** 🚨\n\nThis PR contains a major version update or critical dependency update that requires manual review:\n- **Dependency:** ${{ steps.metadata.outputs.dependency-names }}\n- **Previous version:** ${{ steps.metadata.outputs.previous-version }}\n- **New version:** ${{ steps.metadata.outputs.new-version }}\n\nPlease review the changelog and breaking changes before merging.\n\nAuto-merge has been **disabled** for this PR."}'
 
       - name: Log Auto-Merge Decision
         run: |
           echo "Auto-merge decision for PR #${{ github.event.pull_request.number }}:"
           echo "- Update type: ${{ steps.metadata.outputs.update-type }}"
           echo "- Has required labels: ${{ steps.check-labels.outputs.has-required-labels }}"
+          echo "- Is critical component: ${{ steps.check-critical.outputs.is_critical_update }}"
           echo "- Dependency: ${{ steps.metadata.outputs.dependency-names }}"
 
           if [[ "${{ steps.metadata.outputs.update-type }}" == "version-update:semver-patch" ]] || \
              [[ "${{ steps.metadata.outputs.update-type }}" == "version-update:semver-minor" ]] || \
-             [[ "${{ steps.metadata.outputs.update-type }}" == "version-update:semver-digest" ]]; then
+             [[ "${{ steps.metadata.outputs.update-type }}" == "version-update:semver-digest" ]] || \
+             [[ "${{ steps.check-critical.outputs.is_critical_update }}" == "false" ]]; then
             if [[ "${{ steps.check-labels.outputs.has-required-labels }}" == "true" ]]; then
               echo "✅ Auto-merge ENABLED"
             else
               echo "❌ Auto-merge DISABLED: Missing required labels"
             fi
           else
-            echo "❌ Auto-merge DISABLED: Major version update or unknown update type"
+            echo "❌ Auto-merge DISABLED: Major version update or critical component update or unknown update type"
           fi
