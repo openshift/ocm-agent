@@ -14,7 +14,7 @@ jobs:
   auto-merge:
     runs-on: ubuntu-latest
     # Only run for Dependabot PRs
-    if: github.actor == 'dependabot[bot]' && github.repository == '--add-gomod'
+    if: github.actor == 'dependabot[bot]' && github.repository == 'openshift/ocm-agent'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -33,13 +33,10 @@ jobs:
       
       - name: Check Critical package updates
         id: check-critical
-        if: |
-          contains(steps.metadata.outputs.dependency-names, 'github.com/openshift-online/ocm-sdk-go') ||
-          contains(steps.metadata.outputs.dependency-names, 'github.com/openshift/api') ||
-          contains(steps.metadata.outputs.dependency-names, 'k8s.io/api')
         run: |
           DEPENDENCY="${{ steps.metadata.outputs.dependency-names }}"
           CRITICAL_PACKAGES=(
+            "go"
             "github.com/openshift-online/ocm-sdk-go"
             "k8s.io/client-go"
             "k8s.io/api"
@@ -111,10 +108,23 @@ jobs:
               -d '{"body":"🤖 **Dependabot Auto-Merge Status**\n\nThis PR meets the criteria for auto-merge but could not be automatically merged due to repository permissions.\n\n**Details:**\n- Update type: ${{ steps.metadata.outputs.update-type }}\n- Dependencies: ${{ steps.metadata.outputs.dependency-names }}\n- Previous version: ${{ steps.metadata.outputs.previous-version }}\n- New version: ${{ steps.metadata.outputs.new-version }}\n\nPlease review and merge manually if appropriate."}'
           fi
 
+      - name: Comment on Critical Dependency Version Updates
+        if: |
+          steps.check-labels.outputs.has-required-labels == 'true' && 
+          steps.check-critical.outputs.is_critical_update == 'true'
+        run: |
+          GH_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          export GH_TOKEN
+
+          curl -s -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            -d '{"body":"🚨 **Critical Dependency Version Update Detected** 🚨\n\nThis PR contains a critical dependency package version update that requires manual review:\n- **Dependency:** ${{ steps.metadata.outputs.dependency-names }}\n- **Previous version:** ${{ steps.metadata.outputs.previous-version }}\n- **New version:** ${{ steps.metadata.outputs.new-version }}\n\nPlease review the changelog and breaking changes before merging.\n\nAuto-merge has been **disabled** for this PR."}'
+
       - name: Comment on Major Version Updates
         if: |
-          steps.check-labels.outputs.has-required-labels == 'true' &&
-          steps.check-critical.outputs.is_critical_update == 'true' &&
+          steps.check-labels.outputs.has-required-labels == 'true' && 
           steps.metadata.outputs.update-type == 'version-update:semver-major'
         run: |
           GH_TOKEN="${{ secrets.GITHUB_TOKEN }}"
@@ -124,7 +134,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer $GH_TOKEN" \
             "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
-            -d '{"body":"🚨 **Major Version Update Detected** 🚨\n\nThis PR contains a major version update or critical dependency update that requires manual review:\n- **Dependency:** ${{ steps.metadata.outputs.dependency-names }}\n- **Previous version:** ${{ steps.metadata.outputs.previous-version }}\n- **New version:** ${{ steps.metadata.outputs.new-version }}\n\nPlease review the changelog and breaking changes before merging.\n\nAuto-merge has been **disabled** for this PR."}'
+            -d '{"body":"🚨 **Major Version Update Detected** 🚨\n\nThis PR contains a major version update that requires manual review:\n- **Dependency:** ${{ steps.metadata.outputs.dependency-names }}\n- **Previous version:** ${{ steps.metadata.outputs.previous-version }}\n- **New version:** ${{ steps.metadata.outputs.new-version }}\n\nPlease review the changelog and breaking changes before merging.\n\nAuto-merge has been **disabled** for this PR."}'
 
       - name: Log Auto-Merge Decision
         run: |
@@ -134,9 +144,9 @@ jobs:
           echo "- Is critical component: ${{ steps.check-critical.outputs.is_critical_update }}"
           echo "- Dependency: ${{ steps.metadata.outputs.dependency-names }}"
 
-          if [[ "${{ steps.metadata.outputs.update-type }}" == "version-update:semver-patch" ]] || \
-             [[ "${{ steps.metadata.outputs.update-type }}" == "version-update:semver-minor" ]] || \
-             [[ "${{ steps.metadata.outputs.update-type }}" == "version-update:semver-digest" ]] || \
+          if ( [[ "${{ steps.metadata.outputs.update-type }}" == "version-update:semver-patch" ]] || \
+               [[ "${{ steps.metadata.outputs.update-type }}" == "version-update:semver-minor" ]] || \
+               [[ "${{ steps.metadata.outputs.update-type }}" == "version-update:semver-digest" ]] ) && \
              [[ "${{ steps.check-critical.outputs.is_critical_update }}" == "false" ]]; then
             if [[ "${{ steps.check-labels.outputs.has-required-labels }}" == "true" ]]; then
               echo "✅ Auto-merge ENABLED"
