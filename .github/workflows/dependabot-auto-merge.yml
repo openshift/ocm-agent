@@ -30,19 +30,44 @@ jobs:
         run: |
           echo "has-required-labels=true" >> $GITHUB_OUTPUT
           echo "✅ Dependabot PR detected - auto-merge enabled for safe updates"
-      
+
+      - name: Check for Go version bump
+        id: check-go-version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check if the "go X.Y" directive in go.mod changed
+          GO_DIFF=$(gh pr diff ${{ github.event.pull_request.number }} -- go.mod | grep "^[+-]go [0-9]" || true)
+
+          if echo "$GO_DIFF" | grep -q "^-go "; then
+            OLD_GO=$(echo "$GO_DIFF" | grep "^-go " | sed 's/^-go //')
+            NEW_GO=$(echo "$GO_DIFF" | grep "^+go " | sed 's/^+go //')
+
+            echo "go-version-bumped=true" >> $GITHUB_OUTPUT
+            echo "⚠️ Go version bump detected: $OLD_GO → $NEW_GO"
+          else
+            echo "go-version-bumped=false" >> $GITHUB_OUTPUT
+            echo "✅ No Go version change detected"
+          fi
+
       - name: Check Critical package updates
         id: check-critical
         run: |
           DEPENDENCY="${{ steps.metadata.outputs.dependency-names }}"
           CRITICAL_PACKAGES=(
-            "go"
             "github.com/openshift-online/ocm-sdk-go"
             "k8s.io/client-go"
             "k8s.io/api"
             "github.com/openshift/api"
           )
           
+          #For golang version changed, mark it critical
+          if [[ "${{ steps.check-go-version.outputs.go-version-bumped }}" == "true" ]]; then
+            echo "is_critical_update=true" >> $GITHUB_OUTPUT
+            echo "⚠️ Golang version changed"
+            exit 0
+          fi
+
           for pkg in "${CRITICAL_PACKAGES[@]}"; do
             if [[ "$DEPENDENCY" == *"$pkg"* ]]; then
               echo "is_critical_update=true" >> $GITHUB_OUTPUT
