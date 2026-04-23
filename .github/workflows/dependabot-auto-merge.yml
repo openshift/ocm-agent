@@ -36,8 +36,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -o pipefail
           # Check if the "go X.Y" directive in go.mod changed
-          GO_DIFF=$(gh pr diff ${{ github.event.pull_request.number }} -- go.mod | grep "^[+-]go [0-9]" || true)
+          GO_DIFF=$(gh pr diff ${{ github.event.pull_request.number }} --patch | awk '
+            /^diff --git a\/go\.mod b\/go\.mod$/ { in_go_mod=1; next }
+            /^diff --git / { in_go_mod=0 }
+            in_go_mod && /^[+-]go [0-9]/ { print }
+          ')
 
           if echo "$GO_DIFF" | grep -q "^-go "; then
             OLD_GO=$(echo "$GO_DIFF" | grep "^-go " | sed 's/^-go //')
@@ -58,7 +63,11 @@ jobs:
             "github.com/openshift-online/ocm-sdk-go"
             "k8s.io/client-go"
             "k8s.io/api"
+            "github.com/openshift/ocm-agent-operator"
             "github.com/openshift/api"
+            "sigs.k8s.io/controller-runtime"
+            "github.com/openshift-online/ocm-api-model/clientapi"
+            "k8s.io/klog/v2"
           )
           
           #For golang version changed, mark it critical
