@@ -11,7 +11,7 @@ require (
 	github.com/openshift/ocm-agent-operator v0.0.0-20260407044455-99bd4d7df24e
 	github.com/prometheus/alertmanager v0.25.1
 	github.com/prometheus/client_golang v1.22.0
-	github.com/sirupsen/logrus v1.9.3
+	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.6
 	github.com/spf13/viper v1.15.0
