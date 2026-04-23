@@ -1,6 +1,6 @@
 module github.com/openshift/ocm-agent
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/gorilla/mux v1.8.1
@@ -107,7 +107,7 @@ require (
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/term v0.39.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
-	golang.org/x/time v0.9.0 // indirect
+	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.41.0 // indirect
 	golang.org/x/tools/godoc v0.1.0-deprecated // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
