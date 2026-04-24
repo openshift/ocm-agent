@@ -10,3 +10,21 @@ updates:
     ignore:
       - dependency-name: "openshift/release"
         # don't automatically upgrade golang version here
+  - package-ecosystem: "gomod"
+    directory: "/"
+    labels:
+      - "area/dependency"
+      - "ok-to-test"
+    schedule:
+      interval: "weekly"
+    groups:
+      kubernetes:
+        patterns:
+          - "k8s.io/*"
+          - "sigs.k8s.io/*"
+      openshift:
+        patterns:
+          - "github.com/openshift/*"
+      prometheus:
+        patterns:
+          - "github.com/prometheus/*"
