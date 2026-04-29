@@ -5,7 +5,7 @@ go 1.24.0
 require (
 	github.com/gorilla/mux v1.8.1
 	github.com/onsi/ginkgo/v2 v2.28.1
-	github.com/onsi/gomega v1.39.0
+	github.com/onsi/gomega v1.40.0
 	github.com/openshift-online/ocm-sdk-go v0.1.499
 	github.com/openshift/api v3.9.1-0.20190424152011-77b8897ec79a+incompatible
 	github.com/openshift/ocm-agent-operator v0.0.0-20260407044455-99bd4d7df24e
