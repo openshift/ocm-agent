@@ -2,5 +2,6 @@
 # This file automatically includes any *.mk files in your subscribed
 # conventions. Please ensure your base Makefile includes only this file.
 include boilerplate/_lib/boilerplate.mk
+include boilerplate/openshift/osd-container-image/standard.mk
 include boilerplate/openshift/golang-osd-e2e/project.mk
 include boilerplate/openshift/golang-osd-e2e/standard.mk

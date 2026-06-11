@@ -24,7 +24,7 @@ Available targets are:
 build                            Build binary
 go-test                          runs go test across operator
 serve                            Start OCM Agent Server
-build-image                      Build image locally
+osd-container-image-build        Build image locally
 getlint                          Get lint package
 ```
 
@@ -64,10 +64,10 @@ To run build locally, call `make build`
 make build
 ```
 
-To build image, call `make build-image`
+To build image, call `make osd-container-image-build`
 
 ```shell
-make build-image 
+make osd-container-image-build
 ```
 
 ## Run locally

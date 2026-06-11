@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Build
 - `make build` - Build the OCM agent binary to `build/_output/ocm-agent`
-- `make build-image` - Build container image with tag based on git hash
+- `make osd-container-image-build` - Build container image using boilerplate convention
 - `make clean` - Remove build artifacts
 
 ### Testing
@@ -25,8 +25,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - Uses sample OCM URL for testing
 
 ### Container Operations
-- `make build-push` - Build and push container image
-- `make skopeo-push` - Push image using skopeo (requires QUAY_USER and QUAY_TOKEN)
+- `make osd-container-image-push` - Build and push container image (requires REGISTRY_USER and REGISTRY_TOKEN)
+- `make osd-container-image-build-push` - Build and push all images via app-sre script
 
 ## Project Architecture
 
