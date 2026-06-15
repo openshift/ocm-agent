@@ -1,5 +1,8 @@
 export KONFLUX_BUILDS=true
 SHELL := /usr/bin/env bash
+
+IMAGE_NAME=ocm-agent
+
 include boilerplate/generated-includes.mk
 include test/e2e/project.mk
 
@@ -7,14 +10,6 @@ include test/e2e/project.mk
 AT_ = @
 AT = $(AT_$(V))
 # /Verbosity
-
-GIT_HASH := $(shell git rev-parse --short=7 HEAD)
-IMAGETAG ?= ${GIT_HASH}
-
-BASE_IMG ?= ocm-agent
-IMAGE_REGISTRY ?= quay.io
-IMAGE_REPOSITORY ?= app-sre
-IMG ?= $(IMAGE_REGISTRY)/$(IMAGE_REPOSITORY)/${BASE_IMG}
 
 BINARY_FILE ?= build/_output/ocm-agent
 
@@ -30,9 +25,6 @@ GOENV=GOOS=${GOOS} GOARCH=${GOARCH} CGO_ENABLED=1 GOEXPERIMENT=boringcrypto GOFL
 
 GOBUILDFLAGS=-gcflags="all=-trimpath=${GOPATH}" -asmflags="all=-trimpath=${GOPATH}" -tags="fips_enabled"
 
-CONTAINER_ENGINE ?= $(shell command -v podman 2>/dev/null || command -v docker 2>/dev/null)
-SRC_CONTAINER_TRANSPORT ?= $(if $(findstring podman,$(CONTAINER_ENGINE)),containers-storage,docker-daemon)
-
 #eg, -v
 TESTOPTS ?=
 
@@ -40,9 +32,7 @@ DOC_BINARY := hack/documentation/document.go
 # ex -hideRules
 DOCFLAGS ?=
 
-default: all
-
-all: test build-image
+all: test osd-container-image-build
 
 .PHONY: test
 go-test: vet $(GO_SOURCES)
@@ -67,39 +57,6 @@ build: $(BINARY_FILE)
 $(BINARY_FILE): test $(GO_SOURCES)
 	mkdir -p $(shell dirname $(BINARY_FILE))
 	$(GOENV) go build $(GOBUILDFLAGS) -o $(BINARY_FILE) ./cmd/ocm-agent
-
-.PHONY: build-base
-build-base: build-image
-.PHONY: build-image
-build-image: clean $(GO_SOURCES) $(EXTRA_DEPS)
-	$(CONTAINER_ENGINE) build -t $(IMG):$(IMAGETAG) -f $(join $(CURDIR),/build/Dockerfile) . && \
-	$(CONTAINER_ENGINE) tag $(IMG):$(IMAGETAG) $(IMG):latest
-
-.PHONY: build-push
-build-push:
-	build/build_push.sh $(IMG):$(IMAGETAG)
-
-### Imported
-.PHONY: skopeo-push
-skopeo-push:
-	@if [[ -z $$QUAY_USER || -z $$QUAY_TOKEN ]]; then \
-		echo "You must set QUAY_USER and QUAY_TOKEN environment variables" ;\
-		echo "ex: make QUAY_USER=value QUAY_TOKEN=value $@" ;\
-		exit 1 ;\
-	fi
-	# QUAY_USER and QUAY_TOKEN are supplied as env vars
-	skopeo copy --dest-creds "${QUAY_USER}:${QUAY_TOKEN}" \
-		"${SRC_CONTAINER_TRANSPORT}:${IMG}:${IMAGETAG}" \
-		"docker://${IMG}:latest"
-	skopeo copy --dest-creds "${QUAY_USER}:${QUAY_TOKEN}" \
-		"${SRC_CONTAINER_TRANSPORT}:${IMG}:${IMAGETAG}" \
-		"docker://${IMG}:${IMAGETAG}"
-
-
-.PHONY: push-base
-push-base: build/Dockerfile
-	$(CONTAINER_ENGINE) push $(IMG):$(IMAGETAG)
-	$(CONTAINER_ENGINE) push $(IMG):latest
 
 .PHONY: test
 test: go-test
