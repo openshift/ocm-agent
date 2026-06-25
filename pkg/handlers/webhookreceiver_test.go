@@ -311,7 +311,7 @@ var _ = Describe("Webhook Handlers", func() {
 		It("Should return a notificationContext if one exists", func() {
 			mockClient.EXPECT().Get(gomock.Any(), client.ObjectKey{
 				Namespace: OCMAgentNamespaceName,
-				Name:      testconst.TestManagedNotification.ObjectMeta.Name,
+				Name:      testconst.TestManagedNotification.Name,
 			}, gomock.Any()).Return(nil).SetArg(2, testconst.TestManagedNotificationList.Items[0])
 
 			notificationContext, err := notificationRetriever.retrieveNotificationContext(testconst.TestNotificationName)
@@ -333,7 +333,7 @@ var _ = Describe("Webhook Handlers", func() {
 	Context("WebhookReceiverHandler.processAlert", func() {
 		var testNotifRetriever *notificationRetriever
 		BeforeEach(func() {
-			testNotifRetriever = &notificationRetriever{context.TODO(), mockClient, map[string]string{testconst.TestNotificationName: testconst.TestManagedNotification.ObjectMeta.Name}}
+			testNotifRetriever = &notificationRetriever{context.TODO(), mockClient, map[string]string{testconst.TestNotificationName: testconst.TestManagedNotification.Name}}
 		})
 		Context("Alert is invalid", func() {
 			It("Reports error if alert does not have alertname label", func() {
@@ -367,7 +367,7 @@ var _ = Describe("Webhook Handlers", func() {
 				updatedConditions = nil
 				mockClient.EXPECT().Get(gomock.Any(), client.ObjectKey{
 					Namespace: OCMAgentNamespaceName,
-					Name:      testconst.TestManagedNotification.ObjectMeta.Name,
+					Name:      testconst.TestManagedNotification.Name,
 				}, gomock.Any()).DoAndReturn(
 					func(ctx context.Context, key client.ObjectKey, res *ocmagentv1alpha1.ManagedNotification, opts ...client.GetOption) error {
 						*res = ocmagentv1alpha1.ManagedNotification{

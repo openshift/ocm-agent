@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck // dot import is standard for Ginkgo test utilities
 	sdk "github.com/openshift-online/ocm-sdk-go"
 	slv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	ocmagentv1alpha1 "github.com/openshift/ocm-agent-operator/api/v1alpha1"
