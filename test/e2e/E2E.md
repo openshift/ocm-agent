@@ -245,7 +245,13 @@ The E2E tests can be executed as a job within an existing cluster:
 
 2. **Deploy the test job**:
    ```bash
-   envsubst < ./test/e2e/e2e-image-job.yaml | oc apply --as backplane-cluster-admin -f -
+   # Use the boilerplate-provided e2e template
+   oc process -f boilerplate/openshift/golang-osd-e2e/e2e-template.yml \
+     -p OSDE2E_CONFIGS="rosa,sts,${OSD_ENV},ad-hoc-image" \
+     -p TEST_IMAGE="${TEST_IMAGE}" \
+     -p IMAGE_TAG="${IMAGE_TAG}" \
+     -p CLOUD_PROVIDER_REGION="${REGION}" \
+     | oc apply --as backplane-cluster-admin -f -
    ```
 
 ### Debugging E2E Image Tests
