@@ -1,12 +1,40 @@
+version: "2"
 run:
-  deadline: 30m
+  timeout: 30m
   concurrency: 1
-  modules-download-mode: readonly
 linters:
+  default: none
   enable:
+    - errcheck
     - gosec
-  disable:
-    - depguard
-    - gochecknoglobals
-    - gochecknoinits
-    - lll
+    - govet
+    - ineffassign
+    - misspell
+    - staticcheck
+    - unused
+  settings:
+    misspell:
+      extra-words:
+        - typo: openshit
+          correction: OpenShift
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party/
+      - builtin/
+      - examples/
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party/
+      - builtin/
+      - examples/
