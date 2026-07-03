@@ -14,7 +14,6 @@ import (
 	"go.uber.org/mock/gomock"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
-	oav1alpha1 "github.com/openshift/ocm-agent-operator/api/v1alpha1"
 	ocmagentv1alpha1 "github.com/openshift/ocm-agent-operator/api/v1alpha1"
 	"github.com/prometheus/alertmanager/template"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -519,7 +518,7 @@ var _ = Describe("Webhook Handlers Additional Tests", func() {
 		var (
 			responseRecorder *httptest.ResponseRecorder
 			validAlert       template.Alert
-			validMFN         oav1alpha1.ManagedFleetNotification
+			validMFN         ocmagentv1alpha1.ManagedFleetNotification
 		)
 
 		BeforeEach(func() {
