@@ -4,7 +4,6 @@ SHELL := /usr/bin/env bash
 IMAGE_NAME=ocm-agent
 
 include boilerplate/generated-includes.mk
-include test/e2e/project.mk
 
 # Verbosity
 AT_ = @

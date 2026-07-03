@@ -229,24 +229,57 @@ When testing against a remote cluster, use port forwarding to access the OCM Age
 
 ### Running in Cluster
 
-The E2E tests can be executed as a job within an existing cluster:
+The E2E tests can be executed as a job within an existing cluster using the osde2e orchestrator:
 
-1. **Set environment variables**:
+1. **Create required secrets in your target namespace** (e.g., `ocm-agent-e2e`):
+
    ```bash
-   export TEST_IMAGE="quay.io/your-org/ocm-agent-e2e"
-   export IMAGE_TAG="latest"
-   export OCM_E2E_TOKEN=$(ocm token)
-   export AWS_ACCESS_KEY_ID="your-access-key"
-   export AWS_SECRET_ACCESS_KEY="your-secret-key"
-   export REGION="us-east-1"
-   export CLUSTER_ID="your-cluster-id"
-   export OSD_ENV="stage"
+   # Create OCM credentials secret
+   oc create secret generic osde2e-ocm-credentials \
+     -n ocm-agent-e2e \
+     --from-literal=config.ocm.token=$(ocm token) \
+     --from-literal=config.cluster.id=${CLUSTER_ID} \
+     --from-literal=config.cluster.skipProvision=true \
+     --as backplane-cluster-admin
+
+   # Create AWS credentials secret
+   oc create secret generic osde2e-aws-credentials \
+     -n ocm-agent-e2e \
+     --from-literal=config.aws.accessKeyId=${AWS_ACCESS_KEY_ID} \
+     --from-literal=config.aws.secretAccessKey=${AWS_SECRET_ACCESS_KEY} \
+     --from-literal=config.cloudProvider.region=${AWS_REGION} \
+     --from-literal=config.cluster.id=${CLUSTER_ID} \
+     --as backplane-cluster-admin
    ```
 
 2. **Deploy the test job**:
+
    ```bash
-   envsubst < ./test/e2e/e2e-image-job.yaml | oc apply --as backplane-cluster-admin -f -
+   export TEST_IMAGE="<ocm-agent-e2e-url>"
+   export IMAGE_TAG="<your-tag>" 
+   export CLUSTER_ID="${CLUSTER_ID}" 
+   export OSD_ENV="stage"  # or "prod"
+   
+   # Process template locally and inject required environment variables
+   oc process -f test/e2e/e2e-template.yml \
+     -p OSDE2E_CONFIGS="${OSD_ENV},ad-hoc-image" \
+     -p TEST_IMAGE="${TEST_IMAGE}:<full-tag>" \
+     -p IMAGE_TAG="${IMAGE_TAG}" \
+     --local -o json | \
+   jq '.items[0].spec.template.spec.containers[0].env += [
+     {"name": "AWS_ACCESS_KEY_ID", "valueFrom": {"secretKeyRef": {"name": "osde2e-aws-credentials", "key": "config.aws.accessKeyId"}}},
+     {"name": "AWS_SECRET_ACCESS_KEY", "valueFrom": {"secretKeyRef": {"name": "osde2e-aws-credentials", "key": "config.aws.secretAccessKey"}}},
+     {"name": "CLUSTER_ID", "value": "'${CLUSTER_ID}'"},
+     {"name": "OCM_TOKEN", "valueFrom": {"secretKeyRef": {"name": "osde2e-ocm-credentials", "key": "config.ocm.token"}}}
+   ]' | \
+   oc apply --as backplane-cluster-admin -n ocm-agent-e2e -f -
    ```
+
+   **Important notes:**
+   - Use `--local` flag with `oc process` to avoid permission issues with processedtemplates
+   - For OSD clusters, use `OSDE2E_CONFIGS="${OSD_ENV},ad-hoc-image"` (omit `rosa,sts`)
+   - For ROSA clusters, use `OSDE2E_CONFIGS="rosa,sts,${OSD_ENV},ad-hoc-image"`
+   - OCM token expires quickly - refresh with `$(ocm token)` if job fails with token errors
 
 ### Debugging E2E Image Tests
 

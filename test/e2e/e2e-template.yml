@@ -109,3 +109,4 @@ objects:
                   value: ${USE_EXISTING_CLUSTER}
                 - name: SLACK_NOTIFY
                   value: ${SLACK_NOTIFY}
+                  
