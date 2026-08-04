@@ -256,7 +256,7 @@ func (o *ocmClientImpl) SendServiceLog(logEntry *slv1.LogEntry) error {
 	response, err := request.Send()
 	if err != nil {
 		if response != nil && response.Status() == http.StatusTooManyRequests {
-			return &RateLimitError{Err: fmt.Errorf("can't post service log: rate limited (HTTP 429): %v", err)}
+			return &RateLimitError{Err: fmt.Errorf("can't post service log: rate limited (HTTP 429): %w", err)}
 		}
 		return fmt.Errorf("can't post service log: %v", err)
 	}

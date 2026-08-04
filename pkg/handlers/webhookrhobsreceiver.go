@@ -395,11 +395,9 @@ func (h *WebhookRHOBSReceiverHandler) processAlert(alert template.Alert, isCurre
 			if time.Since(backoffTime.(time.Time)) < rateLimitRetryInterval {
 				log.WithFields(log.Fields{
 					LogFieldNotificationName: alert.Labels[AMLabelTemplateName],
-					"hosted_cluster_id":      alert.Labels[AMLabelAlertHCID],
 				}).Warn("skipping alert due to OCM API rate-limit backoff")
 				return nil
 			}
-			rateLimitBackoffs.Delete(rateLimitKey)
 		}
 	}
 
@@ -442,7 +440,6 @@ func (h *WebhookRHOBSReceiverHandler) processAlert(alert template.Alert, isCurre
 					rateLimitBackoffs.Store(rateLimitKey, time.Now())
 					log.WithFields(log.Fields{
 						LogFieldNotificationName: fleetNotification.Name,
-						"hosted_cluster_id":      alert.Labels[AMLabelAlertHCID],
 					}).Warn("OCM API rate limit hit (HTTP 429), backing off for 30 minutes")
 				}
 				if fleetNotification.LimitedSupport { // Limited support case
@@ -455,7 +452,8 @@ func (h *WebhookRHOBSReceiverHandler) processAlert(alert template.Alert, isCurre
 				return err
 			}
 
-			// Clear any rate-limit backoff for this notification:cluster on success.
+			// Clear any rate-limit backoff for this notification:cluster pair
+			// after a successful send so normal operation resumes immediately.
 			rateLimitBackoffs.Delete(alert.Labels[AMLabelTemplateName] + ":" + alert.Labels[AMLabelAlertHCID])
 
 			if fleetNotification.LimitedSupport { // Limited support case
