@@ -424,6 +424,7 @@ func (h *WebhookRHOBSReceiverHandler) processAlert(alert template.Alert, isCurre
 
 	if isCurrentlyFiring {
 		if canSend {
+			sendStartTime := time.Now()
 			err := c.sendNotification(h.ocm, alert)
 
 			var logService string
@@ -454,7 +455,14 @@ func (h *WebhookRHOBSReceiverHandler) processAlert(alert template.Alert, isCurre
 
 			// Clear any rate-limit backoff for this notification:cluster pair
 			// after a successful send so normal operation resumes immediately.
-			rateLimitBackoffs.Delete(alert.Labels[AMLabelTemplateName] + ":" + alert.Labels[AMLabelAlertHCID])
+			// Only delete if the stored timestamp predates this send attempt,
+			// so a concurrent 429 that arrived while we were sending is preserved.
+			rateLimitKey := alert.Labels[AMLabelTemplateName] + ":" + alert.Labels[AMLabelAlertHCID]
+			if val, ok := rateLimitBackoffs.Load(rateLimitKey); ok {
+				if val.(time.Time).Before(sendStartTime) {
+					rateLimitBackoffs.Delete(rateLimitKey)
+				}
+			}
 
 			if fleetNotification.LimitedSupport { // Limited support case
 				metrics.IncrementLimitedSupportSentCount(fleetNotification.Name)

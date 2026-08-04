@@ -784,4 +784,26 @@ var _ = Describe("Rate-limit backoff behavior", func() {
 		_, ok := rateLimitBackoffs.Load(key)
 		Expect(ok).To(BeFalse())
 	})
+
+	It("does not clear a newer backoff stored during an in-flight send", func() {
+		key := testconst.TestNotificationName + ":" + testconst.TestHostedClusterID
+		// Seed an old, expired backoff so the request is not skipped.
+		rateLimitBackoffs.Store(key, time.Now().Add(-rateLimitRetryInterval-time.Minute))
+
+		// Simulate a concurrent 429: while SendServiceLog is running,
+		// another goroutine stores a fresh backoff timestamp.
+		mockOCMClient.EXPECT().SendServiceLog(serviceLog).DoAndReturn(
+			func(sl *ocm.ServiceLog) error {
+				rateLimitBackoffs.Store(key, time.Now())
+				return nil
+			},
+		)
+
+		err := testHandler.processAlert(testAlertFiring, true)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// The fresh backoff must survive the success-path cleanup.
+		_, ok := rateLimitBackoffs.Load(key)
+		Expect(ok).To(BeTrue())
+	})
 })
