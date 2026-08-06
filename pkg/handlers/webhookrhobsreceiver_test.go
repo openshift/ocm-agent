@@ -785,6 +785,18 @@ var _ = Describe("Rate-limit backoff behavior", func() {
 		Expect(ok).To(BeFalse())
 	})
 
+	It("clears backoff entry when a resolved alert is received", func() {
+		key := testconst.TestNotificationName + ":" + testconst.TestHostedClusterID
+		rateLimitBackoffs.Store(key, time.Now())
+
+		testAlertResolved := testconst.NewTestAlert(true, true)
+		err := testHandler.processAlert(testAlertResolved, false)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		_, ok := rateLimitBackoffs.Load(key)
+		Expect(ok).To(BeFalse())
+	})
+
 	It("does not clear a newer backoff stored during an in-flight send", func() {
 		key := testconst.TestNotificationName + ":" + testconst.TestHostedClusterID
 		// Seed an old, expired backoff so the request is not skipped.

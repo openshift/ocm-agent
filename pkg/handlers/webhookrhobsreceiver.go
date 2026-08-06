@@ -384,6 +384,13 @@ func (h *WebhookRHOBSReceiverHandler) processAlert(alert template.Alert, isCurre
 		return fmt.Errorf("unable to find ManagedFleetNotification %s", alert.Labels[AMLabelTemplateName])
 	}
 
+	// When an alert resolves, clear any rate-limit backoff entry so that
+	// if the alert fires again later, the send is not suppressed.
+	if !isCurrentlyFiring {
+		rateLimitKey := alert.Labels[AMLabelTemplateName] + ":" + alert.Labels[AMLabelAlertHCID]
+		rateLimitBackoffs.Delete(rateLimitKey)
+	}
+
 	if !fleetNotificationRetriever.fleetNotification.LimitedSupport && !isCurrentlyFiring {
 		return nil
 	}
