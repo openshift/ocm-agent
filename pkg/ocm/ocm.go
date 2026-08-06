@@ -20,6 +20,19 @@ const (
 	ServiceLogResolvePrefix = "Issue Resolution"
 )
 
+// RateLimitError indicates that an OCM API call was rejected with HTTP 429.
+type RateLimitError struct {
+	Err error
+}
+
+func (e *RateLimitError) Error() string {
+	return e.Err.Error()
+}
+
+func (e *RateLimitError) Unwrap() error {
+	return e.Err
+}
+
 type ServiceLogBuilder struct {
 	wrappedBuilder *slv1.LogEntryBuilder
 	summary        string
@@ -242,10 +255,16 @@ func (o *ocmClientImpl) SendServiceLog(logEntry *slv1.LogEntry) error {
 	// Send the request to the OCM API.
 	response, err := request.Send()
 	if err != nil {
+		if response != nil && response.Status() == http.StatusTooManyRequests {
+			return &RateLimitError{Err: fmt.Errorf("can't post service log: rate limited (HTTP 429): %w", err)}
+		}
 		return fmt.Errorf("can't post service log: %v", err)
 	}
 
 	// Check the response status code.
+	if response.Status() == http.StatusTooManyRequests {
+		return &RateLimitError{Err: fmt.Errorf("can't post service log: rate limited (HTTP 429)")}
+	}
 	if response.Status() != http.StatusCreated {
 		// Extract error details from the response and return an appropriate error.
 		return fmt.Errorf("unexpected status: %d", response.Status())

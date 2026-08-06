@@ -664,3 +664,158 @@ func (f *FailingResponseWriter) Write([]byte) (int, error) {
 func (f *FailingResponseWriter) WriteHeader(statusCode int) {
 	f.statusCode = statusCode
 }
+
+func clearRateLimitBackoffs() {
+	rateLimitBackoffs.Range(func(k, v any) bool {
+		rateLimitBackoffs.Delete(k)
+		return true
+	})
+}
+
+var _ = Describe("Rate-limit backoff behavior", func() {
+	var (
+		mockCtrl                       *gomock.Controller
+		mockClient                     *clientmocks.MockClient
+		mockOCMClient                  *webhookreceivermock.MockOCMClient
+		testHandler                    *WebhookRHOBSReceiverHandler
+		testAlertFiring                template.Alert
+		mockStatusWriter               *clientmocks.MockStatusWriter
+		serviceLog                     *ocm.ServiceLog
+		managedFleetNotification       *ocmagentv1alpha1.ManagedFleetNotification
+		managedFleetNotificationRecord *ocmagentv1alpha1.ManagedFleetNotificationRecord
+	)
+
+	BeforeEach(func() {
+		clearRateLimitBackoffs()
+
+		mockCtrl = gomock.NewController(GinkgoT())
+		mockClient = clientmocks.NewMockClient(mockCtrl)
+		mockStatusWriter = clientmocks.NewMockStatusWriter(mockCtrl)
+		mockOCMClient = webhookreceivermock.NewMockOCMClient(mockCtrl)
+		testHandler = &WebhookRHOBSReceiverHandler{
+			c:   mockClient,
+			ocm: mockOCMClient,
+		}
+		testAlertFiring = testconst.NewTestAlert(false, true)
+
+		defaultMFN := testconst.NewManagedFleetNotification(false)
+		defaultMFN.Spec.FleetNotification.ResendWait = 1
+		managedFleetNotification = &defaultMFN
+
+		defaultRecord := testconst.NewManagedFleetNotificationRecordWithStatus()
+		managedFleetNotificationRecord = &defaultRecord
+
+		serviceLog = testconst.NewTestServiceLog(
+			ocm.ServiceLogActivePrefix+": "+testconst.ServiceLogSummary,
+			testconst.ServiceLogFleetDesc,
+			testconst.TestHostedClusterID,
+			testconst.TestNotification.Severity,
+			"",
+			testconst.TestNotification.References)
+
+		// Setup k8s mocks for ManagedFleetNotification and Record retrieval
+		mockClient.EXPECT().Get(gomock.Any(), client.ObjectKey{
+			Namespace: OCMAgentNamespaceName,
+			Name:      managedFleetNotification.ObjectMeta.Name,
+		}, gomock.Any()).DoAndReturn(
+			func(ctx context.Context, key client.ObjectKey, res *ocmagentv1alpha1.ManagedFleetNotification, opts ...client.GetOption) error {
+				*res = *managedFleetNotification
+				return nil
+			}).AnyTimes()
+
+		mockClient.EXPECT().Get(gomock.Any(), client.ObjectKey{
+			Namespace: OCMAgentNamespaceName,
+			Name:      managedFleetNotificationRecord.ObjectMeta.Name,
+		}, gomock.Any()).DoAndReturn(
+			func(ctx context.Context, key client.ObjectKey, res *ocmagentv1alpha1.ManagedFleetNotificationRecord, opts ...client.GetOption) error {
+				*res = *managedFleetNotificationRecord
+				return nil
+			}).AnyTimes()
+
+		mockClient.EXPECT().Status().Return(mockStatusWriter).AnyTimes()
+		mockStatusWriter.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	})
+
+	AfterEach(func() {
+		clearRateLimitBackoffs()
+		mockCtrl.Finish()
+	})
+
+	It("populates rateLimitBackoffs when SendServiceLog returns RateLimitError", func() {
+		rateLimitErr := &ocm.RateLimitError{Err: fmt.Errorf("rate limited")}
+		mockOCMClient.EXPECT().SendServiceLog(serviceLog).Return(rateLimitErr)
+
+		err := testHandler.processAlert(testAlertFiring, true)
+		Expect(err).To(HaveOccurred())
+
+		key := testconst.TestNotificationName + ":" + testconst.TestHostedClusterID
+		_, ok := rateLimitBackoffs.Load(key)
+		Expect(ok).To(BeTrue())
+	})
+
+	It("skips sending when within the rate-limit backoff window", func() {
+		key := testconst.TestNotificationName + ":" + testconst.TestHostedClusterID
+		rateLimitBackoffs.Store(key, time.Now())
+
+		// SendServiceLog should NOT be called because the backoff guard returns early
+		err := testHandler.processAlert(testAlertFiring, true)
+		Expect(err).ShouldNot(HaveOccurred())
+	})
+
+	It("proceeds normally after the backoff window expires", func() {
+		key := testconst.TestNotificationName + ":" + testconst.TestHostedClusterID
+		rateLimitBackoffs.Store(key, time.Now().Add(-rateLimitRetryInterval-time.Minute))
+
+		mockOCMClient.EXPECT().SendServiceLog(serviceLog).Return(nil)
+
+		err := testHandler.processAlert(testAlertFiring, true)
+		Expect(err).ShouldNot(HaveOccurred())
+	})
+
+	It("clears backoff entry on successful send", func() {
+		key := testconst.TestNotificationName + ":" + testconst.TestHostedClusterID
+		rateLimitBackoffs.Store(key, time.Now().Add(-rateLimitRetryInterval-time.Minute))
+
+		mockOCMClient.EXPECT().SendServiceLog(serviceLog).Return(nil)
+
+		err := testHandler.processAlert(testAlertFiring, true)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		_, ok := rateLimitBackoffs.Load(key)
+		Expect(ok).To(BeFalse())
+	})
+
+	It("clears backoff entry when a resolved alert is received", func() {
+		key := testconst.TestNotificationName + ":" + testconst.TestHostedClusterID
+		rateLimitBackoffs.Store(key, time.Now())
+
+		testAlertResolved := testconst.NewTestAlert(true, true)
+		err := testHandler.processAlert(testAlertResolved, false)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		_, ok := rateLimitBackoffs.Load(key)
+		Expect(ok).To(BeFalse())
+	})
+
+	It("does not clear a newer backoff stored during an in-flight send", func() {
+		key := testconst.TestNotificationName + ":" + testconst.TestHostedClusterID
+		// Seed an old, expired backoff so the request is not skipped.
+		rateLimitBackoffs.Store(key, time.Now().Add(-rateLimitRetryInterval-time.Minute))
+
+		// Simulate a concurrent 429: while SendServiceLog is running,
+		// another goroutine stores a fresh backoff timestamp.
+		mockOCMClient.EXPECT().SendServiceLog(serviceLog).DoAndReturn(
+			func(sl *ocm.ServiceLog) error {
+				rateLimitBackoffs.Store(key, time.Now())
+				return nil
+			},
+		)
+
+		err := testHandler.processAlert(testAlertFiring, true)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// The fresh backoff must survive the success-path cleanup.
+		_, ok := rateLimitBackoffs.Load(key)
+		Expect(ok).To(BeTrue())
+	})
+})

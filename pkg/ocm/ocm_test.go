@@ -1,6 +1,7 @@
 package ocm
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"testing"
@@ -312,6 +313,95 @@ var _ = Describe("OCM client Handler", func() {
 		})
 
 	})
+
+	Context("RateLimitError type", func() {
+		It("Error() returns the wrapped error message", func() {
+			inner := fmt.Errorf("some error")
+			rle := &RateLimitError{Err: inner}
+			Expect(rle.Error()).To(Equal("some error"))
+		})
+
+		It("Unwrap() returns the inner error", func() {
+			inner := fmt.Errorf("some error")
+			rle := &RateLimitError{Err: inner}
+			Expect(rle.Unwrap()).To(Equal(inner))
+		})
+
+		It("errors.As() detects RateLimitError from a wrapped error chain", func() {
+			inner := fmt.Errorf("sdk error")
+			rle := &RateLimitError{Err: inner}
+			wrapped := fmt.Errorf("outer context: %w", rle)
+
+			var target *RateLimitError
+			Expect(errors.As(wrapped, &target)).To(BeTrue())
+			Expect(target.Err.Error()).To(Equal("sdk error"))
+		})
+
+		It("errors.As() does not match a plain error as RateLimitError", func() {
+			plainErr := fmt.Errorf("just an error")
+			var target *RateLimitError
+			Expect(errors.As(plainErr, &target)).To(BeFalse())
+		})
+	})
+
+	Context("SendServiceLog returns RateLimitError on 429", func() {
+		It("should return a RateLimitError when the API responds with HTTP 429", func() {
+			mockServer.SetHandler(0, CombineHandlers(
+				VerifyRequest("POST", "/api/service_logs/v1/cluster_logs"),
+				RespondWith(
+					http.StatusTooManyRequests,
+					`{"kind": "Error", "id": "429", "href": "/api/service_logs/v1/errors/429", "code": "SERVICE-LOGS-429", "reason": "Rate limit exceeded"}`,
+					http.Header{"Content-Type": []string{"application/json"}},
+				),
+			))
+			// The OCM SDK may retry on certain errors, so add extra handlers
+			for i := 0; i < 5; i++ {
+				mockServer.AppendHandlers(CombineHandlers(
+					VerifyRequest("POST", "/api/service_logs/v1/cluster_logs"),
+					RespondWith(
+						http.StatusTooManyRequests,
+						`{"kind": "Error", "id": "429", "href": "/api/service_logs/v1/errors/429", "code": "SERVICE-LOGS-429", "reason": "Rate limit exceeded"}`,
+						http.Header{"Content-Type": []string{"application/json"}},
+					),
+				))
+			}
+
+			err := ocmClient.SendServiceLog(serviceLog)
+			Expect(err).To(HaveOccurred())
+
+			var rateLimitErr *RateLimitError
+			Expect(errors.As(err, &rateLimitErr)).To(BeTrue())
+			Expect(rateLimitErr.Error()).To(ContainSubstring("rate limited"))
+		})
+
+		It("should return a non-RateLimitError for other failure statuses", func() {
+			mockServer.SetHandler(0, CombineHandlers(
+				VerifyRequest("POST", "/api/service_logs/v1/cluster_logs"),
+				RespondWith(
+					http.StatusInternalServerError,
+					`{"kind": "Error", "id": "500", "href": "/api/service_logs/v1/errors/500", "code": "SERVICE-LOGS-500", "reason": "Internal server error"}`,
+					http.Header{"Content-Type": []string{"application/json"}},
+				),
+			))
+			for i := 0; i < 5; i++ {
+				mockServer.AppendHandlers(CombineHandlers(
+					VerifyRequest("POST", "/api/service_logs/v1/cluster_logs"),
+					RespondWith(
+						http.StatusInternalServerError,
+						`{"kind": "Error", "id": "500", "href": "/api/service_logs/v1/errors/500", "code": "SERVICE-LOGS-500", "reason": "Internal server error"}`,
+						http.Header{"Content-Type": []string{"application/json"}},
+					),
+				))
+			}
+
+			err := ocmClient.SendServiceLog(serviceLog)
+			Expect(err).To(HaveOccurred())
+
+			var rateLimitErr *RateLimitError
+			Expect(errors.As(err, &rateLimitErr)).To(BeFalse())
+		})
+	})
+
 	Context("Limit support", func() {
 		It("should not return an error on successful post", func() {
 			mockServer.SetHandler(0, CombineHandlers(

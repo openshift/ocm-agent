@@ -3,9 +3,11 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/prometheus/alertmanager/template"
@@ -41,6 +43,12 @@ var (
 	}
 
 	customIs409 = func(err error) bool { return errors.IsConflict(err) || errors.IsAlreadyExists(err) }
+
+	// rateLimitBackoffs tracks per-notification:cluster backoff timestamps after
+	// an OCM API 429 rate-limit response.  The key is "notification:clusterID"
+	// and the value is the time.Time when the 429 was received.
+	rateLimitBackoffs      sync.Map
+	rateLimitRetryInterval = 30 * time.Minute
 )
 
 type WebhookRHOBSReceiverHandler struct {
@@ -376,8 +384,28 @@ func (h *WebhookRHOBSReceiverHandler) processAlert(alert template.Alert, isCurre
 		return fmt.Errorf("unable to find ManagedFleetNotification %s", alert.Labels[AMLabelTemplateName])
 	}
 
+	// When an alert resolves, clear any rate-limit backoff entry so that
+	// if the alert fires again later, the send is not suppressed.
+	if !isCurrentlyFiring {
+		rateLimitKey := alert.Labels[AMLabelTemplateName] + ":" + alert.Labels[AMLabelAlertHCID]
+		rateLimitBackoffs.Delete(rateLimitKey)
+	}
+
 	if !fleetNotificationRetriever.fleetNotification.LimitedSupport && !isCurrentlyFiring {
 		return nil
+	}
+
+	// Skip firing alerts that are within the rate-limit backoff window.
+	if isCurrentlyFiring {
+		rateLimitKey := alert.Labels[AMLabelTemplateName] + ":" + alert.Labels[AMLabelAlertHCID]
+		if backoffTime, ok := rateLimitBackoffs.Load(rateLimitKey); ok {
+			if time.Since(backoffTime.(time.Time)) < rateLimitRetryInterval {
+				log.WithFields(log.Fields{
+					LogFieldNotificationName: alert.Labels[AMLabelTemplateName],
+				}).Warn("skipping alert due to OCM API rate-limit backoff")
+				return nil
+			}
+		}
 	}
 
 	var c *fleetNotificationContext
@@ -403,6 +431,7 @@ func (h *WebhookRHOBSReceiverHandler) processAlert(alert template.Alert, isCurre
 
 	if isCurrentlyFiring {
 		if canSend {
+			sendStartTime := time.Now()
 			err := c.sendNotification(h.ocm, alert)
 
 			var logService string
@@ -413,6 +442,14 @@ func (h *WebhookRHOBSReceiverHandler) processAlert(alert template.Alert, isCurre
 			}
 
 			if err != nil {
+				var rateLimitErr *ocm.RateLimitError
+				if stderrors.As(err, &rateLimitErr) {
+					rateLimitKey := alert.Labels[AMLabelTemplateName] + ":" + alert.Labels[AMLabelAlertHCID]
+					rateLimitBackoffs.Store(rateLimitKey, time.Now())
+					log.WithFields(log.Fields{
+						LogFieldNotificationName: fleetNotification.Name,
+					}).Warn("OCM API rate limit hit (HTTP 429), backing off for 30 minutes")
+				}
 				if fleetNotification.LimitedSupport { // Limited support case
 					metrics.IncrementFailedLimitedSupportSend(fleetNotification.Name)
 				} else { // Service log case
@@ -421,6 +458,17 @@ func (h *WebhookRHOBSReceiverHandler) processAlert(alert template.Alert, isCurre
 				metrics.SetResponseMetricFailure(logService, fleetNotification.Name, alertName)
 				_ = c.restoreNotificationStatus()
 				return err
+			}
+
+			// Clear any rate-limit backoff for this notification:cluster pair
+			// after a successful send so normal operation resumes immediately.
+			// Only delete if the stored timestamp predates this send attempt,
+			// so a concurrent 429 that arrived while we were sending is preserved.
+			rateLimitKey := alert.Labels[AMLabelTemplateName] + ":" + alert.Labels[AMLabelAlertHCID]
+			if val, ok := rateLimitBackoffs.Load(rateLimitKey); ok {
+				if val.(time.Time).Before(sendStartTime) {
+					rateLimitBackoffs.Delete(rateLimitKey)
+				}
 			}
 
 			if fleetNotification.LimitedSupport { // Limited support case
