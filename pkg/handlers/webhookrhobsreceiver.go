@@ -392,6 +392,7 @@ func (h *WebhookRHOBSReceiverHandler) processAlert(alert template.Alert, isCurre
 	}
 
 	if !fleetNotificationRetriever.fleetNotification.LimitedSupport && !isCurrentlyFiring {
+		metrics.ResetResponseMetricFailure(config.ServiceLogService, fleetNotificationRetriever.fleetNotification.Name, alert.Labels[AMLabelAlertName])
 		return nil
 	}
 
@@ -475,6 +476,14 @@ func (h *WebhookRHOBSReceiverHandler) processAlert(alert template.Alert, isCurre
 				metrics.IncrementLimitedSupportSentCount(fleetNotification.Name)
 			} else { // Service log case
 				metrics.CountServiceLogSent(fleetNotification.Name, "firing")
+			}
+			metrics.ResetResponseMetricFailure(logService, fleetNotification.Name, alertName)
+		} else {
+			var logService string
+			if fleetNotification.LimitedSupport {
+				logService = config.ClustersService
+			} else {
+				logService = config.ServiceLogService
 			}
 			metrics.ResetResponseMetricFailure(logService, fleetNotification.Name, alertName)
 		}
