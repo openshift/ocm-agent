@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"time"
 
 	oav1alpha1 "github.com/openshift/ocm-agent-operator/api/v1alpha1"
@@ -153,6 +154,11 @@ var _ = Describe("ocm-agent", Ordered, func() {
 		// Override the ocm-agent URL if the OCM_AGENT_URL environment variable is set
 		if os.Getenv("OCM_AGENT_URL") != "" {
 			ocmAgentURL = os.Getenv("OCM_AGENT_URL")
+		}
+
+		// Override the ocm-agent fleet URL if the OCM_AGENT_FLEET_URL environment variable is set
+		if os.Getenv("OCM_AGENT_FLEET_URL") != "" {
+			ocmAgentFleetURL = os.Getenv("OCM_AGENT_FLEET_URL")
 		}
 
 		// Get access token from env or secret
@@ -485,11 +491,6 @@ var _ = Describe("ocm-agent", Ordered, func() {
 			}
 		)
 
-		// set ocm agent url to fleet url when overriding OCM_AGENT_URL environment variable is not set
-		if os.Getenv("OCM_AGENT_URL") == "" {
-			ocmAgentURL = ocmAgentFleetURL
-		}
-
 		// Get OcmAgent "ocm-agent" resource
 		oa := &oav1alpha1.OcmAgent{}
 		err := k8sClient.Get(ctx, crClient.ObjectKey{Name: "ocm-agent", Namespace: namespace}, oa)
@@ -563,6 +564,24 @@ var _ = Describe("ocm-agent", Ordered, func() {
 			}
 		}
 
+		// When OCM_AGENT_URL is set (port-forward mode) but OCM_AGENT_FLEET_URL is not,
+		// start a kubectl port-forward to the fleet service so that fleet tests can
+		// reach the fleet-mode ocm-agent instead of the regular one.
+		if os.Getenv("OCM_AGENT_URL") != "" && os.Getenv("OCM_AGENT_FLEET_URL") == "" {
+			By("Setup: Starting kubectl port-forward for ocm-agent-fleet service")
+			portForwardCmd := exec.Command("kubectl", "port-forward",
+				"-n", namespace,
+				"svc/ocm-agent-fleet", "8082:8081")
+			portForwardCmd.Stdout = GinkgoWriter
+			portForwardCmd.Stderr = GinkgoWriter
+			err = portForwardCmd.Start()
+			Expect(err).Should(BeNil(), "failed to start kubectl port-forward for fleet service")
+			defer portForwardCmd.Process.Kill()
+			// Wait for port-forward to establish
+			time.Sleep(3 * time.Second)
+			ocmAgentFleetURL = "http://localhost:8082"
+		}
+
 		By("Step 1: Testing ocm-agent-fleet healthcheck endpoints")
 		resp, err := httpClient.Get(fmt.Sprintf("%s/livez", ocmAgentFleetURL))
 		if err == nil {
@@ -611,8 +630,8 @@ var _ = Describe("ocm-agent", Ordered, func() {
 		Expect(err).Should(BeNil(), "failed to get service log count")
 		// create an alert payload for the audit-webhook-error-putting-minimized-cloudwatch-log
 		alertPayloadAuditWebhook := testconst.CreateFleetAlert("firing", alertName, mcClusterID1, mFleetNotificationAuditWebhookErrorTemplate.ObjectMeta.Name, externalClusterID)
-		// send the alert payload for the audit-webhook-error-putting-minimized-cloudwatch-log to the ocm-agent
-		err = testconst.PostAlert(ctx, alertPayloadAuditWebhook, httpClient, ocmAgentURL)
+		// send the alert payload for the audit-webhook-error-putting-minimized-cloudwatch-log to the fleet-mode ocm-agent
+		err = testconst.PostAlert(ctx, alertPayloadAuditWebhook, httpClient, ocmAgentFleetURL)
 		Expect(err).Should(BeNil(), "failed to post alert")
 		// wait for shortSleepInterval
 		time.Sleep(shortSleepInterval)
