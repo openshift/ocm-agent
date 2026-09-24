@@ -1,6 +1,6 @@
 module github.com/openshift/ocm-agent
 
-go 1.26.6
+go 1.27
 
 require (
 	github.com/gorilla/mux v1.8.1
