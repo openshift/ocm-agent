@@ -640,6 +640,24 @@ var _ = Describe("ocm-agent", Ordered, func() {
 	})
 
 	AfterAll(func(ctx context.Context) {
+		By("Cleanup: Removing e2e test limited support reasons")
+		if ocmConnection != nil && externalClusterID != "" {
+			cleanupClient := ocm.NewOcmClient(ocmConnection)
+			reasons, err := cleanupClient.GetLimitedSupportReasons(externalClusterID)
+			if err == nil {
+				for _, r := range reasons {
+					if r.Summary() == "E2E Test Limited Support" {
+						cleanupErr := cleanupClient.RemoveLimitedSupport(externalClusterID, r.ID())
+						if cleanupErr != nil {
+							fmt.Fprintf(GinkgoWriter, "Warning: failed to remove LS reason %s: %v\n", r.ID(), cleanupErr)
+						}
+					}
+				}
+			} else {
+				fmt.Fprintf(GinkgoWriter, "Warning: failed to get LS reasons for cleanup: %v\n", err)
+			}
+		}
+
 		// Clean up the error server
 		if errorServer != nil {
 			errorServer.Close()
