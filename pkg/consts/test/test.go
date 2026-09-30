@@ -488,10 +488,16 @@ func GetServiceLogCount(ctx context.Context, clusterUUID string, ocmConnection *
 // CheckServiceLogCount verifies the service log count matches expectations
 func CheckServiceLogCount(ctx context.Context, clusterUUID string, preCount, expectedNew int, ocmConnection *sdk.Connection) {
 	expectedTotal := preCount + expectedNew
-	actualCount, err := GetServiceLogCount(ctx, clusterUUID, ocmConnection)
-	Expect(err).Should(BeNil(), "failed to get service log count")
-	Expect(actualCount).Should(Equal(expectedTotal),
-		fmt.Sprintf("Expected SL count: %d, Got SL count: %d", expectedTotal, actualCount))
+	Eventually(func() error {
+		actualCount, err := GetServiceLogCount(ctx, clusterUUID, ocmConnection)
+		if err != nil {
+			return err
+		}
+		if actualCount != expectedTotal {
+			return fmt.Errorf("Expected SL count: %d, Got SL count: %d", expectedTotal, actualCount)
+		}
+		return nil
+	}, "30s", "2s").Should(Succeed())
 }
 
 // CreateFleetAlert creates an alert payload for fleet mode
