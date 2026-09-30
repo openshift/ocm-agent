@@ -324,7 +324,7 @@ func CreateDefaultNotification(ctx context.Context, k8sClient crClient.Client, n
 					ResendWait:   24,
 					ResolvedDesc: `Your cluster's ElasticSearch deployment is detected as being at safe disk consumption levels and no additional action on this issue is required.`,
 					ActiveDesc:   `Your cluster requires you to take action as its ElasticSearch cluster logging deployment has been detected as reaching a high disk usage threshold.`,
-					Severity:     "Info",
+					Severity:     "Low",
 					Summary:      "ElasticSearch reaching disk capacity",
 				},
 				{
@@ -332,7 +332,7 @@ func CreateDefaultNotification(ctx context.Context, k8sClient crClient.Client, n
 					ResendWait:   24,
 					ResolvedDesc: `Parallel Alert1 has been resolved`,
 					ActiveDesc:   `Your cluster requires you to take action as Parallel Alert1 is firing.`,
-					Severity:     "Info",
+					Severity:     "Low",
 					Summary:      "Test Parallel Alert 1",
 				},
 				{
@@ -340,7 +340,7 @@ func CreateDefaultNotification(ctx context.Context, k8sClient crClient.Client, n
 					ResendWait:   24,
 					ResolvedDesc: `Parallel Alert2 has been resolved`,
 					ActiveDesc:   `Your cluster requires you to take action as Parallel Alert1 is firing.`,
-					Severity:     "Info",
+					Severity:     "Low",
 					Summary:      "Test Parallel Alert 2",
 				},
 			},
