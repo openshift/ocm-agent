@@ -494,7 +494,7 @@ func CheckServiceLogCount(ctx context.Context, clusterUUID string, preCount, exp
 			return err
 		}
 		if actualCount != expectedTotal {
-			return fmt.Errorf("Expected SL count: %d, Got SL count: %d", expectedTotal, actualCount)
+			return fmt.Errorf("expected SL count: %d, got SL count: %d", expectedTotal, actualCount)
 		}
 		return nil
 	}, "30s", "2s").Should(Succeed())
