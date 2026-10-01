@@ -17,5 +17,5 @@ spec:
     resendWait: 24
     resolvedBody: Your cluster's ElasticSearch deployment is detected as being at
       safe disk consumption levels and no additional action on this issue is required.
-    severity: Info
+    severity: Low
     summary: ElasticSearch reaching disk capacity
