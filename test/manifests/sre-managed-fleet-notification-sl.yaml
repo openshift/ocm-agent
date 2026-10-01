@@ -12,5 +12,5 @@ spec:
       due to the event being too large. The reduced event failed delivery as well.
       Please verify your CloudWatch configuration for this cluster: https://access.redhat.com/solutions/7002219'
     resendWait: 24
-    severity: Info
+    severity: Low
     summary: Audit-events could not be delivered to your CloudWatch

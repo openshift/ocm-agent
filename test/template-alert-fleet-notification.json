@@ -12,7 +12,7 @@
           "prometheus": "openshift-monitoring/k8s",
           "send_managed_notification": "${SEND_MANAGED_NOTIFICATION_BOOL}",
           "managed_notification_template": "${MANAGED_NOTIFICATION_TEMPLATE}",
-          "severity": "info",
+          "severity": "Low",
           "_mc_id": "${MANAGEMENT_CLUSTER_ID}",
           "_id": "${HC_ID}",
           "source": "MC"

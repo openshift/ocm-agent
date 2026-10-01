@@ -12,5 +12,5 @@ spec:
     notificationMessage: |-
       Your cluster is degraded due to the deletion of the associated OpenIDConnectProvider. To restore full support, please recreate the OpenID Connect provider by executing the command: rosa create oidc-provider --mode manual --cluster $CLUSTER_ID
     resendWait: 0
-    severity: Info
+    severity: Low
     limitedSupport: true
