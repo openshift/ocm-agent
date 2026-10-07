@@ -19,6 +19,7 @@ import (
 type MockHTTPChecker struct {
 	ctrl     *gomock.Controller
 	recorder *MockHTTPCheckerMockRecorder
+	isgomock struct{}
 }
 
 // MockHTTPCheckerMockRecorder is the mock recorder for MockHTTPChecker.
@@ -39,15 +40,15 @@ func (m *MockHTTPChecker) EXPECT() *MockHTTPCheckerMockRecorder {
 }
 
 // UrlAvailabilityCheck mocks base method.
-func (m *MockHTTPChecker) UrlAvailabilityCheck(arg0 string) error {
+func (m *MockHTTPChecker) UrlAvailabilityCheck(url string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UrlAvailabilityCheck", arg0)
+	ret := m.ctrl.Call(m, "UrlAvailabilityCheck", url)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UrlAvailabilityCheck indicates an expected call of UrlAvailabilityCheck.
-func (mr *MockHTTPCheckerMockRecorder) UrlAvailabilityCheck(arg0 any) *gomock.Call {
+func (mr *MockHTTPCheckerMockRecorder) UrlAvailabilityCheck(url any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UrlAvailabilityCheck", reflect.TypeOf((*MockHTTPChecker)(nil).UrlAvailabilityCheck), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UrlAvailabilityCheck", reflect.TypeOf((*MockHTTPChecker)(nil).UrlAvailabilityCheck), url)
 }

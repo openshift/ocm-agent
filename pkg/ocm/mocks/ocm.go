@@ -21,6 +21,7 @@ import (
 type MockOCMClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockOCMClientMockRecorder
+	isgomock struct{}
 }
 
 // MockOCMClientMockRecorder is the mock recorder for MockOCMClient.
@@ -41,9 +42,9 @@ func (m *MockOCMClient) EXPECT() *MockOCMClientMockRecorder {
 }
 
 // GetCluster mocks base method.
-func (m *MockOCMClient) GetCluster(arg0 string) (*v1.Cluster, string, error) {
+func (m *MockOCMClient) GetCluster(clusterID string) (*v1.Cluster, string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCluster", arg0)
+	ret := m.ctrl.Call(m, "GetCluster", clusterID)
 	ret0, _ := ret[0].(*v1.Cluster)
 	ret1, _ := ret[1].(string)
 	ret2, _ := ret[2].(error)
@@ -51,30 +52,30 @@ func (m *MockOCMClient) GetCluster(arg0 string) (*v1.Cluster, string, error) {
 }
 
 // GetCluster indicates an expected call of GetCluster.
-func (mr *MockOCMClientMockRecorder) GetCluster(arg0 any) *gomock.Call {
+func (mr *MockOCMClientMockRecorder) GetCluster(clusterID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCluster", reflect.TypeOf((*MockOCMClient)(nil).GetCluster), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCluster", reflect.TypeOf((*MockOCMClient)(nil).GetCluster), clusterID)
 }
 
 // GetLimitedSupportReasons mocks base method.
-func (m *MockOCMClient) GetLimitedSupportReasons(arg0 string) ([]*v1.LimitedSupportReason, error) {
+func (m *MockOCMClient) GetLimitedSupportReasons(clusterUUID string) ([]*v1.LimitedSupportReason, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetLimitedSupportReasons", arg0)
+	ret := m.ctrl.Call(m, "GetLimitedSupportReasons", clusterUUID)
 	ret0, _ := ret[0].([]*v1.LimitedSupportReason)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetLimitedSupportReasons indicates an expected call of GetLimitedSupportReasons.
-func (mr *MockOCMClientMockRecorder) GetLimitedSupportReasons(arg0 any) *gomock.Call {
+func (mr *MockOCMClientMockRecorder) GetLimitedSupportReasons(clusterUUID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLimitedSupportReasons", reflect.TypeOf((*MockOCMClient)(nil).GetLimitedSupportReasons), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLimitedSupportReasons", reflect.TypeOf((*MockOCMClient)(nil).GetLimitedSupportReasons), clusterUUID)
 }
 
 // GetUpgradePolicies mocks base method.
-func (m *MockOCMClient) GetUpgradePolicies(arg0 string) ([]*v1.UpgradePolicy, string, error) {
+func (m *MockOCMClient) GetUpgradePolicies(clusterID string) ([]*v1.UpgradePolicy, string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetUpgradePolicies", arg0)
+	ret := m.ctrl.Call(m, "GetUpgradePolicies", clusterID)
 	ret0, _ := ret[0].([]*v1.UpgradePolicy)
 	ret1, _ := ret[1].(string)
 	ret2, _ := ret[2].(error)
@@ -82,15 +83,15 @@ func (m *MockOCMClient) GetUpgradePolicies(arg0 string) ([]*v1.UpgradePolicy, st
 }
 
 // GetUpgradePolicies indicates an expected call of GetUpgradePolicies.
-func (mr *MockOCMClientMockRecorder) GetUpgradePolicies(arg0 any) *gomock.Call {
+func (mr *MockOCMClientMockRecorder) GetUpgradePolicies(clusterID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpgradePolicies", reflect.TypeOf((*MockOCMClient)(nil).GetUpgradePolicies), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpgradePolicies", reflect.TypeOf((*MockOCMClient)(nil).GetUpgradePolicies), clusterID)
 }
 
 // GetUpgradePolicy mocks base method.
-func (m *MockOCMClient) GetUpgradePolicy(arg0, arg1 string) (*v1.UpgradePolicy, string, error) {
+func (m *MockOCMClient) GetUpgradePolicy(clusterID, upgradePolicyID string) (*v1.UpgradePolicy, string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetUpgradePolicy", arg0, arg1)
+	ret := m.ctrl.Call(m, "GetUpgradePolicy", clusterID, upgradePolicyID)
 	ret0, _ := ret[0].(*v1.UpgradePolicy)
 	ret1, _ := ret[1].(string)
 	ret2, _ := ret[2].(error)
@@ -98,15 +99,15 @@ func (m *MockOCMClient) GetUpgradePolicy(arg0, arg1 string) (*v1.UpgradePolicy, 
 }
 
 // GetUpgradePolicy indicates an expected call of GetUpgradePolicy.
-func (mr *MockOCMClientMockRecorder) GetUpgradePolicy(arg0, arg1 any) *gomock.Call {
+func (mr *MockOCMClientMockRecorder) GetUpgradePolicy(clusterID, upgradePolicyID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpgradePolicy", reflect.TypeOf((*MockOCMClient)(nil).GetUpgradePolicy), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpgradePolicy", reflect.TypeOf((*MockOCMClient)(nil).GetUpgradePolicy), clusterID, upgradePolicyID)
 }
 
 // GetUpgradePolicyState mocks base method.
-func (m *MockOCMClient) GetUpgradePolicyState(arg0, arg1 string) (*v1.UpgradePolicyState, string, error) {
+func (m *MockOCMClient) GetUpgradePolicyState(clusterID, upgradePolicyID string) (*v1.UpgradePolicyState, string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetUpgradePolicyState", arg0, arg1)
+	ret := m.ctrl.Call(m, "GetUpgradePolicyState", clusterID, upgradePolicyID)
 	ret0, _ := ret[0].(*v1.UpgradePolicyState)
 	ret1, _ := ret[1].(string)
 	ret2, _ := ret[2].(error)
@@ -114,57 +115,57 @@ func (m *MockOCMClient) GetUpgradePolicyState(arg0, arg1 string) (*v1.UpgradePol
 }
 
 // GetUpgradePolicyState indicates an expected call of GetUpgradePolicyState.
-func (mr *MockOCMClientMockRecorder) GetUpgradePolicyState(arg0, arg1 any) *gomock.Call {
+func (mr *MockOCMClientMockRecorder) GetUpgradePolicyState(clusterID, upgradePolicyID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpgradePolicyState", reflect.TypeOf((*MockOCMClient)(nil).GetUpgradePolicyState), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpgradePolicyState", reflect.TypeOf((*MockOCMClient)(nil).GetUpgradePolicyState), clusterID, upgradePolicyID)
 }
 
 // RemoveLimitedSupport mocks base method.
-func (m *MockOCMClient) RemoveLimitedSupport(arg0, arg1 string) error {
+func (m *MockOCMClient) RemoveLimitedSupport(clusterUUID, lsReasonID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RemoveLimitedSupport", arg0, arg1)
+	ret := m.ctrl.Call(m, "RemoveLimitedSupport", clusterUUID, lsReasonID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RemoveLimitedSupport indicates an expected call of RemoveLimitedSupport.
-func (mr *MockOCMClientMockRecorder) RemoveLimitedSupport(arg0, arg1 any) *gomock.Call {
+func (mr *MockOCMClientMockRecorder) RemoveLimitedSupport(clusterUUID, lsReasonID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveLimitedSupport", reflect.TypeOf((*MockOCMClient)(nil).RemoveLimitedSupport), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveLimitedSupport", reflect.TypeOf((*MockOCMClient)(nil).RemoveLimitedSupport), clusterUUID, lsReasonID)
 }
 
 // SendLimitedSupport mocks base method.
-func (m *MockOCMClient) SendLimitedSupport(arg0 string, arg1 *v1.LimitedSupportReason) error {
+func (m *MockOCMClient) SendLimitedSupport(clusterUUID string, lsReason *v1.LimitedSupportReason) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SendLimitedSupport", arg0, arg1)
+	ret := m.ctrl.Call(m, "SendLimitedSupport", clusterUUID, lsReason)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SendLimitedSupport indicates an expected call of SendLimitedSupport.
-func (mr *MockOCMClientMockRecorder) SendLimitedSupport(arg0, arg1 any) *gomock.Call {
+func (mr *MockOCMClientMockRecorder) SendLimitedSupport(clusterUUID, lsReason any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendLimitedSupport", reflect.TypeOf((*MockOCMClient)(nil).SendLimitedSupport), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendLimitedSupport", reflect.TypeOf((*MockOCMClient)(nil).SendLimitedSupport), clusterUUID, lsReason)
 }
 
 // SendServiceLog mocks base method.
-func (m *MockOCMClient) SendServiceLog(arg0 *v10.LogEntry) error {
+func (m *MockOCMClient) SendServiceLog(logEntry *v10.LogEntry) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SendServiceLog", arg0)
+	ret := m.ctrl.Call(m, "SendServiceLog", logEntry)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SendServiceLog indicates an expected call of SendServiceLog.
-func (mr *MockOCMClientMockRecorder) SendServiceLog(arg0 any) *gomock.Call {
+func (mr *MockOCMClientMockRecorder) SendServiceLog(logEntry any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendServiceLog", reflect.TypeOf((*MockOCMClient)(nil).SendServiceLog), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendServiceLog", reflect.TypeOf((*MockOCMClient)(nil).SendServiceLog), logEntry)
 }
 
 // UpdateUpgradePolicyState mocks base method.
-func (m *MockOCMClient) UpdateUpgradePolicyState(arg0, arg1 string, arg2 *v1.UpgradePolicyState) (*v1.UpgradePolicyState, string, error) {
+func (m *MockOCMClient) UpdateUpgradePolicyState(clusterID, upgradePolicyID string, policyState *v1.UpgradePolicyState) (*v1.UpgradePolicyState, string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateUpgradePolicyState", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "UpdateUpgradePolicyState", clusterID, upgradePolicyID, policyState)
 	ret0, _ := ret[0].(*v1.UpgradePolicyState)
 	ret1, _ := ret[1].(string)
 	ret2, _ := ret[2].(error)
@@ -172,7 +173,7 @@ func (m *MockOCMClient) UpdateUpgradePolicyState(arg0, arg1 string, arg2 *v1.Upg
 }
 
 // UpdateUpgradePolicyState indicates an expected call of UpdateUpgradePolicyState.
-func (mr *MockOCMClientMockRecorder) UpdateUpgradePolicyState(arg0, arg1, arg2 any) *gomock.Call {
+func (mr *MockOCMClientMockRecorder) UpdateUpgradePolicyState(clusterID, upgradePolicyID, policyState any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUpgradePolicyState", reflect.TypeOf((*MockOCMClient)(nil).UpdateUpgradePolicyState), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUpgradePolicyState", reflect.TypeOf((*MockOCMClient)(nil).UpdateUpgradePolicyState), clusterID, upgradePolicyID, policyState)
 }
