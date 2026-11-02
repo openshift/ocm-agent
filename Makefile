@@ -19,7 +19,7 @@ EXTRA_DEPS := $(find $(CURDIR)/build -type f -print) Makefile
 # we're using modules.
 unexport GOFLAGS
 GOOS?=linux
-GOARCH?=amd64
+GOARCH?=$(shell go env GOARCH)
 GOENV=GOOS=${GOOS} GOARCH=${GOARCH} CGO_ENABLED=1 GOEXPERIMENT=boringcrypto GOFIPS140=off GOFLAGS=
 
 GOBUILDFLAGS=-gcflags="all=-trimpath=${GOPATH}" -asmflags="all=-trimpath=${GOPATH}" -tags="fips_enabled"
